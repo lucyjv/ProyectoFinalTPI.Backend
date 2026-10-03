@@ -1,0 +1,34 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36429.23 d17.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProyectoFinalTPI.Backend", "ProyectoFinalTPI.Backend\ProyectoFinalTPI.Backend.csproj", "{28854BDA-52CE-4958-B07F-437F7BCF43E0}"
+	ProjectSection(ProjectDependencies) = postProject
+		{4D848830-4719-47B8-A225-BA0C71E87AC8} = {4D848830-4719-47B8-A225-BA0C71E87AC8}
+	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProyectoFinalTPI.Backend.Entidades", "ProyectoFinalTPI.Backend.Entidades\ProyectoFinalTPI.Backend.Entidades.csproj", "{4D848830-4719-47B8-A225-BA0C71E87AC8}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{28854BDA-52CE-4958-B07F-437F7BCF43E0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{28854BDA-52CE-4958-B07F-437F7BCF43E0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{28854BDA-52CE-4958-B07F-437F7BCF43E0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{28854BDA-52CE-4958-B07F-437F7BCF43E0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4D848830-4719-47B8-A225-BA0C71E87AC8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4D848830-4719-47B8-A225-BA0C71E87AC8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4D848830-4719-47B8-A225-BA0C71E87AC8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4D848830-4719-47B8-A225-BA0C71E87AC8}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {DA739E72-1A22-4A9E-B484-8E38004337E2}
+	EndGlobalSection
+EndGlobal
