@@ -69,7 +69,7 @@ dotnet ef database update --context ApplicationDbContext
 
 ---
 
-## 🔄 Flujo de Trabajo para Modificaciones (Importante)
+## Flujo de Trabajo para Modificaciones (Importante)
 
 Dado que implementamos el patrón **Code-First** con Entity Framework Core, **está prohibido crear tablas o columnas a mano en pgAdmin**. 
 
