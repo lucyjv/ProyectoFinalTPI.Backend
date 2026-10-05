@@ -9,5 +9,8 @@
         public bool EsAdmin { get; set; }
         public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;
 
+        public ICollection<Publicacion> Publicaciones { get; set; }
+            = new List<Publicacion>();
+
     }
 }

@@ -12,6 +12,7 @@
             public DateTime FechaCreación { get; set; } = DateTime.UtcNow;
             public Lugar Lugar { get; set; } = null!;
             public CategoriaEnum Categoria { get; set; }
+            public Usuario Autor { get; set; } = null!;
             public ICollection<Comentario> Comentarios { get; set; } = new List<Comentario>();
 
     }
