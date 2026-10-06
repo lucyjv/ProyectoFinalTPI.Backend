@@ -21,6 +21,9 @@
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL.NetTopologySuite" Version="9.0.4" />
 	<ProjectReference Include="..\ProyectoFinalTPI.Backend.Entidades\ProyectoFinalTPI.Backend.Entidades.csproj" />
+	<ProjectReference Include="..\ProyectoFinalTPI.Backend.Repositorio\ProyectoFinalTPI.Backend.Repositorio.csproj" />
+	<ProjectReference Include="..\ProyectoFinalTPI.Backend.Servicio\ProyectoFinalTPI.Backend.Servicio.csproj" />
+	  <ProjectReference Include="..\ProyectoFinalTPI.Backend.Interfaces\ProyectoFinalTPI.Backend.Interfaces.csproj" />
 
   </ItemGroup>
 

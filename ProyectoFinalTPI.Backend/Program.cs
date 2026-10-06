@@ -1,7 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using Neo4j.Driver;
+using NetTopologySuite;
 using Npgsql;
-using ProyectoFinalTPI.Backend.Data;
+using ProyectoFinalTPI.Backend.Entidades;
+using ProyectoFinalTPI.Backend.Interfaces;
+using ProyectoFinalTPI.Backend.Repositorio;
+using ProyectoFinalTPI.Backend.Repositorio.Data;
+using ProyectoFinalTPI.Backend.Servicio;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,6 +27,9 @@ builder.Services.AddSingleton<IDriver>(provider =>
 
     return GraphDatabase.Driver(uri, AuthTokens.Basic(user, password));
 });
+
+builder.Services.AddScoped<IPublicacionRepositorio, PublicacionRepositorio>();
+builder.Services.AddScoped<IPublicacionServicio, PublicacionServicio>();
 
 var app = builder.Build();
 
@@ -48,6 +56,5 @@ app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}")
     .WithStaticAssets();
-
 
 app.Run();

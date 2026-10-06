@@ -13,7 +13,7 @@
             public Lugar Lugar { get; set; } = null!;
             public CategoriaEnum Categoria { get; set; }
             public ICollection<Comentario> Comentarios { get; set; } = new List<Comentario>();
-
+            public Usuario_Interactivo Usuario { get; set; } = null!;
     }
 
     public enum CategoriaEnum
