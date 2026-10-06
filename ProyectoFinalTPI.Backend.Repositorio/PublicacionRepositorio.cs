@@ -1,7 +1,7 @@
 ﻿using ProyectoFinalTPI.Backend.Entidades;
 using Microsoft.EntityFrameworkCore;
-using ProyectoFinalTPI.Backend.Interfaces;
 using ProyectoFinalTPI.Backend.Repositorio.Data;
+using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 
 namespace ProyectoFinalTPI.Backend.Repositorio
 {
@@ -34,5 +34,14 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                            .Where(p => p.Categoria == categoria && !p.EstaOculto)
                            .ToList();
         }
+
+        public async Task<int> Crear(Publicacion publicacion)
+        {
+            await _context.Publicaciones.AddAsync(publicacion);
+            await _context.SaveChangesAsync();
+            return publicacion.Id;
+        }
+
+
     }
 }

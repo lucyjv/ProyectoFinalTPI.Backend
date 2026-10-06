@@ -17,7 +17,7 @@ Antes de levantar la aplicación .NET:
 
 ### 1. PostgreSQL + PostGIS
 1. Descargar e instalar **PostgreSQL 17** (o superior) desde la [Página Oficial](https://postgresql.org).
-2. Durante la instalación, configurar el usuario administrador `postgres` con la contraseña acordada para desarrollo local: `123`.
+2. Durante la instalación, configurar el usuario administrador `postgres` con una contraseña local y utilizarla en `ConnectionStrings:PostgresConnection` de User Secrets.
 3. Asegurarse de que el motor esté corriendo en el puerto por defecto `5432`.
 4. El soporte espacial **PostGIS** se activará de forma automática al impactar las migraciones.
 
@@ -29,26 +29,32 @@ Antes de levantar la aplicación .NET:
    bin\neo4j-admin server console
    ```
    *(Mantener esta consola abierta mientras se pruebe la aplicación)*.
-4. Entrar al navegador a [http://localhost:7474](http://localhost:7474) (Username: `neo4j`), e introducir la contraseña de desarrollo: `Nostalgicos123`.
+4. Entrar al navegador a [http://localhost:7474](http://localhost:7474) (Username: `neo4j`), e introducir la contraseña local configurada en `Neo4j:Password` de User Secrets.
 
 ---
 
 ## Configuración del Proyecto en .NET 9
 
 ### 1. Variables de Entorno y Credenciales
-El proyecto ya lee automáticamente las credenciales desde el archivo `appsettings.json`. Asegúrate de que tu archivo local contenga las siguientes cadenas de conexión idénticas:
+`appsettings.json` conserva las claves compartidas, pero no contiene credenciales. En desarrollo, `WebApplication.CreateBuilder` carga automáticamente ASP.NET Core User Secrets cuando el entorno es `Development`. El proyecto ya incluye `UserSecretsId`; no es necesario inicializarlo nuevamente.
 
-```json
-{
-  "ConnectionStrings": {
-    "PostgresConnection": "Host=127.0.0.1;Database=Nostalgiar;Username=postgres;Password=123"
-  },
-  "Neo4j": {
-    "Uri": "bolt://localhost:7687",
-    "User": "neo4j",
-    "Password": "Nostalgicos123"
-  }
-}
+Configurar las siguientes claves en **Manage User Secrets** del proyecto web en Visual Studio, o importar un objeto JSON mediante entrada estándar a `dotnet user-secrets set --project ProyectoFinalTPI.Backend`. No guardar ese JSON dentro del repositorio ni mostrar sus valores en logs.
+
+| Clave de User Secrets | Variable de entorno para producción |
+|---|---|
+| `ConnectionStrings:PostgresConnection` | `ConnectionStrings__PostgresConnection` |
+| `Neo4j:Password` | `Neo4j__Password` |
+| `Cloudinary:CloudName` | `Cloudinary__CloudName` |
+| `Cloudinary:ApiKey` | `Cloudinary__ApiKey` |
+| `Cloudinary:ApiSecret` | `Cloudinary__ApiSecret` |
+
+La cadena PostgreSQL debe contener la conexión completa a la base de datos local. User Secrets se almacena fuera del repositorio y no está cifrado; se utiliza únicamente para desarrollo. En producción, configurar las variables mediante el mecanismo de secretos del entorno de despliegue. `.env` está ignorado por Git, pero no se carga automáticamente.
+
+Para ejecutar en desarrollo desde PowerShell, en la raíz del repositorio:
+
+```powershell
+$env:ASPNETCORE_ENVIRONMENT = "Development"
+dotnet run --project ProyectoFinalTPI.Backend --no-launch-profile
 ```
 
 ### 2. Sincronización Inicial de Paquetes y Base de Datos

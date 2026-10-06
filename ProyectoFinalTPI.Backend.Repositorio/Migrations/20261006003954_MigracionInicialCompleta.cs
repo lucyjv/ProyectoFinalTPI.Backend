@@ -13,6 +13,37 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            // La rama anterior utilizaba herencia TPH y nombres singulares.
+            // Conservar ese esquema vacío permite aplicar esta migración TPT
+            // sin borrar tablas ni falsificar el historial de migraciones.
+            migrationBuilder.Sql("""
+                DO $migration$
+                DECLARE
+                    tabla text;
+                    tiene_datos boolean;
+                BEGIN
+                    IF to_regclass('public."Usuario"') IS NOT NULL THEN
+                        FOREACH tabla IN ARRAY ARRAY['Usuario', 'Publicacion', 'Comentario', 'Lugar', 'Moderacion'] LOOP
+                            IF to_regclass(format('public.%I', tabla)) IS NULL THEN
+                                RAISE EXCEPTION 'Esquema anterior incompleto: falta %. Revisar antes de migrar.', tabla;
+                            END IF;
+                            EXECUTE format('SELECT EXISTS (SELECT 1 FROM public.%I)', tabla) INTO tiene_datos;
+                            IF tiene_datos THEN
+                                RAISE EXCEPTION 'La tabla % contiene datos. Se requiere una migración de datos TPH a TPT antes de continuar.', tabla;
+                            END IF;
+                        END LOOP;
+                        IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'nostalgiar_legacy_20261006') THEN
+                            RAISE EXCEPTION 'Ya existe el esquema de respaldo nostalgiar_legacy_20261006. Revisar antes de migrar.';
+                        END IF;
+                        CREATE SCHEMA nostalgiar_legacy_20261006;
+                        FOREACH tabla IN ARRAY ARRAY['Usuario', 'Publicacion', 'Comentario', 'Lugar', 'Moderacion'] LOOP
+                            EXECUTE format('ALTER TABLE public.%I SET SCHEMA nostalgiar_legacy_20261006', tabla);
+                        END LOOP;
+                    END IF;
+                END
+                $migration$;
+                """);
+
             migrationBuilder.AlterDatabase()
                 .Annotation("Npgsql:PostgresExtension:postgis", ",,");
 
