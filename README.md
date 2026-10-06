@@ -35,10 +35,55 @@ Antes de levantar la aplicación .NET:
 
 ## Configuración del Proyecto en .NET 9
 
-### 1. Variables de Entorno y Credenciales
-`appsettings.json` conserva las claves compartidas, pero no contiene credenciales. En desarrollo, `WebApplication.CreateBuilder` carga automáticamente ASP.NET Core User Secrets cuando el entorno es `Development`. El proyecto ya incluye `UserSecretsId`; no es necesario inicializarlo nuevamente.
+### 1. Credenciales locales con User Secrets
 
-Configurar las siguientes claves en **Manage User Secrets** del proyecto web en Visual Studio, o importar un objeto JSON mediante entrada estándar a `dotnet user-secrets set --project ProyectoFinalTPI.Backend`. No guardar ese JSON dentro del repositorio ni mostrar sus valores en logs.
+Cada integrante debe configurar las credenciales en su propia computadora y usuario del sistema. No se descargan al clonar el repositorio. `appsettings.json` conserva la configuración compartida; las credenciales de desarrollo se guardan fuera del repositorio mediante **ASP.NET Core User Secrets**.
+
+#### Configuración inicial
+
+1. Instalar el **SDK de .NET 9** y comprobarlo con `dotnet --list-sdks`.
+2. Solicitar al responsable del equipo los datos de Cloudinary por un canal privado. Para PostgreSQL y Neo4j, utilizar las credenciales de las bases locales configuradas en los requisitos previos. No publicar credenciales en GitHub, capturas ni mensajes públicos.
+3. Abrir **PowerShell en la raíz del repositorio**, donde se encuentra este README. Restaurar los paquetes:
+
+   ```powershell
+   dotnet restore
+   ```
+
+4. Reemplazar los valores de ejemplo y ejecutar los cinco comandos siguientes. La cadena de PostgreSQL debe incluir el nombre de la base, el usuario y la contraseña locales:
+
+   ```powershell
+   dotnet user-secrets set 'Cloudinary:CloudName' 'REEMPLAZAR_CLOUD_NAME' --project './ProyectoFinalTPI.Backend/ProyectoFinalTPI.Backend.csproj'
+   dotnet user-secrets set 'Cloudinary:ApiKey' 'REEMPLAZAR_API_KEY' --project './ProyectoFinalTPI.Backend/ProyectoFinalTPI.Backend.csproj'
+   dotnet user-secrets set 'Cloudinary:ApiSecret' 'REEMPLAZAR_API_SECRET' --project './ProyectoFinalTPI.Backend/ProyectoFinalTPI.Backend.csproj'
+   dotnet user-secrets set 'ConnectionStrings:PostgresConnection' 'Host=localhost;Port=5432;Database=REEMPLAZAR_BASE;Username=postgres;Password=REEMPLAZAR_PASSWORD_POSTGRES' --project './ProyectoFinalTPI.Backend/ProyectoFinalTPI.Backend.csproj'
+   dotnet user-secrets set 'Neo4j:Password' 'REEMPLAZAR_PASSWORD_NEO4J' --project './ProyectoFinalTPI.Backend/ProyectoFinalTPI.Backend.csproj'
+   ```
+
+   Los valores son ejemplos, no credenciales válidas. El proyecto ya tiene `UserSecretsId`: **no ejecutar `dotnet user-secrets init`**. Para actualizar una credencial, repetir el comando correspondiente con el nuevo valor. Los comandos con valores reales pueden quedar en el historial de la terminal; no compartirlo.
+
+#### Ejecución y verificación
+
+Después de completar la sincronización de la base de datos de la siguiente sección, iniciar PostgreSQL y Neo4j y ejecutar desde la raíz del repositorio:
+
+```powershell
+$env:DOTNET_ENVIRONMENT = 'Development'
+$env:ASPNETCORE_ENVIRONMENT = 'Development'
+dotnet run --project './ProyectoFinalTPI.Backend/ProyectoFinalTPI.Backend.csproj' --no-launch-profile
+```
+
+Comprobar que el inicio indique `Hosting environment: Development` y abrir la dirección indicada en `Now listening on`. Verificar una operación que consulte PostgreSQL, una que utilice Neo4j y una carga de imagen a Cloudinary: el inicio de la aplicación por sí solo no valida todas las credenciales. No compartir la salida de `dotnet user-secrets list`, ya que muestra los valores completos.
+
+#### Si la configuración no funciona
+
+- **Valores vacíos o credenciales no encontradas:** comprobar que los comandos apuntan al proyecto web indicado y se ejecutaron con el mismo usuario del sistema que inicia la aplicación. User Secrets se carga automáticamente en `Development` mediante `WebApplication.CreateBuilder`.
+- **Errores de conexión o autenticación:** comprobar que las bases estén encendidas y que los datos coincidan con la instalación local. Para Cloudinary, comprobar que los tres valores pertenezcan a la misma cuenta.
+- **Un valor anterior sigue activo:** revisar si existen variables de entorno con los nombres de la tabla siguiente; tienen prioridad sobre User Secrets. Reiniciar la aplicación después de cambiar la configuración.
+
+#### Producción y almacenamiento
+
+User Secrets es solo para desarrollo y **no cifra los valores**. No copiar estos datos a `appsettings.json` ni a archivos del repositorio. `.env` está ignorado por Git, pero el arranque actual no lo carga automáticamente.
+
+En producción, configurar las credenciales mediante el mecanismo de secretos del entorno de despliegue, con estos nombres de variables de entorno:
 
 | Clave de User Secrets | Variable de entorno para producción |
 |---|---|
@@ -48,14 +93,23 @@ Configurar las siguientes claves en **Manage User Secrets** del proyecto web en 
 | `Cloudinary:ApiKey` | `Cloudinary__ApiKey` |
 | `Cloudinary:ApiSecret` | `Cloudinary__ApiSecret` |
 
-La cadena PostgreSQL debe contener la conexión completa a la base de datos local. User Secrets se almacena fuera del repositorio y no está cifrado; se utiliza únicamente para desarrollo. En producción, configurar las variables mediante el mecanismo de secretos del entorno de despliegue. `.env` está ignorado por Git, pero no se carga automáticamente.
+Parate en la raíz del repositorio, donde están el README.md y el archivo .sln
 
-Para ejecutar en desarrollo desde PowerShell, en la raíz del repositorio:
+C:\Users\GianCroci\Documents\Nostalgiar\ProyectoFinalTPI.Backend
 
-```powershell
-$env:ASPNETCORE_ENVIRONMENT = "Development"
-dotnet run --project ProyectoFinalTPI.Backend --no-launch-profile
-```
+Desde ahí, usá:
+
+dotnet user-secrets set "Cloudinary:ApiSecret" "TU_SECRETO_REAL" --project ".\ProyectoFinalTPI.Backend\ProyectoFinalTPI.Backend.csproj"
+
+Reemplazá TU_SECRETO_REAL por el valor correspondiente. Para las otras claves de Cloudinary:
+
+dotnet user-secrets set "Cloudinary:CloudName" "TU_CLOUD_NAME" --project ".\ProyectoFinalTPI.Backend\ProyectoFinalTPI.Backend.csproj"
+
+dotnet user-secrets set "Cloudinary:ApiKey" "TU_API_KEY" --project ".\ProyectoFinalTPI.Backend\ProyectoFinalTPI.Backend.csproj"
+
+Cada comando guarda o actualiza una clave en tus User Secrets, fuera del repositorio. No necesitás ejecutar init: el proyecto ya está configurado.
+
+Tené en cuenta que el valor escrito puede quedar en el historial de tu terminal; no compartas capturas ni el historial con credenciales.
 
 ### 2. Sincronización Inicial de Paquetes y Base de Datos
 Una vez clonado el repositorio, abre una terminal en la raíz de la solución y ejecuta los comandos en este orden exacto para limpiar la caché de NuGet, compilar el proyecto y **crear la base de datos relacional y geográfica automáticamente**:
