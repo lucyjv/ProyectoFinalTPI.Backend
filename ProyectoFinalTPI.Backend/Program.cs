@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Neo4j.Driver;
 using Npgsql;
 using ProyectoFinalTPI.Backend.Data;
+using ProyectoFinalTPI.Backend.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -23,6 +24,8 @@ builder.Services.AddSingleton<IDriver>(provider =>
     return GraphDatabase.Driver(uri, AuthTokens.Basic(user, password));
 });
 
+builder.Services.AddScoped<ISeguimientoService, SeguimientoService>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -43,6 +46,7 @@ app.UseRouting();
 app.UseAuthorization();
 
 app.MapStaticAssets();
+app.MapControllers();
 
 app.MapControllerRoute(
     name: "default",
