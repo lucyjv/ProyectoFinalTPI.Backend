@@ -29,15 +29,13 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
             // Le indicamos explícitamente a EF Core que use PostGIS para la propiedad de ubicación
             modelBuilder.HasPostgresExtension("postgis");
 
-            modelBuilder.Entity<Usuario>().ToTable("usuarios");
-
-            modelBuilder.Entity<Usuario_Interactivo>().ToTable("usuarios_interactivos");
-
-            modelBuilder.Entity<Usuario_Personal>().ToTable("usuarios_personales");
-
-            modelBuilder.Entity<Usuario_Marca>().ToTable("usuarios_marcas");
-
-            modelBuilder.Entity<Moderador>().ToTable("moderadores");
+            modelBuilder.Entity<Usuario>()
+                .ToTable("Usuario")
+                .HasDiscriminator<string>("tipo_usuario")
+                .HasValue<Usuario>("Usuario")
+                .HasValue<Usuario_Personal>("Usuario_Personal")
+                .HasValue<Usuario_Marca>("Usuario_Marca")
+                .HasValue<Moderador>("Moderador");
 
             modelBuilder.Entity<Lugar>(entity =>
             {

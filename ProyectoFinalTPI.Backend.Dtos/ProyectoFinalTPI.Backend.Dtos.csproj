@@ -7,8 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-	<ProjectReference Include="..\ProyectoFinalTPI.Backend.Dtos\ProyectoFinalTPI.Backend.Dtos.csproj" />
-	<ProjectReference Include="..\ProyectoFinalTPI.Backend.Entidades\ProyectoFinalTPI.Backend.Entidades.csproj" />
+    <ProjectReference Include="..\ProyectoFinalTPI.Backend.Entidades\ProyectoFinalTPI.Backend.Entidades.csproj" />
   </ItemGroup>
 
 </Project>

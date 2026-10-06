@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NetTopologySuite.Geometries;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -12,9 +13,11 @@ using ProyectoFinalTPI.Backend.Repositorio.Data;
 namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261006131700_ActualizarPublicacionMultimedia")]
+    partial class ActualizarPublicacionMultimedia
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -190,18 +193,11 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("tipo_usuario")
-                        .IsRequired()
-                        .HasMaxLength(21)
-                        .HasColumnType("character varying(21)");
-
                     b.HasKey("Id");
 
-                    b.ToTable("Usuario", (string)null);
+                    b.ToTable("usuarios", (string)null);
 
-                    b.HasDiscriminator<string>("tipo_usuario").HasValue("Usuario");
-
-                    b.UseTphMappingStrategy();
+                    b.UseTptMappingStrategy();
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Usuario_Interactivo", b =>
@@ -214,7 +210,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Property<DateTime?>("SuspendidoHasta")
                         .HasColumnType("timestamp with time zone");
 
-                    b.HasDiscriminator().HasValue("Usuario_Interactivo");
+                    b.ToTable("usuarios_interactivos", (string)null);
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Usuario_Marca", b =>
@@ -233,7 +229,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.HasDiscriminator().HasValue("Usuario_Marca");
+                    b.ToTable("usuarios_marcas", (string)null);
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Usuario_Personal", b =>
@@ -254,7 +250,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Property<int>("Reputacion")
                         .HasColumnType("integer");
 
-                    b.HasDiscriminator().HasValue("Usuario_Personal");
+                    b.ToTable("usuarios_personales", (string)null);
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Moderador", b =>
@@ -267,7 +263,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Property<int>("ReportesAtendidos")
                         .HasColumnType("integer");
 
-                    b.HasDiscriminator().HasValue("Moderador");
+                    b.ToTable("moderadores", (string)null);
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Comentario", b =>
@@ -306,6 +302,42 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Navigation("Lugar");
 
                     b.Navigation("Usuario");
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Usuario_Interactivo", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario", null)
+                        .WithOne()
+                        .HasForeignKey("ProyectoFinalTPI.Backend.Entidades.Usuario_Interactivo", "Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Usuario_Marca", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario_Interactivo", null)
+                        .WithOne()
+                        .HasForeignKey("ProyectoFinalTPI.Backend.Entidades.Usuario_Marca", "Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Usuario_Personal", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario_Interactivo", null)
+                        .WithOne()
+                        .HasForeignKey("ProyectoFinalTPI.Backend.Entidades.Usuario_Personal", "Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Moderador", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario_Personal", null)
+                        .WithOne()
+                        .HasForeignKey("ProyectoFinalTPI.Backend.Entidades.Moderador", "Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Publicacion", b =>

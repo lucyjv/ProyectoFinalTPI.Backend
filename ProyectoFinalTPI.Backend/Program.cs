@@ -3,7 +3,8 @@ using Neo4j.Driver;
 using NetTopologySuite;
 using Npgsql;
 using ProyectoFinalTPI.Backend.Entidades;
-using ProyectoFinalTPI.Backend.Interfaces;
+using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
+using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Repositorio;
 using ProyectoFinalTPI.Backend.Repositorio.Data;
 using ProyectoFinalTPI.Backend.Servicio;
@@ -11,7 +12,13 @@ using ProyectoFinalTPI.Backend.Servicio;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddControllersWithViews();
+builder.Services.AddControllersWithViews(options =>
+{
+    // Las coordenadas multipart usan punto decimal, independientemente del servidor.
+    var formFactory = options.ValueProviderFactories.OfType<Microsoft.AspNetCore.Mvc.ModelBinding.FormValueProviderFactory>().Single();
+    options.ValueProviderFactories.Remove(formFactory);
+    options.ValueProviderFactories.Insert(0, new ProyectoFinalTPI.Backend.Requests.InvariantFormValueProviderFactory());
+});
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(
@@ -30,6 +37,8 @@ builder.Services.AddSingleton<IDriver>(provider =>
 
 builder.Services.AddScoped<IPublicacionRepositorio, PublicacionRepositorio>();
 builder.Services.AddScoped<IPublicacionServicio, PublicacionServicio>();
+builder.Services.AddScoped<IUsuarioRepositorio, UsuarioRepositorio>();
+builder.Services.AddScoped<IMultimediaServicio, MultimediaServicio>();
 
 var app = builder.Build();
 
@@ -58,3 +67,5 @@ app.MapControllerRoute(
     .WithStaticAssets();
 
 app.Run();
+
+public partial class Program { }
