@@ -4,5 +4,7 @@
     {
         public int PuntosNostalgia { get; set; }
         public DateTime? SuspendidoHasta { get; set; }
+        public ICollection<Publicacion> Publicaciones { get; set; } = new List<Publicacion>();
+
     }
 }

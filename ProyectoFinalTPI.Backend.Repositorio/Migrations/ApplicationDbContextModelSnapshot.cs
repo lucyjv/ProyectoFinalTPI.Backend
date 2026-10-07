@@ -5,11 +5,11 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NetTopologySuite.Geometries;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
-using ProyectoFinalTPI.Backend.Data;
+using ProyectoFinalTPI.Backend.Repositorio.Data;
 
 #nullable disable
 
-namespace ProyectoFinalTPI.Backend.Migrations
+namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
     partial class ApplicationDbContextModelSnapshot : ModelSnapshot
@@ -67,7 +67,7 @@ namespace ProyectoFinalTPI.Backend.Migrations
 
                     b.Property<Point>("Coordenadas")
                         .IsRequired()
-                        .HasColumnType("geometry");
+                        .HasColumnType("geometry(Point, 4326)");
 
                     b.Property<string>("Direccion")
                         .IsRequired()
@@ -79,7 +79,7 @@ namespace ProyectoFinalTPI.Backend.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Lugar");
+                    b.ToTable("lugares", (string)null);
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Moderación", b =>
@@ -108,7 +108,7 @@ namespace ProyectoFinalTPI.Backend.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Moderacion");
+                    b.ToTable("Moderaciones");
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Publicacion", b =>
@@ -118,9 +118,6 @@ namespace ProyectoFinalTPI.Backend.Migrations
                         .HasColumnType("integer");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("Año")
-                        .HasColumnType("integer");
 
                     b.Property<int>("Categoria")
                         .HasColumnType("integer");
@@ -132,12 +129,11 @@ namespace ProyectoFinalTPI.Backend.Migrations
                     b.Property<bool>("EstaOculto")
                         .HasColumnType("boolean");
 
-                    b.Property<DateTime>("FechaCreación")
+                    b.Property<DateTime>("Fecha")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("Foto")
-                        .IsRequired()
-                        .HasColumnType("text");
+                    b.Property<DateTime>("FechaCreación")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("LugarId")
                         .HasColumnType("integer");
@@ -145,15 +141,27 @@ namespace ProyectoFinalTPI.Backend.Migrations
                     b.Property<string>("MotivoOculto")
                         .HasColumnType("text");
 
+                    b.Property<int>("TipoMultimedia")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Titulo")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<string>("UrlMultimedia")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("UsuarioId")
+                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 
                     b.HasIndex("LugarId");
 
-                    b.ToTable("Publicacion");
+                    b.HasIndex("UsuarioId");
+
+                    b.ToTable("Publicaciones");
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Usuario", b =>
@@ -189,7 +197,7 @@ namespace ProyectoFinalTPI.Backend.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Usuario");
+                    b.ToTable("Usuario", (string)null);
 
                     b.HasDiscriminator<string>("tipo_usuario").HasValue("Usuario");
 
@@ -225,7 +233,7 @@ namespace ProyectoFinalTPI.Backend.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.HasDiscriminator().HasValue("Marca");
+                    b.HasDiscriminator().HasValue("Usuario_Marca");
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Usuario_Personal", b =>
@@ -246,7 +254,7 @@ namespace ProyectoFinalTPI.Backend.Migrations
                     b.Property<int>("Reputacion")
                         .HasColumnType("integer");
 
-                    b.HasDiscriminator().HasValue("Personal");
+                    b.HasDiscriminator().HasValue("Usuario_Personal");
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Moderador", b =>
@@ -289,12 +297,25 @@ namespace ProyectoFinalTPI.Backend.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario_Interactivo", "Usuario")
+                        .WithMany("Publicaciones")
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.Navigation("Lugar");
+
+                    b.Navigation("Usuario");
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Publicacion", b =>
                 {
                     b.Navigation("Comentarios");
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Usuario_Interactivo", b =>
+                {
+                    b.Navigation("Publicaciones");
                 });
 #pragma warning restore 612, 618
         }
