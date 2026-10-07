@@ -7,6 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Neo4j.Driver" Version="6.3.0" />
     <ProjectReference Include="..\ProyectoFinalTPI.Backend.Dtos\ProyectoFinalTPI.Backend.Dtos.csproj" />
     <ProjectReference Include="..\ProyectoFinalTPI.Backend.Entidades\ProyectoFinalTPI.Backend.Entidades.csproj" />
     <ProjectReference Include="..\ProyectoFinalTPI.Backend.Interfaces\ProyectoFinalTPI.Backend.Interfaces.csproj" />
