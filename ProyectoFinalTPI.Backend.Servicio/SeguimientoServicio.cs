@@ -12,24 +12,33 @@ namespace ProyectoFinalTPI.Backend.Servicio
             MERGE (seguidor)-[relacion:SIGUE_A]->(seguido)
             ON CREATE SET relacion.desde = datetime()";
 
+        private const string EliminarRelacionQuery = @"
+            MATCH (seguidor:Usuario { postgresId: $idUsuario })-[relacion:SIGUE_A]->
+                  (seguido:Usuario { postgresId: $idUsuarioASeguir })
+            DELETE relacion";
+
         private readonly IUsuarioRepositorio _usuarioRepositorio;
         private readonly IDriver _neo4jDriver;
 
-        public SeguimientoServicio( IUsuarioRepositorio usuarioRepositorio, IDriver neo4jDriver)
+        public SeguimientoServicio(
+            IUsuarioRepositorio usuarioRepositorio,
+            IDriver neo4jDriver)
         {
             _usuarioRepositorio = usuarioRepositorio;
             _neo4jDriver = neo4jDriver;
         }
 
-        public async Task<ResultadoSeguirUsuario> SeguirUsuarioAsync
-            ( int idUsuario, int idUsuarioASeguir,CancellationToken cancellationToken = default)
+        public async Task<ResultadoSeguirUsuario> SeguirUsuarioAsync(
+            int idUsuario,
+            int idUsuarioASeguir,
+            CancellationToken cancellationToken = default)
         {
             if (idUsuario == idUsuarioASeguir)
             {
                 return ResultadoSeguirUsuario.AutoSeguimiento;
             }
 
-            var ambosUsuariosExisten = await AmbosUsuariosExisten(
+            var ambosUsuariosExisten = await AmbosUsuariosExistenAsync(
                 idUsuario,
                 idUsuarioASeguir,
                 cancellationToken);
@@ -39,7 +48,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 return ResultadoSeguirUsuario.UsuarioNoEncontrado;
             }
 
-            var relacionCreada = await CrearRelacionNeo4j(
+            var relacionCreada = await CrearRelacionNeo4jAsync(
                 idUsuario,
                 idUsuarioASeguir);
 
@@ -48,8 +57,39 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 : ResultadoSeguirUsuario.YaLoSeguía;
         }
 
-        private async Task<bool> AmbosUsuariosExisten
-            ( int idUsuario,int idUsuarioASeguir,CancellationToken cancellationToken)
+        public async Task<ResultadoDejarDeSeguirUsuario> DejarDeSeguirUsuarioAsync(
+            int idUsuario,
+            int idUsuarioASeguir,
+            CancellationToken cancellationToken = default)
+        {
+            if (idUsuario == idUsuarioASeguir)
+            {
+                return ResultadoDejarDeSeguirUsuario.AutoSeguimiento;
+            }
+
+            var ambosUsuariosExisten = await AmbosUsuariosExistenAsync(
+                idUsuario,
+                idUsuarioASeguir,
+                cancellationToken);
+
+            if (!ambosUsuariosExisten)
+            {
+                return ResultadoDejarDeSeguirUsuario.UsuarioNoEncontrado;
+            }
+
+            var relacionEliminada = await EliminarRelacionNeo4jAsync(
+                idUsuario,
+                idUsuarioASeguir);
+
+            return relacionEliminada
+                ? ResultadoDejarDeSeguirUsuario.DejadoDeSeguir
+                : ResultadoDejarDeSeguirUsuario.YaNoLoSeguía;
+        }
+
+        private async Task<bool> AmbosUsuariosExistenAsync(
+            int idUsuario,
+            int idUsuarioASeguir,
+            CancellationToken cancellationToken)
         {
             var usuarioExiste = await _usuarioRepositorio.ExisteUsuario(
                 idUsuario,
@@ -62,17 +102,37 @@ namespace ProyectoFinalTPI.Backend.Servicio
             return usuarioExiste && usuarioASeguirExiste;
         }
 
-        private async Task<bool> CrearRelacionNeo4j( int idUsuario, int idUsuarioASeguir)
+        private async Task<bool> CrearRelacionNeo4jAsync(
+            int idUsuario,
+            int idUsuarioASeguir)
         {
             await using var session = _neo4jDriver.AsyncSession();
 
             return await session.ExecuteWriteAsync(async transaction =>
             {
                 var cursor = await transaction.RunAsync(
-                    CrearRelacionQuery,new { idUsuario, idUsuarioASeguir });
+                    CrearRelacionQuery,
+                    new { idUsuario, idUsuarioASeguir });
 
                 var summary = await cursor.ConsumeAsync();
                 return summary.Counters.RelationshipsCreated > 0;
+            });
+        }
+
+        private async Task<bool> EliminarRelacionNeo4jAsync(
+            int idUsuario,
+            int idUsuarioASeguir)
+        {
+            await using var session = _neo4jDriver.AsyncSession();
+
+            return await session.ExecuteWriteAsync(async transaction =>
+            {
+                var cursor = await transaction.RunAsync(
+                    EliminarRelacionQuery,
+                    new { idUsuario, idUsuarioASeguir });
+
+                var summary = await cursor.ConsumeAsync();
+                return summary.Counters.RelationshipsDeleted > 0;
             });
         }
     }

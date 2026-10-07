@@ -21,27 +21,77 @@ namespace ProyectoFinalTPI.Backend.Controllers
         }
 
         [HttpPost]
-        public async Task<IActionResult> SeguirUsuario(
+        public Task<IActionResult> SeguirUsuario(
             [FromBody] SeguirUsuarioRequest request,
-            CancellationToken cancellationToken) // cancelar una operación que está en curso
-                                                 // si el cliente cierra la conexion o deja de esperar la respuesta,.NET puede señalar esa cancelacion
+            CancellationToken cancellationToken)
+        {
+            return EjecutarOperacion( () 
+                => _seguimientoServicio.SeguirUsuarioAsync(
+                    request.IdUsuario,
+                    request.IdUsuarioASeguir,
+                    cancellationToken),
+
+                MapearResultadoSeguir,
+                request.IdUsuario,
+                request.IdUsuarioASeguir,
+                cancellationToken,
+                "crear");
+        }
+
+        [HttpDelete]
+        public Task<IActionResult> DejarDeSeguirUsuario(
+            [FromBody] DejarDeSeguirUsuarioRequest request, CancellationToken cancellationToken)
+        {
+            return EjecutarOperacion(
+                () => _seguimientoServicio.DejarDeSeguirUsuarioAsync(
+                    request.IdUsuario,
+                    request.IdUsuarioASeguir,
+                    cancellationToken),
+                MapearResultadoDejarDeSeguir,
+                request.IdUsuario,
+                request.IdUsuarioASeguir,
+                cancellationToken,
+                "eliminar");
+        }
+
+        private IActionResult MapearResultadoSeguir(ResultadoSeguirUsuario resultado)
+        {
+            return resultado switch
+            {
+                ResultadoSeguirUsuario.Seguido => StatusCode( StatusCodes.Status201Created,new { mensaje = "Ahora seguís a este usuario." }),
+                ResultadoSeguirUsuario.YaLoSeguía => Ok(new { mensaje = "Ya seguías a este usuario."}),
+                ResultadoSeguirUsuario.AutoSeguimiento => BadRequest(new { error = "No podés seguirte a vos mismo." }),
+                ResultadoSeguirUsuario.UsuarioNoEncontrado => NotFound(new { error = "No se encontró uno o ambos usuarios." }),
+                
+                _ => ErrorInterno()
+            };
+        }
+
+        private IActionResult MapearResultadoDejarDeSeguir( ResultadoDejarDeSeguirUsuario resultado)
+        {
+            return resultado switch
+            {
+                ResultadoDejarDeSeguirUsuario.DejadoDeSeguir => NoContent(),
+                ResultadoDejarDeSeguirUsuario.YaNoLoSeguía => NoContent(),
+                ResultadoDejarDeSeguirUsuario.AutoSeguimiento => BadRequest(new { error = "No podés dejar de seguirte a vos mismo." }),
+                ResultadoDejarDeSeguirUsuario.UsuarioNoEncontrado => NotFound(new { error = "No se encontró uno o ambos usuarios." }),
+               
+                _ => ErrorInterno()
+            };
+        }
+
+        private async Task<IActionResult> EjecutarOperacion<TResult>(
+            Func<Task<TResult>> ejecutar,
+            Func<TResult, IActionResult> mapearResultado,
+            int idUsuario,
+            int idUsuarioASeguir,
+            CancellationToken cancellationToken,
+            string accion)
         {
             try
             {
-                var resultado = await _seguimientoServicio.SeguirUsuarioAsync(
-                    request.IdUsuario,
-                    request.IdUsuarioASeguir,
-                    cancellationToken);
-
-                return resultado switch
-                {
-                    ResultadoSeguirUsuario.Seguido => StatusCode( StatusCodes.Status201Created, new { mensaje = "Ahora seguís a este usuario." }),
-                    ResultadoSeguirUsuario.YaLoSeguía => Ok(new{ mensaje = "Ya seguías a este usuario." }),
-                    ResultadoSeguirUsuario.AutoSeguimiento => BadRequest(new{ error = "No podés seguirte a vos mismo."}),
-                    ResultadoSeguirUsuario.UsuarioNoEncontrado => NotFound(new{ error = "No se encontró uno o ambos usuarios."}),
-                    _ => StatusCode( StatusCodes.Status500InternalServerError, new { error = "Ocurrió un error al procesar el seguimiento." })
-                 // _ para cualquier otro valor
-                };
+                var resultado = await ejecutar();
+                return mapearResultado(resultado);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -51,13 +101,20 @@ namespace ProyectoFinalTPI.Backend.Controllers
             {
                 _logger.LogError(
                     exception,
-                    "Error al registrar el seguimiento entre los usuarios {IdUsuario} y {IdUsuarioASeguir}.",
-                    request.IdUsuario,
-                    request.IdUsuarioASeguir);
+                    "Error al {Accion} la relación de seguimiento entre los usuarios {IdUsuario} y {IdUsuarioASeguir}.",
+                    accion,
+                    idUsuario,
+                    idUsuarioASeguir);
 
-                return StatusCode(
-                    StatusCodes.Status500InternalServerError,new { error = "Ocurrió un error al procesar el seguimiento." });
+                return ErrorInterno();
             }
+        }
+
+        private IActionResult ErrorInterno()
+        {
+            return StatusCode(
+                StatusCodes.Status500InternalServerError,
+                new { error = "Ocurrió un error al procesar el seguimiento." });
         }
     }
 }

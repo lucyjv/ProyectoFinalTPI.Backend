@@ -14,7 +14,6 @@ namespace ProyectoFinalTPI.Backend.Tests;
 
 public class SeguimientosControllerTests
 {
-    // xUnit lo ejecuta 4 veces, una por cada resultado
     [Theory]
     [InlineData(ResultadoSeguirUsuario.Seguido, HttpStatusCode.Created, "Ahora seguís a este usuario.")]
     [InlineData(ResultadoSeguirUsuario.YaLoSeguía, HttpStatusCode.OK, "Ya seguías a este usuario.")]
@@ -26,7 +25,7 @@ public class SeguimientosControllerTests
         string mensajeEsperado)
     {
         await using var factory = new ApiFactory();
-        factory.Seguimiento.Resultado = resultado;
+        factory.Seguimiento.ResultadoSeguir = resultado;
         using var client = factory.CreateClient();
 
         using var response = await client.PostAsJsonAsync(
@@ -39,10 +38,10 @@ public class SeguimientosControllerTests
     }
 
     [Fact]
-    public async Task Falla_inesperada_devuelve_500_sin_exponer_detalles()
+    public async Task Falla_inesperada_al_seguir_devuelve_500_sin_exponer_detalles()
     {
         await using var factory = new ApiFactory();
-        factory.Seguimiento.Error = new InvalidOperationException("detalle interno");
+        factory.Seguimiento.ErrorSeguir = new InvalidOperationException("detalle interno");
         using var client = factory.CreateClient();
 
         using var response = await client.PostAsJsonAsync(
@@ -69,6 +68,67 @@ public class SeguimientosControllerTests
         Assert.False(factory.Seguimiento.FueInvocado);
     }
 
+    [Theory]
+    [InlineData(ResultadoDejarDeSeguirUsuario.DejadoDeSeguir, HttpStatusCode.NoContent)]
+    [InlineData(ResultadoDejarDeSeguirUsuario.YaNoLoSeguía, HttpStatusCode.NoContent)]
+    [InlineData(ResultadoDejarDeSeguirUsuario.AutoSeguimiento, HttpStatusCode.BadRequest)]
+    [InlineData(ResultadoDejarDeSeguirUsuario.UsuarioNoEncontrado, HttpStatusCode.NotFound)]
+    public async Task DejarDeSeguir_devuelve_el_codigo_segun_el_resultado(
+        ResultadoDejarDeSeguirUsuario resultado,
+        HttpStatusCode codigoEsperado)
+    {
+        await using var factory = new ApiFactory();
+        factory.Seguimiento.ResultadoDejarDeSeguir = resultado;
+        using var client = factory.CreateClient();
+        using var request = CrearRequestDelete(10, 20);
+
+        using var response = await client.SendAsync(request);
+
+        Assert.Equal(codigoEsperado, response.StatusCode);
+        Assert.Equal((10, 20), factory.Seguimiento.UltimosIds);
+        if (codigoEsperado == HttpStatusCode.NoContent)
+        {
+            Assert.Empty(await response.Content.ReadAsStringAsync());
+        }
+    }
+
+    [Fact]
+    public async Task Falla_inesperada_al_dejar_de_seguir_devuelve_500_sin_exponer_detalles()
+    {
+        await using var factory = new ApiFactory();
+        factory.Seguimiento.ErrorDejarDeSeguir = new InvalidOperationException("detalle interno");
+        using var client = factory.CreateClient();
+        using var request = CrearRequestDelete(10, 20);
+
+        using var response = await client.SendAsync(request);
+        var contenido = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.Contains("Ocurrió un error al procesar el seguimiento.", contenido);
+        Assert.DoesNotContain("detalle interno", contenido);
+    }
+
+    [Fact]
+    public async Task Delete_con_id_invalido_devuelve_400_sin_invocar_el_servicio()
+    {
+        await using var factory = new ApiFactory();
+        using var client = factory.CreateClient();
+        using var request = CrearRequestDelete(0, 20);
+
+        using var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.False(factory.Seguimiento.FueInvocado);
+    }
+
+    private static HttpRequestMessage CrearRequestDelete(int idUsuario, int idUsuarioASeguir)
+    {
+        return new HttpRequestMessage(HttpMethod.Delete, "/api/seguimientos")
+        {
+            Content = JsonContent.Create(new { idUsuario, idUsuarioASeguir })
+        };
+    }
+
     private sealed class ApiFactory : WebApplicationFactory<Program>
     {
         public SeguimientoFake Seguimiento { get; } = new();
@@ -91,8 +151,10 @@ public class SeguimientosControllerTests
 
     private sealed class SeguimientoFake : ISeguimientoServicio
     {
-        public ResultadoSeguirUsuario Resultado { get; set; }
-        public Exception? Error { get; set; }
+        public ResultadoSeguirUsuario ResultadoSeguir { get; set; }
+        public ResultadoDejarDeSeguirUsuario ResultadoDejarDeSeguir { get; set; }
+        public Exception? ErrorSeguir { get; set; }
+        public Exception? ErrorDejarDeSeguir { get; set; }
         public (int Seguidor, int Seguido) UltimosIds { get; private set; }
         public bool FueInvocado { get; private set; }
 
@@ -104,9 +166,22 @@ public class SeguimientosControllerTests
             FueInvocado = true;
             UltimosIds = (idUsuario, idUsuarioASeguir);
 
-            return Error is null
-                ? Task.FromResult(Resultado)
-                : Task.FromException<ResultadoSeguirUsuario>(Error);
+            return ErrorSeguir is null
+                ? Task.FromResult(ResultadoSeguir)
+                : Task.FromException<ResultadoSeguirUsuario>(ErrorSeguir);
+        }
+
+        public Task<ResultadoDejarDeSeguirUsuario> DejarDeSeguirUsuarioAsync(
+            int idUsuario,
+            int idUsuarioASeguir,
+            CancellationToken cancellationToken = default)
+        {
+            FueInvocado = true;
+            UltimosIds = (idUsuario, idUsuarioASeguir);
+
+            return ErrorDejarDeSeguir is null
+                ? Task.FromResult(ResultadoDejarDeSeguir)
+                : Task.FromException<ResultadoDejarDeSeguirUsuario>(ErrorDejarDeSeguir);
         }
     }
 }

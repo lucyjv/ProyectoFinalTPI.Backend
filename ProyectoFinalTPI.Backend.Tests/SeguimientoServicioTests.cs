@@ -37,6 +37,35 @@ public class SeguimientoServicioTests
         Assert.Contains(idUsuarioInexistente, repositorio.IdsConsultados);
     }
 
+    [Fact]
+    public async Task Dejar_de_seguirse_a_si_mismo_devuelve_auto_seguimiento_sin_consultar_usuarios()
+    {
+        var repositorio = new UsuarioRepositorioFake(10);
+        var servicio = new SeguimientoServicio(repositorio, null!);
+
+        var resultado = await servicio.DejarDeSeguirUsuarioAsync(10, 10);
+
+        Assert.Equal(ResultadoDejarDeSeguirUsuario.AutoSeguimiento, resultado);
+        Assert.Empty(repositorio.IdsConsultados);
+    }
+
+    [Theory]
+    [InlineData(10, 20)]
+    [InlineData(20, 10)]
+    public async Task Al_dejar_de_seguir_si_falta_un_usuario_devuelve_no_encontrado(
+        int idUsuarioExistente,
+        int idUsuarioInexistente)
+    {
+        var repositorio = new UsuarioRepositorioFake(idUsuarioExistente);
+        var servicio = new SeguimientoServicio(repositorio, null!);
+
+        var resultado = await servicio.DejarDeSeguirUsuarioAsync(10, 20);
+
+        Assert.Equal(ResultadoDejarDeSeguirUsuario.UsuarioNoEncontrado, resultado);
+        Assert.Equal(new[] { 10, 20 }, repositorio.IdsConsultados);
+        Assert.Contains(idUsuarioInexistente, repositorio.IdsConsultados);
+    }
+
     private sealed class UsuarioRepositorioFake : IUsuarioRepositorio
     {
         private readonly HashSet<int> _idsExistentes;
