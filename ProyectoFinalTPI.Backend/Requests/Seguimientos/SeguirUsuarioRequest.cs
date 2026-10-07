@@ -1,8 +1,8 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace ProyectoFinalTPI.Backend.Models
+namespace ProyectoFinalTPI.Backend.Requests.Seguimientos
 {
-    public class SolicitudSeguirUsuario
+    public class SeguirUsuarioRequest
     {
         [Range(1, int.MaxValue)]
         public int IdUsuario { get; set; }

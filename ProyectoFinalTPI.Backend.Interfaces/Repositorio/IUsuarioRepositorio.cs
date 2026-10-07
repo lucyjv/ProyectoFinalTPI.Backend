@@ -11,6 +11,6 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Repositorio
     {
         Task<Usuario?> ObtenerPorIdAsync(int id);
 
-        Task<bool> ExisteUsuario(int id);
+        Task<bool> ExisteUsuario(int id, CancellationToken cancellationToken = default);
     }
 }

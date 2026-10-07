@@ -26,10 +26,10 @@ namespace ProyectoFinalTPI.Backend.Repositorio
             return usuario;
         }
 
-        public async Task<bool> ExisteUsuario(int id)
+        public async Task<bool> ExisteUsuario(int id, CancellationToken cancellationToken = default)
         {
             return await _context.Usuarios
-            .AnyAsync(u => u.Id == id);
+            .AnyAsync(u => u.Id == id, cancellationToken);
 
         }
     }

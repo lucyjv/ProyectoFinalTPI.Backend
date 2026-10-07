@@ -1,6 +1,6 @@
-namespace ProyectoFinalTPI.Backend.Services
+namespace ProyectoFinalTPI.Backend.Interfaces.Servicio
 {
-    public interface ISeguimientoService
+    public interface ISeguimientoServicio
     {
         Task<ResultadoSeguirUsuario> SeguirUsuarioAsync(
             int idUsuario,
