@@ -1,6 +1,6 @@
 ﻿using ProyectoFinalTPI.Backend.Entidades;
 
-namespace ProyectoFinalTPI.Backend.Dtos
+namespace ProyectoFinalTPI.Backend.Dtos.Publicacion
 {
     public class CrearPublicacionDto
     {

@@ -39,6 +39,14 @@ builder.Services.AddScoped<IPublicacionRepositorio, PublicacionRepositorio>();
 builder.Services.AddScoped<IPublicacionServicio, PublicacionServicio>();
 builder.Services.AddScoped<IUsuarioRepositorio, UsuarioRepositorio>();
 builder.Services.AddScoped<IMultimediaServicio, MultimediaServicio>();
+builder.Services.AddScoped<IInteresServicio, InteresServicio>();
+builder.Services.AddScoped<IRecomendacionServicio, RecomendacionServicio>();
+
+builder.Services.AddMemoryCache();
+
+builder.Services.AddSingleton<
+    ISesionFypRepositorio,
+    SesionFypRepositorio>();
 
 var app = builder.Build();
 
