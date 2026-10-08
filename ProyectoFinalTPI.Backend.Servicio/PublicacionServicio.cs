@@ -98,8 +98,8 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
             var publicacion = new Publicacion
             {
-                Titulo = original.Titulo, // Mantenemos el titulo? O lo dejamos en blanco?
-                Descripcion = dto.Descripcion, // Usamos la nueva descripcion que pone el usuario
+                Titulo = original.Titulo, 
+                Descripcion = dto.Descripcion,
                 Fecha = DateTime.UtcNow,
                 Categoria = original.Categoria,
                 UrlMultimedia = original.UrlMultimedia,

@@ -22,7 +22,7 @@ namespace ProyectoFinalTPI.Backend.Tests
     public class CompartirPublicacionTests
     {
         [Fact]
-        public async Task Compartir_crea_nueva_publicacion_y_apunta_al_original()
+        public async Task Compartir_ConComentario_CreaNuevaPublicacion()
         {
             await using var factory = new ApiFactory();
             using var client = factory.CreateClient();
@@ -50,10 +50,37 @@ namespace ProyectoFinalTPI.Backend.Tests
             Assert.Equal(2, p.UsuarioId);
             Assert.Equal(1, p.PublicacionOriginalId);
             Assert.Equal("Este lugar es increible!", p.Descripcion);
-            Assert.Equal("Recuerdo Original", p.Titulo); // Copiado
-            Assert.Equal(CategoriaEnum.Lugares, p.Categoria); // Copiado
-            Assert.Equal("https://example.com/foto.jpg", p.UrlMultimedia); // Copiado
+            Assert.Equal("Recuerdo Original", p.Titulo); 
+            Assert.Equal(CategoriaEnum.Lugares, p.Categoria); 
+            Assert.Equal("https://example.com/foto.jpg", p.UrlMultimedia); 
             Assert.False(p.EstaOculto);
+        }
+
+        [Fact]
+        public async Task Compartir_SinComentario_CreaNuevaPublicacion()
+        {
+            await using var factory = new ApiFactory();
+            using var client = factory.CreateClient();
+            await factory.Seed();
+
+            var requestPayload = new
+            {
+                PublicacionOriginalId = 1,
+                AutorId = 2,
+                Descripcion = "" 
+            };
+
+            using var response = await client.PostAsJsonAsync("/api/publicaciones/compartir", requestPayload);
+
+            Assert.True(response.StatusCode == HttpStatusCode.Created, await response.Content.ReadAsStringAsync());
+
+            var body = await response.Content.ReadFromJsonAsync<Resultado>();
+            using var scope = factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var p = await db.Publicaciones.Include(x => x.Lugar).SingleAsync(x => x.Id == body!.id);
+
+            Assert.Equal(1, p.PublicacionOriginalId);
+            Assert.Equal("", p.Descripcion);
         }
 
         [Fact]
@@ -64,7 +91,7 @@ namespace ProyectoFinalTPI.Backend.Tests
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             await factory.Seed();
 
-            // Insertamos la publicacion compartida
+            
             db.Publicaciones.Add(new Publicacion
             {
                 Id = 2,
@@ -74,19 +101,19 @@ namespace ProyectoFinalTPI.Backend.Tests
                 Categoria = CategoriaEnum.Lugares,
                 LugarId = 1,
                 UsuarioId = 2,
-                PublicacionOriginalId = 1, // Apunta a la original
+                PublicacionOriginalId = 1, 
                 UrlMultimedia = "https://example.com/foto.jpg"
             });
             await db.SaveChangesAsync();
 
             Assert.Equal(2, await db.Publicaciones.CountAsync());
 
-            // Eliminamos la original
+            
             var original = await db.Publicaciones.FindAsync(1);
             db.Publicaciones.Remove(original!);
             await db.SaveChangesAsync();
 
-            // La cascada debería haber eliminado la compartida también (In-Memory provider hace track cascade)
+          
             Assert.Empty(await db.Publicaciones.ToListAsync());
         }
 
