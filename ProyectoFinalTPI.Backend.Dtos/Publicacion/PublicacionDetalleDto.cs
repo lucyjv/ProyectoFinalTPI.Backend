@@ -1,4 +1,4 @@
-﻿using ProyectoFinalTPI.Backend.Dtos.Lugar;
+using ProyectoFinalTPI.Backend.Dtos.Lugar;
 using ProyectoFinalTPI.Backend.Dtos.Usuario;
 using ProyectoFinalTPI.Backend.Entidades;
 using System;
@@ -28,5 +28,7 @@ namespace ProyectoFinalTPI.Backend.Dtos.Publicacion
         public int CantidadLikes { get; set; }
         public int CantidadComentarios { get; set; }
         public bool DioLike { get; set; }
+
+        public PublicacionResumenDto? PublicacionOriginal { get; set; }
     }
 }

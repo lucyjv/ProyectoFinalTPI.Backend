@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using ProyectoFinalTPI.Backend.Dtos;
 using ProyectoFinalTPI.Backend.Dtos.Comentario;
 using ProyectoFinalTPI.Backend.Dtos.Lugar;
@@ -45,6 +45,13 @@ namespace ProyectoFinalTPI.Backend.Repositorio
             await _context.Publicaciones.AddAsync(publicacion);
             await _context.SaveChangesAsync();
             return publicacion.Id;
+        }
+
+        public async Task<Publicacion?> ObtenerPorId(int id, CancellationToken cancellationToken = default)
+        {
+            return await _context.Publicaciones
+                .Include(p => p.Lugar)
+                .FirstOrDefaultAsync(p => p.Id == id && !p.EstaOculto, cancellationToken);
         }
 
         public async Task<List<PublicacionPinDto>> ObtenerPines(PublicacionFiltroDto filtro, int limite, CancellationToken cancellationToken = default)

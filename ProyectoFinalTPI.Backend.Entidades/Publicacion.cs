@@ -1,4 +1,4 @@
-﻿namespace ProyectoFinalTPI.Backend.Entidades
+namespace ProyectoFinalTPI.Backend.Entidades
 {
     public class Publicacion
     {
@@ -17,6 +17,9 @@
             public int UsuarioId { get; set; }    
             public Usuario_Interactivo Usuario { get; set; } = null!;
             public ICollection<Comentario> Comentarios { get; set; } = new List<Comentario>();
+
+            public int? PublicacionOriginalId { get; set; }
+            public Publicacion? PublicacionOriginal { get; set; }
     }
 
     public enum CategoriaEnum

@@ -1,4 +1,4 @@
-﻿using NetTopologySuite.Geometries;
+using NetTopologySuite.Geometries;
 using ProyectoFinalTPI.Backend.Dtos;
 using ProyectoFinalTPI.Backend.Dtos.Comentario;
 using ProyectoFinalTPI.Backend.Dtos.Mapa;
@@ -81,6 +81,34 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 FechaCreación = DateTime.UtcNow,
                 EstaOculto = false,
                 MotivoOculto = null
+            };
+
+            return await _publicacionRepositorio.Crear(publicacion);
+        }
+
+        public async Task<int> Compartir(CompartirPublicacionDto dto, CancellationToken cancellationToken = default)
+        {
+            var existeAutor = await _usuarioRepositorio.ExisteUsuario(dto.AutorId);
+            if (!existeAutor)
+                throw new KeyNotFoundException("El usuario indicado no existe.");
+
+            var original = await _publicacionRepositorio.ObtenerPorId(dto.PublicacionOriginalId, cancellationToken);
+            if (original == null)
+                throw new KeyNotFoundException("La publicacion original no existe o no esta disponible.");
+
+            var publicacion = new Publicacion
+            {
+                Titulo = original.Titulo, // Mantenemos el titulo? O lo dejamos en blanco?
+                Descripcion = dto.Descripcion, // Usamos la nueva descripcion que pone el usuario
+                Fecha = DateTime.UtcNow,
+                Categoria = original.Categoria,
+                UrlMultimedia = original.UrlMultimedia,
+                TipoMultimedia = original.TipoMultimedia,
+                LugarId = original.LugarId,
+                UsuarioId = dto.AutorId,
+                PublicacionOriginalId = original.Id,
+                FechaCreación = DateTime.UtcNow,
+                EstaOculto = false
             };
 
             return await _publicacionRepositorio.Crear(publicacion);

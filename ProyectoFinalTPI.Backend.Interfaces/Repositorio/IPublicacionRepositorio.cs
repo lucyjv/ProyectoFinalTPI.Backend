@@ -1,4 +1,4 @@
-﻿using ProyectoFinalTPI.Backend.Dtos;
+using ProyectoFinalTPI.Backend.Dtos;
 using ProyectoFinalTPI.Backend.Dtos.Comentario;
 using ProyectoFinalTPI.Backend.Dtos.Publicacion;
 using ProyectoFinalTPI.Backend.Entidades;
@@ -11,6 +11,7 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Repositorio
         List<Publicacion> ObtenerPublicacionPorCategoria(CategoriaEnum categoria);
 
         Task<int> Crear(Publicacion publicacion);
+        Task<Publicacion?> ObtenerPorId(int id, CancellationToken cancellationToken = default);
         Task<List<PublicacionPinDto>> ObtenerPines(PublicacionFiltroDto filtro, int limite, CancellationToken cancellationToken = default);
         Task<PublicacionResumenDto?> ObtenerResumenPorId(int id, CancellationToken cancellationToken = default);
         Task<PublicacionDetalleDto?> ObtenerDetallePorId(int id, CancellationToken cancellationToken = default);
