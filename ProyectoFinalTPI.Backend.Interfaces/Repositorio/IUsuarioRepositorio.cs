@@ -17,5 +17,9 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Repositorio
         Task<List<AutorResumenDto>> ObtenerUsuariosPorIdsAsync(
             IReadOnlyCollection<int> ids,
             CancellationToken cancellationToken = default);
+
+        Task<List<int>> ObtenerIdsExistentesAsync(
+            IReadOnlyCollection<int> ids,
+            CancellationToken cancellationToken = default);
     }
 }

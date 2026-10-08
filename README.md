@@ -7,7 +7,7 @@ Este es el repositorio del Backend para nuestro **Proyecto Final TPI**. La soluc
 
 *   **PostgreSQL 17:** Almacena los datos maestros, perfiles de usuario y datos estructurados.
 *   **PostGIS Extension:** Motor geoespacial acoplado a Postgres. Maneja coordenadas, puntos geográficos reales (`Point`) y búsquedas eficientes por radio de cercanía.
-*   **Neo4j (Community Edition):** Base de datos de grafos. Gestiona de manera ultra veloz la red de conexiones.
+*   **Neo4j (Community Edition):** Base de datos de grafos. Gestiona relaciones de la red, como seguimientos y usuarios etiquetados en publicaciones.
 
 ---
 
@@ -147,7 +147,7 @@ Si necesitas agregar una nueva entidad o añadir un atributo (ejemplo: agregar l
    ```
 5. Haz el `git add` y `git commit` incluyendo los nuevos archivos generados dentro de la carpeta `Migrations`. Al hacer `git pull`, tus compañeros solo tendrán que ejecutar el comando `database update` para estar sincronizados.
 
-*Nota: Las propiedades añadidas en **Neo4j** no requieren migraciones debido a que es una base de datos sin esquema (schema-less). Solo modifica la consulta Cypher dentro de los controladores de C#.*
+*Nota: Las relaciones y propiedades añadidas en **Neo4j** no requieren migraciones de Entity Framework. Se implementan mediante consultas Cypher en el servicio correspondiente.*
 
 
 ### Endpoints de publicaciones
@@ -155,12 +155,14 @@ Si necesitas agregar una nueva entidad o añadir un atributo (ejemplo: agregar l
 | Método | Ruta | Descripción |
 |---|---|---|
 | `POST` | `/api/publicaciones` | Crea una publicación con sus datos, ubicación y multimedia. Recibe `multipart/form-data`, con un archivo o una URL HTTPS. |
+| `POST` | `/api/publicaciones/{id}/etiquetas` | Etiqueta uno o más usuarios en una publicación existente. Recibe `usuariosIds` en JSON; repetir una etiqueta existente no la duplica. |
 | `GET` | `/api/publicaciones/mapa` | Devuelve los pines del área visible del mapa. Permite filtrar por categoría y fecha del recuerdo. |
 | `GET` | `/api/publicaciones/{id}/resumen` | Devuelve una vista resumida para mostrar al seleccionar un pin. |
 | `GET` | `/api/publicaciones/{id}` | Devuelve el detalle de una publicación, con descripción completa, autor, multimedia y ubicación. |
 | `GET` | `/api/publicaciones/{id}/comentarios` | Devuelve los comentarios visibles de una publicación, paginados y ordenados del más reciente al más antiguo. |
 
 Las consultas públicas excluyen las publicaciones ocultas. Los comentarios se consultan por separado del detalle.
+Las etiquetas se almacenan en Neo4j como relaciones entre los nodos `Usuario` y `Publicacion`, cuyos datos maestros permanecen en PostgreSQL.
 
 ### Endpoints del feed
 

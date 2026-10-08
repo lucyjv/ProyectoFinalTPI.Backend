@@ -37,6 +37,7 @@ builder.Services.AddSingleton<IDriver>(provider =>
 
 builder.Services.AddScoped<IPublicacionRepositorio, PublicacionRepositorio>();
 builder.Services.AddScoped<IPublicacionServicio, PublicacionServicio>();
+builder.Services.AddScoped<IEtiquetadoPublicacionServicio, EtiquetadoPublicacionServicio>();
 builder.Services.AddScoped<IUsuarioRepositorio, UsuarioRepositorio>();
 builder.Services.AddScoped<ISeguimientoServicio, SeguimientoServicio>();
 builder.Services.AddScoped<IMultimediaServicio, MultimediaServicio>();
