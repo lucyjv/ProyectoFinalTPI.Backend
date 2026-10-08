@@ -58,5 +58,29 @@ namespace ProyectoFinalTPI.Backend.Controllers
                 return NotFound(new { mensaje = ex.Message });
             }
         }
+
+        [HttpPost("compartir")]
+        public async Task<IActionResult> Compartir([FromBody] CompartirPublicacionRequest request)
+        {
+            var dto = new CompartirPublicacionDto
+            {
+                PublicacionOriginalId = request.PublicacionOriginalId,
+                AutorId = request.AutorId,
+                Descripcion = request.Descripcion ?? string.Empty
+            };
+
+            try
+            {
+                var id = await _publicacionServicio.Compartir(dto);
+
+                return Created(
+                    $"/api/publicaciones/{id}",
+                    new { id });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { mensaje = ex.Message });
+            }
+        }
     }
 }
