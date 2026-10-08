@@ -148,3 +148,59 @@ Si necesitas agregar una nueva entidad o añadir un atributo (ejemplo: agregar l
 5. Haz el `git add` y `git commit` incluyendo los nuevos archivos generados dentro de la carpeta `Migrations`. Al hacer `git pull`, tus compañeros solo tendrán que ejecutar el comando `database update` para estar sincronizados.
 
 *Nota: Las propiedades añadidas en **Neo4j** no requieren migraciones debido a que es una base de datos sin esquema (schema-less). Solo modifica la consulta Cypher dentro de los controladores de C#.*
+
+
+### Endpoints de publicaciones
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `POST` | `/api/publicaciones` | Crea una publicación con sus datos, ubicación y multimedia. Recibe `multipart/form-data`, con un archivo o una URL HTTPS. |
+| `GET` | `/api/publicaciones/mapa` | Devuelve los pines del área visible del mapa. Permite filtrar por categoría y fecha del recuerdo. |
+| `GET` | `/api/publicaciones/{id}/resumen` | Devuelve una vista resumida para mostrar al seleccionar un pin. |
+| `GET` | `/api/publicaciones/{id}` | Devuelve el detalle de una publicación, con descripción completa, autor, multimedia y ubicación. |
+| `GET` | `/api/publicaciones/{id}/comentarios` | Devuelve los comentarios visibles de una publicación, paginados y ordenados del más reciente al más antiguo. |
+
+Las consultas públicas excluyen las publicaciones ocultas. Los comentarios se consultan por separado del detalle.
+
+### Endpoints del feed
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `GET` | `/api/feed/para-vos` | Devuelve recomendaciones personalizadas, combinando intereses, actualidad y exploración. Actualmente, los intereses se calculan a partir de las publicaciones del usuario durante los últimos 90 días. |
+| `GET` | `/api/feed/seguidos` | Devuelve las publicaciones de las cuentas que sigue el usuario, ordenadas de más recientes a más antiguas. Los seguimientos se consultan en Neo4j. |
+
+Ambos reciben temporalmente `usuarioId` por query hasta integrar autenticación. Las descripciones del feed tienen un máximo de 300 caracteres.
+
+### Paginación
+
+Los comentarios y ambos feeds reciben:
+
+- `limite`: cantidad de elementos por página, entre 1 y 50; por defecto, 20.
+- `cursor`: valor recibido en `siguienteCursor` para continuar. Se omite en la primera petición.
+
+La respuesta contiene `items`, `siguienteCursor` y `hayMas`.
+
+```http
+GET /api/feed/para-vos?usuarioId=1&limite=20
+GET /api/feed/seguidos?usuarioId=1&limite=20
+GET /api/publicaciones/25/comentarios?limite=20
+```
+
+Para recargar “Para vos”, se realiza otra petición sin cursor. Esto genera una nueva selección. Cada sesión conserva hasta 500 recomendaciones y vence a los 30 minutos; si deja de estar disponible, el endpoint devuelve `410 Gone`.
+
+### Endpoints de seguimiento
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `POST` | `/api/seguimientos` | Crea la relación de seguimiento entre dos usuarios en Neo4j. |
+| `DELETE` | `/api/seguimientos` | Elimina la relación de seguimiento entre dos usuarios. |
+
+Ambos reciben un cuerpo JSON:
+
+```json
+{
+  "idUsuario": 1,
+  "idUsuarioASeguir": 2
+}
+```
+
