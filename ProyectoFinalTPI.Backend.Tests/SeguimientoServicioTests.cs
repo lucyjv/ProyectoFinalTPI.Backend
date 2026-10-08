@@ -1,4 +1,5 @@
 using ProyectoFinalTPI.Backend.Entidades;
+using ProyectoFinalTPI.Backend.Dtos.Usuario;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Servicio;
@@ -14,9 +15,9 @@ public class SeguimientoServicioTests
         var repositorio = new UsuarioRepositorioFake(10);
         var servicio = new SeguimientoServicio(repositorio, null!);
 
-        var resultado = await servicio.SeguirUsuarioAsync(10, 10);
+        var resultado = await servicio.SeguirUsuario(10, 10);
 
-        Assert.Equal(ResultadoSeguirUsuario.AutoSeguimiento, resultado);
+        Assert.Equal(ResultadoSeguimiento.AutoSeguimiento, resultado);
         Assert.Empty(repositorio.IdsConsultados);
     }
 
@@ -30,9 +31,9 @@ public class SeguimientoServicioTests
         var repositorio = new UsuarioRepositorioFake(idUsuarioExistente);
         var servicio = new SeguimientoServicio(repositorio, null!);
 
-        var resultado = await servicio.SeguirUsuarioAsync(10, 20);
+        var resultado = await servicio.SeguirUsuario(10, 20);
 
-        Assert.Equal(ResultadoSeguirUsuario.UsuarioNoEncontrado, resultado);
+        Assert.Equal(ResultadoSeguimiento.UsuarioNoEncontrado, resultado);
         Assert.Equal(new[] { 10, 20 }, repositorio.IdsConsultados);
         Assert.Contains(idUsuarioInexistente, repositorio.IdsConsultados);
     }
@@ -43,9 +44,9 @@ public class SeguimientoServicioTests
         var repositorio = new UsuarioRepositorioFake(10);
         var servicio = new SeguimientoServicio(repositorio, null!);
 
-        var resultado = await servicio.DejarDeSeguirUsuarioAsync(10, 10);
+        var resultado = await servicio.DejarDeSeguirUsuario(10, 10);
 
-        Assert.Equal(ResultadoDejarDeSeguirUsuario.AutoSeguimiento, resultado);
+        Assert.Equal(ResultadoSeguimiento.AutoSeguimiento, resultado);
         Assert.Empty(repositorio.IdsConsultados);
     }
 
@@ -59,11 +60,35 @@ public class SeguimientoServicioTests
         var repositorio = new UsuarioRepositorioFake(idUsuarioExistente);
         var servicio = new SeguimientoServicio(repositorio, null!);
 
-        var resultado = await servicio.DejarDeSeguirUsuarioAsync(10, 20);
+        var resultado = await servicio.DejarDeSeguirUsuario(10, 20);
 
-        Assert.Equal(ResultadoDejarDeSeguirUsuario.UsuarioNoEncontrado, resultado);
+        Assert.Equal(ResultadoSeguimiento.UsuarioNoEncontrado, resultado);
         Assert.Equal(new[] { 10, 20 }, repositorio.IdsConsultados);
         Assert.Contains(idUsuarioInexistente, repositorio.IdsConsultados);
+    }
+
+    [Fact]
+    public async Task Listar_seguidos_devuelve_null_si_el_usuario_no_existe_sin_acceder_a_Neo4j()
+    {
+        var repositorio = new UsuarioRepositorioFake();
+        var servicio = new SeguimientoServicio(repositorio, null!);
+
+        var resultado = await servicio.ListarSeguidos(99);
+
+        Assert.Null(resultado);
+        Assert.Equal(new[] { 99 }, repositorio.IdsConsultados);
+    }
+
+    [Fact]
+    public async Task Listar_seguidores_devuelve_null_si_el_usuario_no_existe_sin_acceder_a_Neo4j()
+    {
+        var repositorio = new UsuarioRepositorioFake();
+        var servicio = new SeguimientoServicio(repositorio, null!);
+
+        var resultado = await servicio.ListarSeguidores(99);
+
+        Assert.Null(resultado);
+        Assert.Equal(new[] { 99 }, repositorio.IdsConsultados);
     }
 
     private sealed class UsuarioRepositorioFake : IUsuarioRepositorio
@@ -84,6 +109,16 @@ public class SeguimientoServicioTests
                 : null;
 
             return Task.FromResult(usuario);
+        }
+
+        public Task<List<AutorResumenDto>> ObtenerUsuariosPorIdsAsync(
+            IReadOnlyCollection<int> ids,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(ids
+                .Where(_idsExistentes.Contains)
+                .Select(id => new AutorResumenDto { Id = id, Username = $"usuario_{id}" })
+                .ToList());
         }
 
         public Task<bool> ExisteUsuario(

@@ -194,6 +194,8 @@ Para recargar “Para vos”, se realiza otra petición sin cursor. Esto genera 
 |---|---|---|
 | `POST` | `/api/seguimientos` | Crea la relación de seguimiento entre dos usuarios en Neo4j. |
 | `DELETE` | `/api/seguimientos` | Elimina la relación de seguimiento entre dos usuarios. |
+| `GET` | `/api/seguimientos/{idUsuario}/seguidos` | Lista las personas que sigue el usuario indicado. |
+| `GET` | `/api/seguimientos/{idUsuario}/seguidores` | Lista las personas que siguen al usuario indicado. |
 
 Ambos reciben un cuerpo JSON:
 
