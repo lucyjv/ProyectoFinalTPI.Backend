@@ -11,6 +11,16 @@ using ProyectoFinalTPI.Backend.Servicio;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend", policy =>
+    {
+        policy.WithOrigins("http://localhost:3001")
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
+});
+
 // Add services to the container.
 builder.Services.AddControllersWithViews(options =>
 {
@@ -64,8 +74,23 @@ app.UseHttpsRedirection();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    // Seed user if empty
+    if (!db.Usuarios.Any())
+    {
+        db.Usuarios.Add(new ProyectoFinalTPI.Backend.Entidades.Usuario
+        {
+            Id = 1,
+            Username = "DemoUser",
+            Email = "demo@example.com",
+            Contraseña = "password123",
+            EsAdmin = false
+        });
+        db.SaveChanges();
+    }
 }
 app.UseRouting();
+
+app.UseCors("AllowFrontend");
 
 app.UseAuthorization();
 
