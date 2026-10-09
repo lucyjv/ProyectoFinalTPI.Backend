@@ -53,5 +53,22 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                 })
                 .ToListAsync(cancellationToken);
         }
+
+        public async Task<List<int>> ObtenerIdsExistentesAsync(
+            IReadOnlyCollection<int> ids, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(ids);
+
+            if (ids.Count == 0)
+            {
+                return new List<int>();
+            }
+
+            return await _context.Usuarios
+                .AsNoTracking()
+                .Where(usuario => ids.Contains(usuario.Id))
+                .Select(usuario => usuario.Id)
+                .ToListAsync(cancellationToken);
+        }
     }
 }

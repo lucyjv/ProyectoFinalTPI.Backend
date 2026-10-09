@@ -11,11 +11,17 @@ namespace ProyectoFinalTPI.Backend.Controllers
     public class PublicacionesController : ControllerBase
     {
         private readonly IPublicacionServicio _publicacionServicio;
+        private readonly IEtiquetadoPublicacionServicio _etiquetadoPublicacionServicio;
+        private readonly ILogger<PublicacionesController> _logger;
 
         public PublicacionesController(
-            IPublicacionServicio publicacionServicio)
+            IPublicacionServicio publicacionServicio,
+            IEtiquetadoPublicacionServicio etiquetadoPublicacionServicio,
+            ILogger<PublicacionesController> logger)
         {
             _publicacionServicio = publicacionServicio;
+            _etiquetadoPublicacionServicio = etiquetadoPublicacionServicio;
+            _logger = logger;
         }
 
         [HttpPost]
@@ -80,6 +86,52 @@ namespace ProyectoFinalTPI.Backend.Controllers
             catch (KeyNotFoundException ex)
             {
                 return NotFound(new { mensaje = ex.Message });
+            }
+        }
+
+        [HttpPost("{publicacionId:int}/etiquetas")]
+        public async Task<IActionResult> EtiquetarUsuarios(
+            int publicacionId, [FromBody] EtiquetarUsuariosRequest request, CancellationToken cancellationToken)
+        {
+            try
+            {//valida los IDs y ejecuta la consulta Cypher.
+                var cantidadEtiquetasNuevas = await _etiquetadoPublicacionServicio.EtiquetarUsuarios( publicacionId, request.UsuariosIds, cancellationToken);
+
+                var respuesta = new
+                {
+                    mensaje = cantidadEtiquetasNuevas > 0
+                        ? "Se etiquetaron los usuarios en la publicacion."
+                        : "usuarios ya etiquetados en la publicacion",
+                    publicacionId,
+                    cantidadEtiquetasNuevas
+                };
+
+                return cantidadEtiquetasNuevas > 0
+                    ? StatusCode(StatusCodes.Status201Created, respuesta)
+                    : Ok(respuesta);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (ArgumentException exception)
+            {
+                return BadRequest(new { error = exception.Message });
+            }
+            catch (KeyNotFoundException exception)
+            {
+                return NotFound(new { error = exception.Message });
+            }
+            catch (Exception exception)
+            {
+                _logger.LogError(
+                    exception,
+                    "Error al etiquetar usuarios en la publicacion {PublicacionId}.",
+                    publicacionId);
+
+                return StatusCode(
+                    StatusCodes.Status500InternalServerError,
+                    new { error = "Ocurrio un error al etiquetar usuarios en la publicacion" });
             }
         }
     }

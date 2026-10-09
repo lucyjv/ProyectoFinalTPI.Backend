@@ -18,6 +18,8 @@ namespace ProyectoFinalTPI.Backend.Controllers
             _logger = logger;
         }
 
+
+
         [HttpPost]
         public Task<IActionResult> SeguirUsuario(
             [FromBody] SeguirUsuarioRequest request, CancellationToken cancellationToken)
@@ -122,6 +124,12 @@ namespace ProyectoFinalTPI.Backend.Controllers
                     new { error = "Ocurrio un error al listar los seguidores" });
             }
         }
+
+
+
+
+
+
 
         private IActionResult MapearResultadoSeguir(ResultadoSeguimiento resultado)
         {
