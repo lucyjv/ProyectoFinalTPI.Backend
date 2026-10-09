@@ -1,32 +1,35 @@
+using ProyectoFinalTPI.Backend.Dtos.Usuario;
+
 namespace ProyectoFinalTPI.Backend.Interfaces.Servicio
 {
     public interface ISeguimientoServicio
     {
-        Task<ResultadoSeguirUsuario> SeguirUsuarioAsync(
+        Task<ResultadoSeguimiento> SeguirUsuario(
             int idUsuario,
             int idUsuarioASeguir,
             CancellationToken cancellationToken = default);
 
-        Task<ResultadoDejarDeSeguirUsuario> DejarDeSeguirUsuarioAsync(
+        Task<ResultadoSeguimiento> DejarDeSeguirUsuario(
             int idUsuario,
             int idUsuarioASeguir,
             CancellationToken cancellationToken = default);
+
 
         Task<IReadOnlyCollection<int>> ObtenerSeguidosIdsAsync(int usuarioId, CancellationToken cancellationToken = default);
+
+        Task<IReadOnlyList<AutorResumenDto>?> ListarSeguidos(
+            int idUsuario,
+            CancellationToken cancellationToken = default);
+
+        Task<IReadOnlyList<AutorResumenDto>?> ListarSeguidores(
+            int idUsuario, CancellationToken cancellationToken = default);
+
     }
 
-    public enum ResultadoSeguirUsuario
+    public enum ResultadoSeguimiento
     {
-        Seguido,
-        YaLoSeguía,
-        AutoSeguimiento,
-        UsuarioNoEncontrado
-    }
-
-    public enum ResultadoDejarDeSeguirUsuario
-    {
-        DejadoDeSeguir,
-        YaNoLoSeguía,
+        Aplicado,
+        SinCambios, // ya seguia al usuario o ya habia dejado de seguirloi
         AutoSeguimiento,
         UsuarioNoEncontrado
     }

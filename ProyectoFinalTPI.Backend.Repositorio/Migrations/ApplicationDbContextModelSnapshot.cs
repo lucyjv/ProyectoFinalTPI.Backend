@@ -141,6 +141,9 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Property<string>("MotivoOculto")
                         .HasColumnType("text");
 
+                    b.Property<int?>("PublicacionOriginalId")
+                        .HasColumnType("integer");
+
                     b.Property<int>("TipoMultimedia")
                         .HasColumnType("integer");
 
@@ -158,6 +161,8 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("LugarId");
+
+                    b.HasIndex("PublicacionOriginalId");
 
                     b.HasIndex("UsuarioId");
 
@@ -297,6 +302,11 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Publicacion", "PublicacionOriginal")
+                        .WithMany()
+                        .HasForeignKey("PublicacionOriginalId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
                     b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario_Interactivo", "Usuario")
                         .WithMany("Publicaciones")
                         .HasForeignKey("UsuarioId")
@@ -304,6 +314,8 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                         .IsRequired();
 
                     b.Navigation("Lugar");
+
+                    b.Navigation("PublicacionOriginal");
 
                     b.Navigation("Usuario");
                 });

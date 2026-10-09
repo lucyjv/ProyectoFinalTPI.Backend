@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using ProyectoFinalTPI.Backend.Entidades;
 using Npgsql.EntityFrameworkCore.PostgreSQL;
 using NetTopologySuite.Geometries;
@@ -44,6 +44,11 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
                       .HasColumnType("geometry(Point, 4326)");
             });
 
+            modelBuilder.Entity<Publicacion>()
+                .HasOne(p => p.PublicacionOriginal)
+                .WithMany()
+                .HasForeignKey(p => p.PublicacionOriginalId)
+                .OnDelete(DeleteBehavior.Cascade);
 
         }
     }
