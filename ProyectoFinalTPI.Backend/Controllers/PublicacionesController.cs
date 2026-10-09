@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using ProyectoFinalTPI.Backend.Dtos;
+using ProyectoFinalTPI.Backend.Dtos.Comentario;
+using ProyectoFinalTPI.Backend.Dtos.Mapa;
 using ProyectoFinalTPI.Backend.Dtos.Publicacion;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Requests.Publicaciones;
@@ -16,6 +18,60 @@ namespace ProyectoFinalTPI.Backend.Controllers
             IPublicacionServicio publicacionServicio)
         {
             _publicacionServicio = publicacionServicio;
+        }
+
+        [HttpGet("mapa")]
+        public Task<ActionResult<ResultadoMapaDto>> ObtenerMapa(
+            [FromQuery] PublicacionFiltroDto filtro,
+            CancellationToken cancellationToken)
+        {
+            return EjecutarConsulta(() => _publicacionServicio.ObtenerPines(
+                filtro, cancellationToken));
+        }
+
+        [HttpGet("{id:int}/resumen")]
+        public Task<ActionResult<PublicacionResumenDto>> ObtenerResumen(
+            int id,
+            CancellationToken cancellationToken)
+        {
+            return EjecutarConsulta(() => _publicacionServicio.ObtenerResumenPorId(
+                id, cancellationToken));
+        }
+
+        [HttpGet("{id:int}")]
+        public Task<ActionResult<PublicacionDetalleDto>> ObtenerDetalle(
+            int id,
+            CancellationToken cancellationToken)
+        {
+            return EjecutarConsulta(() => _publicacionServicio.ObtenerDetallePorId(
+                id, cancellationToken));
+        }
+
+        [HttpGet("{id:int}/comentarios")]
+        public Task<ActionResult<ResultadoPaginadoDto<ComentarioDto>>> ObtenerComentarios(
+            int id,
+            [FromQuery] string? cursor = null,
+            [FromQuery] int limite = 20,
+            CancellationToken cancellationToken = default)
+        {
+            return EjecutarConsulta(() => _publicacionServicio.ObtenerComentarios(
+                id, cursor, limite, cancellationToken));
+        }
+
+        private async Task<ActionResult<T>> EjecutarConsulta<T>(Func<Task<T>> consulta)
+        {
+            try
+            {
+                return Ok(await consulta());
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { mensaje = ex.Message });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { mensaje = ex.Message });
+            }
         }
 
         [HttpPost]

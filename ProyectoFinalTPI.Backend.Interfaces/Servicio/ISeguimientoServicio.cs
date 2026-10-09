@@ -11,6 +11,8 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Servicio
             int idUsuario,
             int idUsuarioASeguir,
             CancellationToken cancellationToken = default);
+
+        Task<IReadOnlyCollection<int>> ObtenerSeguidosIdsAsync(int usuarioId, CancellationToken cancellationToken = default);
     }
 
     public enum ResultadoSeguirUsuario
