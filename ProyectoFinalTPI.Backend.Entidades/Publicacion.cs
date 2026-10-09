@@ -1,3 +1,6 @@
+using System.ComponentModel.DataAnnotations.Schema;
+using ProyectoFinalTPI.Backend.Entidades.ValueObjects;
+
 namespace ProyectoFinalTPI.Backend.Entidades
 {
     public class Publicacion
@@ -6,6 +9,12 @@ namespace ProyectoFinalTPI.Backend.Entidades
             public string Titulo { get; set; } = string.Empty;
             public string Descripcion { get; set; } = string.Empty;
             public DateTime Fecha { get; set; }
+
+            [NotMapped]
+            public Año AñoDelRecuerdo => Año.DesdeFecha(Fecha);
+
+            [NotMapped]
+            public Decada DecadaDelRecuerdo => AñoDelRecuerdo.ADecada();
             public string UrlMultimedia { get; set; } = string.Empty;
             public MultimediaEnum TipoMultimedia { get; set; }
             public bool EstaOculto { get; set; }
