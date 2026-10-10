@@ -4,6 +4,10 @@ using ProyectoFinalTPI.Backend.Dtos.Publicacion;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Requests.Publicaciones;
 
+using Microsoft.EntityFrameworkCore;
+using ProyectoFinalTPI.Backend.Repositorio.Data;
+using ProyectoFinalTPI.Backend.Entidades;
+
 namespace ProyectoFinalTPI.Backend.Controllers
 {
     [ApiController]
@@ -11,11 +15,43 @@ namespace ProyectoFinalTPI.Backend.Controllers
     public class PublicacionesController : ControllerBase
     {
         private readonly IPublicacionServicio _publicacionServicio;
+        private readonly ApplicationDbContext _context;
 
         public PublicacionesController(
-            IPublicacionServicio publicacionServicio)
+            IPublicacionServicio publicacionServicio,
+            ApplicationDbContext context)
         {
             _publicacionServicio = publicacionServicio;
+            _context = context;
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetAll()
+        {
+            var publicaciones = await _context.Publicaciones
+                .Include(p => p.Lugar)
+                .Include(p => p.Usuario)
+                .Where(p => !p.EstaOculto)
+                .ToListAsync();
+
+            var result = publicaciones.Select(p => new {
+                id = p.Id.ToString(),
+                title = p.Titulo,
+                year = p.Fecha.Year,
+                author = p.Usuario?.Username ?? "Desconocido",
+                place = p.Lugar?.Nombre ?? "",
+                lat = p.Lugar?.Coordenadas.Y ?? 0,
+                lng = p.Lugar?.Coordenadas.X ?? 0,
+                description = p.Descripcion,
+                category = p.Categoria.ToString().Replace("Recuerdos_Personales", "Personales"),
+                source = "db",
+                media = string.IsNullOrEmpty(p.UrlMultimedia) ? null : new {
+                    url = p.UrlMultimedia,
+                    kind = p.TipoMultimedia == MultimediaEnum.Video ? "video" : "image"
+                }
+            });
+
+            return Ok(result);
         }
 
         [HttpPost]

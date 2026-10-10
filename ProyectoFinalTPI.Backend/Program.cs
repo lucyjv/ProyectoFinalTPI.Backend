@@ -70,23 +70,7 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    // Seed user if empty
-    if (!db.Usuarios.Any())
-    {
-        db.Usuarios.Add(new ProyectoFinalTPI.Backend.Entidades.Usuario
-        {
-            Id = 1,
-            Username = "DemoUser",
-            Email = "demo@example.com",
-            Contraseña = "password123",
-            EsAdmin = false
-        });
-        db.SaveChanges();
-    }
-}
+ProyectoFinalTPI.Backend.DataSeeder.Seed(app.Services, app.Environment);
 app.UseRouting();
 
 app.UseCors("AllowFrontend");
