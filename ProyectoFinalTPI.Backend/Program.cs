@@ -146,9 +146,11 @@ app.UseSwaggerUI(options =>
 });
 
 app.UseHttpsRedirection();
-using (var scope = app.Services.CreateScope())
+if (app.Environment.IsDevelopment())
 {
+    using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
     if (!db.Usuarios.Any())
     {
         db.Usuarios.Add(new ProyectoFinalTPI.Backend.Entidades.Usuario
@@ -159,6 +161,7 @@ using (var scope = app.Services.CreateScope())
             Contraseña = "password123",
             EsAdmin = false
         });
+
         db.SaveChanges();
     }
 }

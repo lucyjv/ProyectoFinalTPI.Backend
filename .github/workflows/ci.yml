@@ -1,0 +1,29 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main, feature/ci-be]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Instalar .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Restaurar dependencias
+        run: dotnet restore ProyectoFinalTPI.Backend.sln
+
+      - name: Compilar solución
+        run: dotnet build ProyectoFinalTPI.Backend.sln --no-restore --configuration Release
+
+      - name: Ejecutar pruebas
+        run: dotnet test ProyectoFinalTPI.Backend.sln --no-build --no-restore --configuration Release
