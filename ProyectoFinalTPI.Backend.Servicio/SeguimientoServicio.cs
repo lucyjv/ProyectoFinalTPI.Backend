@@ -1,4 +1,5 @@
 using Neo4j.Driver;
+using ProyectoFinalTPI.Backend.Dtos.Usuario;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 
@@ -17,6 +18,16 @@ namespace ProyectoFinalTPI.Backend.Servicio
                   (seguido:Usuario { postgresId: $idUsuarioASeguir })
             DELETE relacion";
 
+        private const string ListarSeguidosQuery = @"
+            MATCH (:Usuario { postgresId: $idUsuario })-[:SIGUE_A]->(seguido:Usuario)
+            RETURN seguido.postgresId AS idUsuario
+            ORDER BY idUsuario";
+
+        private const string ListarSeguidoresQuery = @"
+            MATCH (seguidor:Usuario)-[:SIGUE_A]->(:Usuario { postgresId: $idUsuario })
+            RETURN seguidor.postgresId AS idUsuario
+            ORDER BY idUsuario";
+
         private readonly IUsuarioRepositorio _usuarioRepositorio;
         private readonly IDriver _neo4jDriver;
 
@@ -28,24 +39,19 @@ namespace ProyectoFinalTPI.Backend.Servicio
             _neo4jDriver = neo4jDriver;
         }
 
-        public async Task<ResultadoSeguirUsuario> SeguirUsuarioAsync(
-            int idUsuario,
-            int idUsuarioASeguir,
-            CancellationToken cancellationToken = default)
+        public async Task<ResultadoSeguimiento> SeguirUsuario(
+            int idUsuario, int idUsuarioASeguir, CancellationToken cancellationToken = default)
         {
             if (idUsuario == idUsuarioASeguir)
             {
-                return ResultadoSeguirUsuario.AutoSeguimiento;
+                return ResultadoSeguimiento.AutoSeguimiento;
             }
 
-            var ambosUsuariosExisten = await AmbosUsuariosExistenAsync(
-                idUsuario,
-                idUsuarioASeguir,
-                cancellationToken);
+            var ambosUsuariosExisten = await AmbosUsuariosExistenAsync( idUsuario,idUsuarioASeguir,cancellationToken);
 
             if (!ambosUsuariosExisten)
             {
-                return ResultadoSeguirUsuario.UsuarioNoEncontrado;
+                return ResultadoSeguimiento.UsuarioNoEncontrado;
             }
 
             var relacionCreada = await CrearRelacionNeo4jAsync(
@@ -53,28 +59,23 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 idUsuarioASeguir);
 
             return relacionCreada
-                ? ResultadoSeguirUsuario.Seguido
-                : ResultadoSeguirUsuario.YaLoSeguía;
+                ? ResultadoSeguimiento.Aplicado
+                : ResultadoSeguimiento.SinCambios;
         }
 
-        public async Task<ResultadoDejarDeSeguirUsuario> DejarDeSeguirUsuarioAsync(
-            int idUsuario,
-            int idUsuarioASeguir,
-            CancellationToken cancellationToken = default)
+        public async Task<ResultadoSeguimiento> DejarDeSeguirUsuario(
+            int idUsuario, int idUsuarioASeguir, CancellationToken cancellationToken = default)
         {
             if (idUsuario == idUsuarioASeguir)
             {
-                return ResultadoDejarDeSeguirUsuario.AutoSeguimiento;
+                return ResultadoSeguimiento.AutoSeguimiento;
             }
 
-            var ambosUsuariosExisten = await AmbosUsuariosExistenAsync(
-                idUsuario,
-                idUsuarioASeguir,
-                cancellationToken);
+            var ambosUsuariosExisten = await AmbosUsuariosExistenAsync( idUsuario, idUsuarioASeguir, cancellationToken);
 
             if (!ambosUsuariosExisten)
             {
-                return ResultadoDejarDeSeguirUsuario.UsuarioNoEncontrado;
+                return ResultadoSeguimiento.UsuarioNoEncontrado;
             }
 
             var relacionEliminada = await EliminarRelacionNeo4jAsync(
@@ -82,14 +83,55 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 idUsuarioASeguir);
 
             return relacionEliminada
-                ? ResultadoDejarDeSeguirUsuario.DejadoDeSeguir
-                : ResultadoDejarDeSeguirUsuario.YaNoLoSeguía;
+                ? ResultadoSeguimiento.Aplicado
+                : ResultadoSeguimiento.SinCambios;
+        }
+
+        public async Task<IReadOnlyList<AutorResumenDto>?> ListarSeguidos(
+            int idUsuario, CancellationToken cancellationToken = default)
+        {
+            var usuarioExiste = await _usuarioRepositorio.ExisteUsuario(
+                idUsuario, cancellationToken);
+
+            if (!usuarioExiste)
+            {
+                return null;
+            }
+
+            var idsSeguidos = await ObtenerIdsSeguidosNeo4jAsync(idUsuario);
+            var usuariosSeguidos = await _usuarioRepositorio.ObtenerUsuariosPorIdsAsync( idsSeguidos, cancellationToken);
+            var usuariosPorId = usuariosSeguidos.ToDictionary(usuario => usuario.Id);
+
+            return idsSeguidos
+                .Where(usuariosPorId.ContainsKey)
+                .Select(id => usuariosPorId[id])
+                .ToList();
+        }
+
+        public async Task<IReadOnlyList<AutorResumenDto>?> ListarSeguidores(
+            int idUsuario, CancellationToken cancellationToken = default)
+        {
+            var usuarioExiste = await _usuarioRepositorio.ExisteUsuario( idUsuario, cancellationToken);
+
+            if (!usuarioExiste)
+            {
+                return null;
+            }
+
+            var idsSeguidores = await ObtenerIdsSeguidoresNeo4jAsync(idUsuario);
+            var usuariosSeguidores = await _usuarioRepositorio.ObtenerUsuariosPorIdsAsync(
+                idsSeguidores,
+                cancellationToken);
+            var usuariosPorId = usuariosSeguidores.ToDictionary(usuario => usuario.Id);
+
+            return idsSeguidores
+                .Where(usuariosPorId.ContainsKey)
+                .Select(id => usuariosPorId[id])
+                .ToList();
         }
 
         private async Task<bool> AmbosUsuariosExistenAsync(
-            int idUsuario,
-            int idUsuarioASeguir,
-            CancellationToken cancellationToken)
+            int idUsuario, int idUsuarioASeguir, CancellationToken cancellationToken)
         {
             var usuarioExiste = await _usuarioRepositorio.ExisteUsuario(
                 idUsuario,
@@ -103,8 +145,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
         }
 
         private async Task<bool> CrearRelacionNeo4jAsync(
-            int idUsuario,
-            int idUsuarioASeguir)
+            int idUsuario, int idUsuarioASeguir)
         {
             await using var session = _neo4jDriver.AsyncSession();
 
@@ -120,8 +161,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
         }
 
         private async Task<bool> EliminarRelacionNeo4jAsync(
-            int idUsuario,
-            int idUsuarioASeguir)
+            int idUsuario, int idUsuarioASeguir)
         {
             await using var session = _neo4jDriver.AsyncSession();
 
@@ -133,6 +173,44 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
                 var summary = await cursor.ConsumeAsync();
                 return summary.Counters.RelationshipsDeleted > 0;
+            });
+        }
+        private async Task<List<int>> ObtenerIdsSeguidosNeo4jAsync(int idUsuario)
+        {
+            await using var session = _neo4jDriver.AsyncSession();
+
+            return await session.ExecuteReadAsync(async transaction =>
+            {
+                var cursor = await transaction.RunAsync(
+                    ListarSeguidosQuery,
+                    new { idUsuario });
+
+                var idsSeguidos = new List<int>();
+                await foreach (var registro in cursor)
+                {
+                    idsSeguidos.Add(registro["idUsuario"].As<int>());
+                }
+
+                return idsSeguidos;
+            });
+        }
+        private async Task<List<int>> ObtenerIdsSeguidoresNeo4jAsync(int idUsuario)
+        {
+            await using var session = _neo4jDriver.AsyncSession();
+
+            return await session.ExecuteReadAsync(async transaction =>
+            {
+                var cursor = await transaction.RunAsync(
+                    ListarSeguidoresQuery,
+                    new { idUsuario });
+
+                var idsSeguidores = new List<int>();
+                await foreach (var registro in cursor)
+                {
+                    idsSeguidores.Add(registro["idUsuario"].As<int>());
+                }
+
+                return idsSeguidores;
             });
         }
     }

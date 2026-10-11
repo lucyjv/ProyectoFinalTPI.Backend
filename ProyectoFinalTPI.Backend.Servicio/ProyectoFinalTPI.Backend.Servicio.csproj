@@ -7,6 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="9.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="9.0.1" />
     <PackageReference Include="Neo4j.Driver" Version="6.3.0" />
     <ProjectReference Include="..\ProyectoFinalTPI.Backend.Dtos\ProyectoFinalTPI.Backend.Dtos.csproj" />
     <ProjectReference Include="..\ProyectoFinalTPI.Backend.Entidades\ProyectoFinalTPI.Backend.Entidades.csproj" />
