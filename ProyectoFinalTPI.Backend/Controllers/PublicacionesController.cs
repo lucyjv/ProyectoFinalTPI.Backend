@@ -44,25 +44,57 @@ namespace ProyectoFinalTPI.Backend.Controllers
             var publicaciones = await _context.Publicaciones
                 .Include(p => p.Lugar)
                 .Include(p => p.Usuario)
-                .Where(p => !p.EstaOculto)
+                .Include(p => p.PublicacionOriginal)
+                    .ThenInclude(po => po.Usuario)
+                .Include(p => p.PublicacionOriginal)
+                    .ThenInclude(po => po.Lugar)
+                .Include(p => p.PublicacionOriginal)
+                    .ThenInclude(po => po.PublicacionOriginal)
+                .Where(p => !p.EstaOculto && (p.PublicacionOriginal == null || !p.PublicacionOriginal.EstaOculto))
+                .OrderByDescending(p => p.FechaCreación)
                 .ToListAsync();
 
-            var result = publicaciones.Select(p => new {
-                id = p.Id.ToString(),
-                title = p.Titulo,
-                year = p.Fecha.Year,
-                author = p.Usuario?.Username ?? "Desconocido",
-                place = p.Lugar?.Nombre ?? "",
-                lat = p.Lugar?.Coordenadas.Y ?? 0,
-                lng = p.Lugar?.Coordenadas.X ?? 0,
-                description = p.Descripcion,
-                category = p.Categoria.ToString().Replace("Recuerdos_Personales", "Personales"),
-                source = "db",
-                image = p.TipoMultimedia == MultimediaEnum.Foto ? p.UrlMultimedia : null,
-                media = (!string.IsNullOrEmpty(p.UrlMultimedia) && p.TipoMultimedia != MultimediaEnum.Foto) ? new {
-                    url = p.UrlMultimedia,
-                    kind = p.TipoMultimedia == MultimediaEnum.Video ? "video" : "image"
-                } : null
+            var result = publicaciones.Select(p => {
+                var esRepost = p.PublicacionOriginal != null;
+                var original = p.PublicacionOriginal;
+
+                var year = esRepost && original != null
+                    ? (original.Fecha.Year <= 2015 ? original.Fecha.Year : (original.PublicacionOriginal != null ? original.PublicacionOriginal.Fecha.Year : original.Fecha.Year))
+                    : p.Fecha.Year;
+                var place = p.Lugar != null ? p.Lugar.Nombre : (original?.Lugar?.Nombre ?? "");
+                var lat = p.Lugar != null ? p.Lugar.Coordenadas.Y : (original?.Lugar?.Coordenadas.Y ?? 0);
+                var lng = p.Lugar != null ? p.Lugar.Coordenadas.X : (original?.Lugar?.Coordenadas.X ?? 0);
+                var description = esRepost && original != null
+                    ? (string.IsNullOrEmpty(original.Descripcion) ? p.Descripcion : original.Descripcion)
+                    : p.Descripcion;
+                var urlMedia = !string.IsNullOrEmpty(p.UrlMultimedia)
+                    ? p.UrlMultimedia
+                    : (original?.UrlMultimedia ?? string.Empty);
+                var tipoMedia = !string.IsNullOrEmpty(p.UrlMultimedia)
+                    ? p.TipoMultimedia
+                    : (original?.TipoMultimedia ?? p.TipoMultimedia);
+
+                return new {
+                    id = p.Id.ToString(),
+                    title = p.Titulo,
+                    year = year,
+                    author = p.Usuario?.Username ?? "Desconocido",
+                    place = place,
+                    lat = lat,
+                    lng = lng,
+                    description = description,
+                    category = p.Categoria.ToString().Replace("Recuerdos_Personales", "Personales"),
+                    source = "db",
+                    image = tipoMedia == MultimediaEnum.Foto ? urlMedia : null,
+                    media = (!string.IsNullOrEmpty(urlMedia) && tipoMedia != MultimediaEnum.Foto) ? new {
+                        url = urlMedia,
+                        kind = tipoMedia == MultimediaEnum.Video ? "video" : "image"
+                    } : null,
+                    repost = esRepost && original != null ? new {
+                        author = original.Usuario?.Username ?? "Desconocido",
+                        comment = !string.IsNullOrEmpty(p.Descripcion) ? p.Descripcion : null
+                    } : null
+                };
             });
 
             return Ok(result);

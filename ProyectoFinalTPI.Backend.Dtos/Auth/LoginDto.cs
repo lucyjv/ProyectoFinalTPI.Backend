@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace ProyectoFinalTPI.Backend.Dtos.Auth
 {
@@ -8,7 +9,20 @@ namespace ProyectoFinalTPI.Backend.Dtos.Auth
         [EmailAddress(ErrorMessage = "El email no tiene un formato válido.")]
         public string Email { get; set; } = string.Empty;
 
+        private string _contrasena = string.Empty;
+
         [Required(ErrorMessage = "La contraseña es obligatoria.")]
-        public string Contraseña { get; set; } = string.Empty;
+        public string Contraseña
+        {
+            get => _contrasena;
+            set => _contrasena = value;
+        }
+
+        [JsonPropertyName("contrasena")]
+        public string? ContrasenaAlias
+        {
+            get => _contrasena;
+            set { if (!string.IsNullOrEmpty(value)) _contrasena = value; }
+        }
     }
 }

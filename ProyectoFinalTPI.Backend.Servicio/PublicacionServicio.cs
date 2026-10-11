@@ -100,7 +100,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
             {
                 Titulo = original.Titulo, 
                 Descripcion = dto.Descripcion,
-                Fecha = DateTime.UtcNow,
+                Fecha = original.Fecha,
                 Categoria = original.Categoria,
                 UrlMultimedia = original.UrlMultimedia,
                 TipoMultimedia = original.TipoMultimedia,
