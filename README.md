@@ -208,3 +208,30 @@ Ambos reciben un cuerpo JSON:
 }
 ```
 
+### Autenticación JWT y Swagger
+Nuevos secrets requeridos
+
+Agregar estos tres comandos a la configuración inicial de User Secrets (junto a los existentes):
+
+dotnet user-secrets set "Jwt:Clave" "nostalgia-clave-secreta-super-segura-2026" --project "./ProyectoFinalTPI.Backend/ProyectoFinalTPI.Backend.csproj"
+dotnet user-secrets set "Jwt:Emisor" "nostalgia-backend" --project "./ProyectoFinalTPI.Backend/ProyectoFinalTPI.Backend.csproj"
+dotnet user-secrets set "Jwt:Audiencia" "nostalgia-frontend" --project "./ProyectoFinalTPI.Backend/ProyectoFinalTPI.Backend.csproj"
+
+La tabla de variables de entorno para producción se amplía con:
+
+Clave de User Secrets	Variable de entorno para producción
+Jwt:Clave	Jwt__Clave
+Jwt:Emisor	Jwt__Emisor
+Jwt:Audiencia	Jwt__Audiencia
+Swagger
+
+Con la aplicación corriendo, la documentación interactiva está disponible en: http://localhost:5000/swagger
+
+Para probar endpoints protegidos: obtener un token desde POST /api/auth/login y pegarlo en el botón Authorize.
+
+### Endpoints de autenticación
+Método	Ruta	Descripción
+| `POST` |	`/api/auth/registro` |	Registra un nuevo usuario. Recibe username, email y contraseña en JSON. Devuelve 201 con token JWT.
+| `POST` |	`/api/auth/login` |	Autentica un usuario existente. Recibe email y contraseña en JSON. Devuelve 200 con token JWT.
+
+Las contraseñas se almacenan hasheadas con BCrypt. El token JWT tiene validez de 7 días e incluye el id, email, username y rol del usuario.
