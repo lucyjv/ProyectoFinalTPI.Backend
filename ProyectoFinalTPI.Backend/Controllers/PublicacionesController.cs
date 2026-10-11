@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using ProyectoFinalTPI.Backend.Dtos;
 using ProyectoFinalTPI.Backend.Dtos.Publicacion;
@@ -67,9 +68,25 @@ namespace ProyectoFinalTPI.Backend.Controllers
             return Ok(result);
         }
 
+        private int? ObtenerUsuarioIdAutenticado()
+        {
+            var idString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                        ?? User.FindFirst("sub")?.Value;
+
+            return int.TryParse(idString, out var id) ? id : null;
+        }
+
         [HttpPost]
         public async Task<IActionResult> Crear([FromForm] CrearPublicacionRequest request)
         {
+            var autorIdAutenticado = ObtenerUsuarioIdAutenticado();
+            var autorIdFinal = autorIdAutenticado ?? request.AutorId;
+
+            if (autorIdFinal <= 0)
+            {
+                return Unauthorized(new { mensaje = "Debe iniciar sesión para crear una publicación." });
+            }
+
             using var stream = request.Archivo?.OpenReadStream();
 
             var dto = new CrearPublicacionDto
@@ -91,7 +108,7 @@ namespace ProyectoFinalTPI.Backend.Controllers
                 NombreArchivo = request.Archivo?.FileName,
                 UrlArchivo = request.UrlArchivo,
 
-                AutorId = request.AutorId
+                AutorId = autorIdFinal
             };
 
             try
@@ -111,10 +128,18 @@ namespace ProyectoFinalTPI.Backend.Controllers
         [HttpPost("compartir")]
         public async Task<IActionResult> Compartir([FromBody] CompartirPublicacionRequest request)
         {
+            var autorIdAutenticado = ObtenerUsuarioIdAutenticado();
+            var autorIdFinal = autorIdAutenticado ?? request.AutorId;
+
+            if (autorIdFinal <= 0)
+            {
+                return Unauthorized(new { mensaje = "Debe iniciar sesión para compartir una publicación." });
+            }
+
             var dto = new CompartirPublicacionDto
             {
                 PublicacionOriginalId = request.PublicacionOriginalId,
-                AutorId = request.AutorId,
+                AutorId = autorIdFinal,
                 Descripcion = request.Descripcion ?? string.Empty
             };
 
