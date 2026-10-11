@@ -25,6 +25,12 @@ namespace ProyectoFinalTPI.Backend.Controllers
             _context = context;
         }
 
+        [HttpGet("test-users")]
+        public IActionResult GetTestUsers()
+        {
+            return Ok(_context.Usuarios.Select(u => new { u.Id, u.Username }).ToList());
+        }
+
         [HttpGet]
         public async Task<IActionResult> GetAll()
         {
@@ -45,10 +51,11 @@ namespace ProyectoFinalTPI.Backend.Controllers
                 description = p.Descripcion,
                 category = p.Categoria.ToString().Replace("Recuerdos_Personales", "Personales"),
                 source = "db",
-                media = string.IsNullOrEmpty(p.UrlMultimedia) ? null : new {
+                image = p.TipoMultimedia == MultimediaEnum.Foto ? p.UrlMultimedia : null,
+                media = (!string.IsNullOrEmpty(p.UrlMultimedia) && p.TipoMultimedia != MultimediaEnum.Foto) ? new {
                     url = p.UrlMultimedia,
                     kind = p.TipoMultimedia == MultimediaEnum.Video ? "video" : "image"
-                }
+                } : null
             });
 
             return Ok(result);
