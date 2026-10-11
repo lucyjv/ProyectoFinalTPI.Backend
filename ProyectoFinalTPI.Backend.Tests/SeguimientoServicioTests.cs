@@ -121,6 +121,13 @@ public class SeguimientoServicioTests
                 .ToList());
         }
 
+        public Task<List<int>> ObtenerIdsExistentesAsync(
+            IReadOnlyCollection<int> ids,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(ids.Where(_idsExistentes.Contains).ToList());
+        }
+
         public Task<bool> ExisteUsuario(
             int id,
             CancellationToken cancellationToken = default)
