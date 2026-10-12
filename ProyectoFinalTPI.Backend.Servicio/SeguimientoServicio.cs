@@ -18,6 +18,14 @@ namespace ProyectoFinalTPI.Backend.Servicio
                   (seguido:Usuario { postgresId: $idUsuarioASeguir })
             DELETE relacion";
 
+
+        private const string ObtenerSeguidosQuery = """
+            MATCH (:Usuario { postgresId: $usuarioId })
+                  -[:SIGUE_A]->(seguido:Usuario)
+            WHERE seguido.postgresId IS NOT NULL
+            RETURN DISTINCT seguido.postgresId AS id
+            """;
+
         private const string ListarSeguidosQuery = @"
             MATCH (:Usuario { postgresId: $idUsuario })-[:SIGUE_A]->(seguido:Usuario)
             RETURN seguido.postgresId AS idUsuario
@@ -27,6 +35,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
             MATCH (seguidor:Usuario)-[:SIGUE_A]->(:Usuario { postgresId: $idUsuario })
             RETURN seguidor.postgresId AS idUsuario
             ORDER BY idUsuario";
+
 
         private readonly IUsuarioRepositorio _usuarioRepositorio;
         private readonly IDriver _neo4jDriver;
@@ -175,6 +184,55 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 return summary.Counters.RelationshipsDeleted > 0;
             });
         }
+
+
+        public async Task<IReadOnlyCollection<int>> ObtenerSeguidosIdsAsync(int usuarioId, CancellationToken cancellationToken = default)
+        {
+            if (usuarioId <= 0)
+            {
+                throw new ArgumentException(
+                    "El ID del usuario debe ser mayor que cero.");
+            }
+
+            var existeUsuario = await _usuarioRepositorio.ExisteUsuario(
+                usuarioId,
+                cancellationToken);
+
+            if (!existeUsuario)
+            {
+                throw new KeyNotFoundException(
+                    "El usuario indicado no existe.");
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            await using var session = _neo4jDriver.AsyncSession();
+
+            var ids = await session.ExecuteReadAsync(async transaction =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var resultado = await transaction.RunAsync(
+                    ObtenerSeguidosQuery,
+                    new { usuarioId });
+
+                var seguidos = new List<int>();
+
+                while (await resultado.FetchAsync())
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    seguidos.Add(
+                        resultado.Current["id"].As<int>());
+                }
+
+                return seguidos;
+            });
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            return ids;
+        }
         private async Task<List<int>> ObtenerIdsSeguidosNeo4jAsync(int idUsuario)
         {
             await using var session = _neo4jDriver.AsyncSession();
@@ -212,6 +270,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
                 return idsSeguidores;
             });
+
         }
     }
 }
