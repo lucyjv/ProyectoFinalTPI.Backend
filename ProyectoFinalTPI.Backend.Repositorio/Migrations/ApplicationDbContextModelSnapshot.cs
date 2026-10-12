@@ -57,6 +57,52 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.ToTable("Comentario");
                 });
 
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Logro", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Descripcion")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("PuntosRecompensa")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Titulo")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("UrlIcono")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("logros", (string)null);
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Logros_Usuarios", b =>
+                {
+                    b.Property<int>("UsuarioId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("LogroId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("FechaDesbloqueo")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("UsuarioId", "LogroId");
+
+                    b.HasIndex("LogroId");
+
+                    b.ToTable("logros_usuarios", (string)null);
+                });
+
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Lugar", b =>
                 {
                     b.Property<int>("Id")
@@ -294,6 +340,25 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Navigation("Usuario");
                 });
 
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Logros_Usuarios", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Logro", "Logro")
+                        .WithMany("LogrosUsuarios")
+                        .HasForeignKey("LogroId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario_Interactivo", "Usuario")
+                        .WithMany("LogrosUsuarios")
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Logro");
+
+                    b.Navigation("Usuario");
+                });
+
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Publicacion", b =>
                 {
                     b.HasOne("ProyectoFinalTPI.Backend.Entidades.Lugar", "Lugar")
@@ -320,6 +385,11 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Navigation("Usuario");
                 });
 
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Logro", b =>
+                {
+                    b.Navigation("LogrosUsuarios");
+                });
+
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Publicacion", b =>
                 {
                     b.Navigation("Comentarios");
@@ -327,6 +397,8 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Usuario_Interactivo", b =>
                 {
+                    b.Navigation("LogrosUsuarios");
+
                     b.Navigation("Publicaciones");
                 });
 #pragma warning restore 612, 618
