@@ -35,7 +35,6 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                     "Los IDs de publicaciones deben ser mayores que cero.");
             }
 
-            // Elimina duplicados conservando el orden recibido.
             var idsUnicos = new List<int>();
             var idsAgregados = new HashSet<int>();
 
