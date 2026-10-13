@@ -25,37 +25,23 @@ namespace ProyectoFinalTPI.Backend.Controllers
             [FromBody] SeguirUsuarioRequest request, CancellationToken cancellationToken)
         {
             return EjecutarOperacion( ()
-                => _seguimientoServicio.SeguirUsuario(
-                    request.IdUsuario,
-                    request.IdUsuarioASeguir,
-                    cancellationToken),
+                => _seguimientoServicio.SeguirUsuario( request.IdUsuario, request.IdUsuarioASeguir,cancellationToken),
 
-                MapearResultadoSeguir,
-                request.IdUsuario,
-                request.IdUsuarioASeguir,
-                cancellationToken,
-                "crear");
+                MapearResultadoSeguir, request.IdUsuario,request.IdUsuarioASeguir,cancellationToken,"crear");
         }
 
         [HttpDelete]
         public Task<IActionResult> DejarDeSeguirUsuario(
             [FromBody] DejarDeSeguirUsuarioRequest request, CancellationToken cancellationToken)
         {
-            return EjecutarOperacion(
-                () => _seguimientoServicio.DejarDeSeguirUsuario(
-                    request.IdUsuario,
-                    request.IdUsuarioASeguir,
-                    cancellationToken),
-                MapearResultadoDejarDeSeguir,
-                request.IdUsuario,
-                request.IdUsuarioASeguir,
-                cancellationToken,
-                "eliminar");
+            return EjecutarOperacion(() 
+                => _seguimientoServicio.DejarDeSeguirUsuario( request.IdUsuario, request.IdUsuarioASeguir,cancellationToken),
+                
+                MapearResultadoDejarDeSeguir, request.IdUsuario, request.IdUsuarioASeguir,cancellationToken,"eliminar");
         }
 
         [HttpGet("{idUsuario:int}/seguidos")]
-        public async Task<IActionResult> ListarSeguidos(
-            int idUsuario, CancellationToken cancellationToken)
+        public async Task<IActionResult> ListarSeguidos( int idUsuario, CancellationToken cancellationToken)
         {
             if (idUsuario <= 0)
             {
@@ -64,9 +50,7 @@ namespace ProyectoFinalTPI.Backend.Controllers
 
             try
             {
-                var usuariosSeguidos = await _seguimientoServicio.ListarSeguidos(
-                    idUsuario,
-                    cancellationToken);
+                var usuariosSeguidos = await _seguimientoServicio.ListarSeguidos( idUsuario, cancellationToken);
 
                 return usuariosSeguidos is null
                     ? NotFound(new { error = "No se encontro el usuario" })
