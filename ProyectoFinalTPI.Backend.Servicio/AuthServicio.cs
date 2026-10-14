@@ -51,7 +51,25 @@ namespace ProyectoFinalTPI.Backend.Servicio
             var usuario = await _context.Usuarios
                 .FirstOrDefaultAsync(u => u.Email == dto.Email);
 
-            if (usuario is null || !BC.Verify(dto.Contraseña, usuario.Contraseña))
+            if (usuario is null)
+                throw new UnauthorizedAccessException("Email o contraseña incorrectos.");
+
+            bool passwordValida = false;
+            try
+            {
+                passwordValida = BC.Verify(dto.Contraseña, usuario.Contraseña);
+            }
+            catch
+            {
+                if (dto.Contraseña == usuario.Contraseña)
+                {
+                    passwordValida = true;
+                    usuario.Contraseña = BC.HashPassword(dto.Contraseña);
+                    await _context.SaveChangesAsync();
+                }
+            }
+
+            if (!passwordValida)
                 throw new UnauthorizedAccessException("Email o contraseña incorrectos.");
 
             return GenerarRespuesta(usuario);
