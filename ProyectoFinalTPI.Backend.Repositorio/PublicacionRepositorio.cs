@@ -62,8 +62,8 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                 .Where(p =>
                 p.Lugar.Coordenadas.Y >= filtro.MinLatitud &&
                 p.Lugar.Coordenadas.Y <= filtro.MaxLatitud &&
-                p.Lugar.Coordenadas.X >= filtro.MinLatitud &&
-                p.Lugar.Coordenadas.X <= filtro.MaxLatitud);
+                p.Lugar.Coordenadas.X >= filtro.MinLongitud &&
+                p.Lugar.Coordenadas.X <= filtro.MaxLongitud);
 
             if (filtro.Categoria.HasValue)
             {
@@ -110,7 +110,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio
 
                     DescripcionBreve = p.Descripcion.Length > longitudMaximaDescripcion
                     ? p.Descripcion.Substring(
-                        longitudMaximaDescripcion) + "..."
+                        0, longitudMaximaDescripcion) + "..."
                         : p.Descripcion,
 
                     Fecha = p.Fecha,
@@ -204,7 +204,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                     Descripcion =
                         p.Descripcion.Length > longitudMaximaDescripcion
                             ? p.Descripcion.Substring(
-                                0, longitudMaximaDescripcion) + "..."
+                                0, longitudMaximaDescripcion - 3) + "..."
                             : p.Descripcion,
 
                     Fecha = p.Fecha,
@@ -222,7 +222,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio
 
                     Lugar = new LugarDetalleDto
                     {
-                        Id = p.Id,
+                        Id = p.LugarId,
                         Nombre = p.Lugar.Nombre,
                         Direccion = p.Lugar.Direccion,
                         Latitud = p.Lugar.Coordenadas.Y,

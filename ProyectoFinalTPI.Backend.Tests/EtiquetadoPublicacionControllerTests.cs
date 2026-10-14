@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using ProyectoFinalTPI.Backend.Controllers;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
@@ -73,7 +74,8 @@ public class EtiquetadoPublicacionControllerTests
             publicacionId,
             new EtiquetarUsuariosRequest { UsuariosIds = usuariosIds.ToList() },
             CancellationToken.None);
-        var respuesta = Assert.IsType<BadRequestObjectResult>(resultado);
+        var respuesta = Assert.IsType<ObjectResult>(resultado);
+        Assert.IsType<ProblemDetails>(respuesta.Value);
 
         Assert.Equal((int)HttpStatusCode.BadRequest, respuesta.StatusCode);
         Assert.Contains(mensaje, JsonSerializer.Serialize(respuesta.Value, OpcionesJson));
@@ -94,7 +96,8 @@ public class EtiquetadoPublicacionControllerTests
             25,
             new EtiquetarUsuariosRequest { UsuariosIds = new List<int> { 10 } },
             CancellationToken.None);
-        var respuesta = Assert.IsType<NotFoundObjectResult>(resultado);
+        var respuesta = Assert.IsType<ObjectResult>(resultado);
+        Assert.IsType<ProblemDetails>(respuesta.Value);
 
         Assert.Equal((int)HttpStatusCode.NotFound, respuesta.StatusCode);
         Assert.Contains(mensaje, JsonSerializer.Serialize(respuesta.Value, OpcionesJson));
@@ -116,7 +119,7 @@ public class EtiquetadoPublicacionControllerTests
         var contenido = JsonSerializer.Serialize(respuesta.Value, OpcionesJson);
 
         Assert.Equal((int)HttpStatusCode.InternalServerError, respuesta.StatusCode);
-        Assert.Contains("Ocurrio un error al etiquetar usuarios en la publicacion", contenido);
+        Assert.Contains("No se pudo etiquetar usuarios en la publicación", contenido);
         Assert.DoesNotContain("detalle interno", contenido);
     }
 
@@ -125,7 +128,10 @@ public class EtiquetadoPublicacionControllerTests
         return new PublicacionesController(
             null!,
             servicio,
-            NullLogger<PublicacionesController>.Instance);
+            NullLogger<PublicacionesController>.Instance)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
+        };
     }
 
     private sealed class EtiquetadoFake : IEtiquetadoPublicacionServicio

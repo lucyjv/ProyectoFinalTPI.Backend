@@ -18,14 +18,17 @@ namespace ProyectoFinalTPI.Backend.Servicio
         private readonly IMultimediaServicio _multimediaServicio;
         private readonly IRecomendacionServicio _recomendacionServicio;
         private readonly ISesionFypRepositorio _sesionFypRepositorio;
+        private readonly ISeguimientoServicio _seguimientoServicio;
         public PublicacionServicio(IPublicacionRepositorio publicacionRepositorio, IUsuarioRepositorio usuarioRepositorio, 
-            IMultimediaServicio multimediaServicio, IRecomendacionServicio recomendacionServicio, ISesionFypRepositorio sesionFypRepositorio)
+            IMultimediaServicio multimediaServicio, IRecomendacionServicio recomendacionServicio, ISesionFypRepositorio sesionFypRepositorio,
+            ISeguimientoServicio seguimientoServicio)
         {
             _publicacionRepositorio = publicacionRepositorio;
             _usuarioRepositorio = usuarioRepositorio;
             _multimediaServicio = multimediaServicio;
             _recomendacionServicio = recomendacionServicio;
             _sesionFypRepositorio = sesionFypRepositorio;
+            _seguimientoServicio = seguimientoServicio;
         }
 
         public List<Publicacion> ObtenerPublicaciones()
@@ -282,10 +285,14 @@ namespace ProyectoFinalTPI.Backend.Servicio
             };
         }
 
-        public async Task<ResultadoPaginadoDto<PublicacionDetalleDto>>ObtenerFeedSeguidos(IReadOnlyCollection<int> autoresIds, string? cursor, int limite,
-            CancellationToken cancellationToken = default)
+        public async Task<ResultadoPaginadoDto<PublicacionDetalleDto>>ObtenerFeedSeguidos(int usuarioId, string? cursor, int limite,
+        CancellationToken cancellationToken = default)
         {
-            ArgumentNullException.ThrowIfNull(autoresIds);
+            if (usuarioId <= 0)
+            {
+                throw new ArgumentException(
+                    "El ID del usuario debe ser mayor que cero.");
+            }
 
             if (limite < 1 || limite > 50)
             {
@@ -293,26 +300,20 @@ namespace ProyectoFinalTPI.Backend.Servicio
                     "El límite debe estar entre 1 y 50.");
             }
 
-            if (autoresIds.Any(id => id <= 0))
-            {
-                throw new ArgumentException(
-                    "Los IDs de los autores deben ser mayores que cero.");
-            }
-
             var cursorDecodificado = CursorCronologicoCodec.Leer(cursor);
 
-            var autoresUnicos = autoresIds
-                .Distinct()
-                .ToArray();
+            var autoresIds = await _seguimientoServicio.ObtenerSeguidosIdsAsync(
+                usuarioId,
+                cancellationToken);
 
-            if (autoresUnicos.Length == 0)
+            if (autoresIds.Count == 0)
             {
                 return new ResultadoPaginadoDto<PublicacionDetalleDto>();
             }
 
             var publicaciones =
                 await _publicacionRepositorio.ObtenerFeedSeguidos(
-                    autoresUnicos,
+                    autoresIds,
                     cursorDecodificado,
                     limite,
                     cancellationToken);
@@ -341,8 +342,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
             };
         }
 
-        public async Task<ResultadoPaginadoDto<PublicacionDetalleDto>>
-    ObtenerPublicacionesParaVos(
+        public async Task<ResultadoPaginadoDto<PublicacionDetalleDto>>ObtenerPublicacionesParaVos(
         int usuarioId,
         string? cursor,
         int limite,

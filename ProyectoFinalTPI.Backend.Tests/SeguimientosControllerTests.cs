@@ -322,6 +322,13 @@ public class SeguimientosControllerTests
 
     private sealed class SeguimientoFake : ISeguimientoServicio
     {
+        public async Task<IReadOnlyCollection<int>> ObtenerSeguidosIdsAsync(
+            int usuarioId, CancellationToken cancellationToken = default)
+        {
+            var seguidos = await ListarSeguidos(usuarioId, cancellationToken);
+            return seguidos?.Select(u => u.Id).ToArray() ?? Array.Empty<int>();
+        }
+
         public ResultadoSeguimiento ResultadoSeguir { get; set; }
         public ResultadoSeguimiento ResultadoDejarDeSeguir { get; set; }
         public IReadOnlyList<ProyectoFinalTPI.Backend.Dtos.Usuario.AutorResumenDto>? ResultadoSeguidos { get; set; }

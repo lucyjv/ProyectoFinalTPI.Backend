@@ -150,6 +150,45 @@ Si necesitas agregar una nueva entidad o añadir un atributo (ejemplo: agregar l
 *Nota: Las relaciones y propiedades añadidas en **Neo4j** no requieren migraciones de Entity Framework. Se implementan mediante consultas Cypher en el servicio correspondiente.*
 
 
+### Tests de integración de publicaciones con Docker
+
+Estos tests prueban los GET de mapa, resumen, detalle y comentarios mediante
+peticiones HTTP que recorren el controlador, servicio y repositorio reales,
+con PostgreSQL 16 y PostGIS.
+
+**Requisitos y ejecución**
+
+1. Tener instalado el SDK de .NET compatible con el proyecto y Docker Desktop.
+2. Abrir Docker Desktop con el motor de contenedores Linux y esperar a que indique que está funcionando.
+3. Desde la raíz del repositorio, ejecutar:
+
+```powershell
+dotnet test ProyectoFinalTPI.Backend.Tests/ProyectoFinalTPI.Backend.Tests.csproj --filter FullyQualifiedName~PublicacionesIntegracionTests
+```
+
+No hace falta iniciar la API manualmente ni crear una base de datos.
+La primera ejecución necesita acceso a Internet para restaurar las dependencias
+y descargar las imágenes de Docker; por eso puede tardar más.
+
+**Qué sucede al ejecutar los tests**
+
+- Testcontainers levanta un contenedor temporal con la imagen `postgis/postgis:16-3.4`.
+- Cada caso crea una base independiente y aplica las migraciones del proyecto.
+- La API de prueba utiliza esa base para ejecutar las consultas, incluidas las geográficas.
+- Al terminar cada caso se elimina su base; al finalizar la clase se elimina el contenedor.
+
+La base de desarrollo no se utiliza ni se modifica. La conexión y las credenciales
+temporales las administra Testcontainers. Cloudinary está simulado y estos GET
+no consultan Neo4j.
+
+Si aparece `DockerUnavailableException`, comprobar que Docker Desktop esté abierto
+y que el motor esté funcionando antes de repetir el comando. Las pruebas requieren
+PostgreSQL/PostGIS real y no cambian automáticamente a una base en memoria.
+
+Los tests originales de `CrearPublicacionTests.cs` y
+`CompartirPublicacionTests.cs` mantienen su configuración anterior.
+Más detalles en [Integracion/README.md](ProyectoFinalTPI.Backend.Tests/Integracion/README.md).
+
 ### Endpoints de publicaciones
 
 | Método | Ruta | Descripción |
