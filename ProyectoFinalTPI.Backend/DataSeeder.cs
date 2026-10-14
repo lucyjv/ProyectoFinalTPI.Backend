@@ -21,7 +21,11 @@ namespace ProyectoFinalTPI.Backend
 
             if (!db.Usuarios.Any())
             {
-                var seedJsonPath = Path.Combine(env.ContentRootPath, "..", "..", "seed.json");
+                var seedJsonPath = Path.Combine(env.ContentRootPath, "seed.json");
+                if (!File.Exists(seedJsonPath))
+                {
+                    seedJsonPath = Path.Combine(env.ContentRootPath, "..", "..", "seed.json");
+                }
                 if (File.Exists(seedJsonPath))
                 {
                     var seedJson = File.ReadAllText(seedJsonPath);
@@ -132,7 +136,7 @@ namespace ProyectoFinalTPI.Backend
         public string category { get; set; } = string.Empty;
         public string source { get; set; } = string.Empty;
         public string image { get; set; } = string.Empty;
-        public SeedMedia media { get; set; }
+        public SeedMedia? media { get; set; }
     }
 
     public class SeedMedia

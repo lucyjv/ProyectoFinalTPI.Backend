@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Extensions.Caching.Memory;
@@ -40,7 +40,7 @@ namespace ProyectoFinalTPI.Backend.Tests
             Assert.Equal(publicacionesIds.Count, sesion.PublicacionesIds.Count);
 
             var clave = $"fyp:sesion:{sesion.Id:N}";
-            Assert.True(_cache.TryGetValue(clave, out SesionFypDto sesionEnCache));
+            Assert.True(_cache.TryGetValue(clave, out SesionFypDto? sesionEnCache));
             Assert.NotNull(sesionEnCache);
         }
 
