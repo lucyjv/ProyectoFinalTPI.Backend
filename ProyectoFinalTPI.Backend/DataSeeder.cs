@@ -21,7 +21,11 @@ namespace ProyectoFinalTPI.Backend
 
             if (!db.Usuarios.Any())
             {
-                var seedJsonPath = Path.Combine(env.ContentRootPath, "..", "..", "seed.json");
+                var seedJsonPath = Path.Combine(env.ContentRootPath, "seed.json");
+                if (!File.Exists(seedJsonPath))
+                {
+                    seedJsonPath = Path.Combine(env.ContentRootPath, "..", "..", "seed.json");
+                }
                 if (File.Exists(seedJsonPath))
                 {
                     var seedJson = File.ReadAllText(seedJsonPath);
