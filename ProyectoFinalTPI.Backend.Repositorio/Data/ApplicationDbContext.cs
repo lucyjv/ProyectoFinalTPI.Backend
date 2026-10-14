@@ -11,6 +11,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
             : base(options)
         {
         }
+
         public DbSet<Usuario> Usuarios { get; set; }
         public DbSet<Publicacion> Publicaciones { get; set; }
         public DbSet<Lugar> Lugares { get; set; }
@@ -20,13 +21,13 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
         public DbSet<Usuario_Marca> Usuario_Marcas { get; set; }
         public DbSet<Usuario_Personal> Usuario_Personales { get; set; }
 
-
+        // ── Chat ──────────────────────────────────────────────────────────────
+        public DbSet<MensajeChat> MensajesChat { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
 
-            // Le indicamos explícitamente a EF Core que use PostGIS para la propiedad de ubicación
             modelBuilder.HasPostgresExtension("postgis");
 
             modelBuilder.Entity<Usuario>()
@@ -50,6 +51,37 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
                 .HasForeignKey(p => p.PublicacionOriginalId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            // ── Configuración de MensajeChat ──────────────────────────────────
+            modelBuilder.Entity<MensajeChat>(entity =>
+            {
+                entity.ToTable("mensajes_chat");
+
+                entity.Property(e => e.Contenido)
+                      .IsRequired()
+                      .HasMaxLength(2000);
+
+                // FK al emisor: si el usuario es eliminado, sus mensajes también.
+                entity.HasOne(e => e.Emisor)
+                      .WithMany()
+                      .HasForeignKey(e => e.EmisorId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                // FK al destinatario: idem.
+                entity.HasOne(e => e.Destinatario)
+                      .WithMany()
+                      .HasForeignKey(e => e.DestinatarioId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                // Índice en FechaExpiracion para que la consulta de limpieza
+                // sea rápida incluso con millones de mensajes.
+                entity.HasIndex(e => e.FechaExpiracion)
+                      .HasDatabaseName("IX_mensajes_chat_expiracion");
+
+                // Índice compuesto para acelerar la consulta del historial
+                // entre dos usuarios concretos.
+                entity.HasIndex(e => new { e.EmisorId, e.DestinatarioId })
+                      .HasDatabaseName("IX_mensajes_chat_participantes");
+            });
         }
     }
 }
