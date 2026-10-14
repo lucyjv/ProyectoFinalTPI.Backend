@@ -178,6 +178,12 @@ if (app.Environment.IsDevelopment())
 {
     ProyectoFinalTPI.Backend.DataSeeder.Seed(app.Services, app.Environment);
 }
+if (args.Contains("--seed-only"))
+{
+    if (!app.Environment.IsDevelopment())
+        throw new InvalidOperationException("--seed-only requiere el entorno Development.");
+    return;
+}
 app.UseRouting();
 
 app.UseCors("AllowFrontend");

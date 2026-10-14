@@ -239,6 +239,35 @@ Los tests originales de `CrearPublicacionTests.cs` y
 `CompartirPublicacionTests.cs` mantienen su configuración anterior.
 Más detalles en [Integracion/README.md](ProyectoFinalTPI.Backend.Tests/Integracion/README.md).
 
+### Datos de demostración
+
+El archivo `ProyectoFinalTPI.Backend/seed.json` incluye 42 publicaciones únicas
+y 37 autores con perfiles personales y apellidos ficticios. Se carga automáticamente
+al iniciar la API en `Development`, usando la conexión `PostgresConnection`.
+La base debe tener aplicadas las migraciones.
+
+Para cargar los datos sin dejar el servidor ejecutándose, desde la raíz:
+
+```powershell
+dotnet run --project ProyectoFinalTPI.Backend --no-launch-profile -- --environment Development --seed-only
+```
+
+La carga también funciona cuando ya hay usuarios. Reutiliza perfiles personales
+por username/email, sin cambiar sus datos ni contraseñas; si hay una coincidencia
+ambigua, informa el problema. Omite recuerdos existentes con el mismo autor,
+título y fecha, y guarda los cambios dentro de una transacción.
+
+Los usuarios nuevos de demostración tienen la contraseña `password123`, guardada
+como hash BCrypt; sus emails están en `seed.json` (por ejemplo,
+`miguel@example.com`). No son administradores. Las cuentas preexistentes conservan
+sus credenciales. Estos datos son exclusivamente para desarrollo.
+
+Se conservaron los textos, categorías, ubicaciones y enlaces originales.
+Hay 19 publicaciones sin multimedia, cuya URL queda vacía.
+Los metadatos `groupId` y `hashtags` permanecen en el JSON, pero este seeder solo
+carga usuarios, lugares y publicaciones: no crea grupos ni relaciones en Neo4j.
+Los bloques editoriales `facts` y `music` no se importan como publicaciones.
+
 ### Endpoints de publicaciones
 
 | Método | Ruta | Descripción |
