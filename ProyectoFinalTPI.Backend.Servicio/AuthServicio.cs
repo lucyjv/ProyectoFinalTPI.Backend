@@ -2,31 +2,29 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using BC = BCrypt.Net.BCrypt;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using ProyectoFinalTPI.Backend.Dtos.Auth;
 using ProyectoFinalTPI.Backend.Entidades;
+using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
-using ProyectoFinalTPI.Backend.Repositorio.Data;
 
 namespace ProyectoFinalTPI.Backend.Servicio
 {
     public class AuthServicio : IAuthServicio
     {
-        private readonly ApplicationDbContext _context;
+        private readonly IUsuarioRepositorio _usuarioRepositorio;
         private readonly IConfiguration _configuration;
 
-        public AuthServicio(ApplicationDbContext context, IConfiguration configuration)
+        public AuthServicio(IUsuarioRepositorio usuarioRepositorio, IConfiguration configuration)
         {
-            _context = context;
+            _usuarioRepositorio = usuarioRepositorio;
             _configuration = configuration;
         }
 
         public async Task<AuthRespuestaDto> RegistrarAsync(RegistroDto dto)
         {
-            var emailEnUso = await _context.Usuarios
-                .AnyAsync(u => u.Email == dto.Email);
+            var emailEnUso = await _usuarioRepositorio.ExistePorEmailAsync(dto.Email);
 
             if (emailEnUso)
                 throw new InvalidOperationException("Ya existe una cuenta registrada con ese email.");
@@ -40,16 +38,14 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 FechaCreacion = DateTime.UtcNow
             };
 
-            _context.Usuarios.Add(usuario);
-            await _context.SaveChangesAsync();
+            await _usuarioRepositorio.AgregarAsync(usuario);
 
             return GenerarRespuesta(usuario);
         }
 
         public async Task<AuthRespuestaDto> LoginAsync(LoginDto dto)
         {
-            var usuario = await _context.Usuarios
-                .FirstOrDefaultAsync(u => u.Email == dto.Email);
+            var usuario = await _usuarioRepositorio.ObtenerPorEmailAsync(dto.Email);
 
             if (usuario is null)
                 throw new UnauthorizedAccessException("Email o contraseña incorrectos.");
@@ -65,7 +61,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 {
                     passwordValida = true;
                     usuario.Contraseña = BC.HashPassword(dto.Contraseña);
-                    await _context.SaveChangesAsync();
+                    await _usuarioRepositorio.ActualizarAsync(usuario);
                 }
             }
 
@@ -105,8 +101,8 @@ namespace ProyectoFinalTPI.Backend.Servicio
             };
 
             var token = new JwtSecurityToken(
-                issuer: _configuration["Jwt:Emisor"],
-                audience: _configuration["Jwt:Audiencia"],
+                issuer: _configuration["Jwt:Emisor"] ?? "nostalgia-backend",
+                audience: _configuration["Jwt:Audiencia"] ?? "nostalgia-frontend",
                 claims: claims,
                 expires: DateTime.UtcNow.AddDays(7),
                 signingCredentials: credenciales

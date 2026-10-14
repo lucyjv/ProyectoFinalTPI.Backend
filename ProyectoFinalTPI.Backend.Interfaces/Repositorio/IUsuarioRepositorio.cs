@@ -1,4 +1,4 @@
-﻿using ProyectoFinalTPI.Backend.Entidades;
+using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Dtos.Usuario;
 using System;
 using System.Collections.Generic;
@@ -21,5 +21,13 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Repositorio
         Task<List<int>> ObtenerIdsExistentesAsync(
             IReadOnlyCollection<int> ids,
             CancellationToken cancellationToken = default);
+
+        Task<Usuario?> ObtenerPorEmailAsync(string email, CancellationToken cancellationToken = default);
+
+        Task<bool> ExistePorEmailAsync(string email, CancellationToken cancellationToken = default);
+
+        Task AgregarAsync(Usuario usuario, CancellationToken cancellationToken = default);
+
+        Task ActualizarAsync(Usuario usuario, CancellationToken cancellationToken = default);
     }
 }
