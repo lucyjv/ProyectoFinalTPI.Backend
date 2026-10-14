@@ -136,7 +136,7 @@ namespace ProyectoFinalTPI.Backend
         public string category { get; set; } = string.Empty;
         public string source { get; set; } = string.Empty;
         public string image { get; set; } = string.Empty;
-        public SeedMedia media { get; set; }
+        public SeedMedia? media { get; set; }
     }
 
     public class SeedMedia
