@@ -56,6 +56,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 return ResultadoSeguimiento.AutoSeguimiento;
             }
 
+            // valida en el repo
             var ambosUsuariosExisten = await AmbosUsuariosExistenAsync( idUsuario,idUsuarioASeguir,cancellationToken);
 
             if (!ambosUsuariosExisten)
@@ -63,6 +64,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 return ResultadoSeguimiento.UsuarioNoEncontrado;
             }
 
+            // creamos la relación en neo 
             var relacionCreada = await CrearRelacionNeo4jAsync(
                 idUsuario,
                 idUsuarioASeguir);
@@ -107,6 +109,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 return null;
             }
 
+            // consulta las relaciones saliente "SIGUE_A" en neo
             var idsSeguidos = await ObtenerIdsSeguidosNeo4jAsync(idUsuario);
             var usuariosSeguidos = await _usuarioRepositorio.ObtenerUsuariosPorIdsAsync( idsSeguidos, cancellationToken);
             var usuariosPorId = usuariosSeguidos.ToDictionary(usuario => usuario.Id);
@@ -127,6 +130,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 return null;
             }
 
+            // consulta las relaciones entrantes "SIGUE_A" en neo
             var idsSeguidores = await ObtenerIdsSeguidoresNeo4jAsync(idUsuario);
             var usuariosSeguidores = await _usuarioRepositorio.ObtenerUsuariosPorIdsAsync(
                 idsSeguidores,
@@ -153,15 +157,17 @@ namespace ProyectoFinalTPI.Backend.Servicio
             return usuarioExiste && usuarioASeguirExiste;
         }
 
-        private async Task<bool> CrearRelacionNeo4jAsync(
-            int idUsuario, int idUsuarioASeguir)
+        private async Task<bool> CrearRelacionNeo4jAsync( int idUsuario, int idUsuarioASeguir)
         {
+
+            //abre una sesion con Neo4j
             await using var session = _neo4jDriver.AsyncSession();
 
+            // ejecuta la escritura en Neo4j
             return await session.ExecuteWriteAsync(async transaction =>
             {
                 var cursor = await transaction.RunAsync(
-                    CrearRelacionQuery,
+                    CrearRelacionQuery, // la query Cypher para crear la relacion
                     new { idUsuario, idUsuarioASeguir });
 
                 var summary = await cursor.ConsumeAsync();

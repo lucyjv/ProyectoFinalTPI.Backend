@@ -176,22 +176,7 @@ app.UseSwaggerUI(options =>
 app.UseHttpsRedirection();
 if (app.Environment.IsDevelopment())
 {
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-
-    if (!db.Usuarios.Any())
-    {
-        db.Usuarios.Add(new ProyectoFinalTPI.Backend.Entidades.Usuario
-        {
-            Id = 1,
-            Username = "DemoUser",
-            Email = "demo@example.com",
-            Contraseña = "password123",
-            EsAdmin = false
-        });
-
-        db.SaveChanges();
-    }
+    ProyectoFinalTPI.Backend.DataSeeder.Seed(app.Services, app.Environment);
 }
 app.UseRouting();
 

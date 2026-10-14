@@ -420,5 +420,45 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                     resultado => resultado.Cantidad,
                     cancellationToken);
         }
+
+        public async Task<bool> Eliminar(int id, int? autorId = null, CancellationToken cancellationToken = default)
+        {
+            var query = _context.Publicaciones.Where(p => p.Id == id);
+            if (autorId.HasValue && autorId.Value > 0)
+            {
+                query = query.Where(p => p.UsuarioId == autorId.Value);
+            }
+
+            var publicacion = await query.FirstOrDefaultAsync(cancellationToken);
+            if (publicacion == null) return false;
+
+            _context.Publicaciones.Remove(publicacion);
+            await _context.SaveChangesAsync(cancellationToken);
+            return true;
+        }
+
+        public async Task<bool> EliminarRepost(int originalId, int? autorId = null, CancellationToken cancellationToken = default)
+        {
+            var query = _context.Publicaciones.Where(p => p.PublicacionOriginalId == originalId);
+            if (autorId.HasValue && autorId.Value > 0)
+            {
+                query = query.Where(p => p.UsuarioId == autorId.Value);
+            }
+
+            var repost = await query.OrderByDescending(p => p.FechaCreación).FirstOrDefaultAsync(cancellationToken);
+            if (repost == null)
+            {
+                // Por si se envió directamente el Id de la fila de repost
+                repost = await _context.Publicaciones.FirstOrDefaultAsync(
+                    p => p.Id == originalId && (autorId == null || p.UsuarioId == autorId.Value),
+                    cancellationToken);
+            }
+
+            if (repost == null) return false;
+
+            _context.Publicaciones.Remove(repost);
+            await _context.SaveChangesAsync(cancellationToken);
+            return true;
+        }
     }
 }
