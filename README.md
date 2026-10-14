@@ -235,3 +235,39 @@ Método	Ruta	Descripción
 | `POST` |	`/api/auth/login` |	Autentica un usuario existente. Recibe email y contraseña en JSON. Devuelve 200 con token JWT.
 
 Las contraseñas se almacenan hasheadas con BCrypt. El token JWT tiene validez de 7 días e incluye el id, email, username y rol del usuario.
+
+## Chat en tiempo real (SignalR)
+
+El chat privado entre usuarios utiliza **SignalR** sobre WebSockets. A diferencia de los endpoints HTTP del resto de la API, la comunicación ocurre a través de un **Hub** persistente: el cliente establece una conexión que permanece abierta y el servidor puede enviar mensajes en cualquier momento sin que el cliente los solicite.
+
+### Funcionamiento interno
+
+- **`PresenciaService`** mantiene en memoria un diccionario `UsuarioId → ConnectionId`. Al conectarse, el usuario queda registrado como "en línea"; al desconectarse, se elimina del registro.
+- **`ChatServicio`** persiste los mensajes en PostgreSQL con una fecha de expiración de **7 días**. Los mensajes solo se pueden enviar si el destinatario está en línea en ese momento.
+- **`LimpiezaMensajesService`** es un servicio en background que elimina automáticamente los mensajes expirados cada hora.
+
+### Ruta del Hub
+
+```
+/hubs/chat
+```
+
+El token JWT se envía por query string (mecanismo estándar de SignalR, ya que el handshake WebSocket no admite headers personalizados):
+
+```
+ws://localhost:{puerto}/hubs/chat?access_token=<TOKEN_JWT>
+```
+
+### Métodos invocables desde el cliente
+
+| Método | Parámetros | Descripción |
+|---|---|---|
+| `EnviarMensaje` | `destinatarioId: int, contenido: string` | Envía un mensaje privado. Falla si el destinatario está offline, el contenido está vacío o supera los 2000 caracteres. |
+| `ObtenerHistorial` | `otroUsuarioId: int` | Devuelve los mensajes no expirados entre el usuario autenticado y el otro, ordenados cronológicamente. |
+
+### Eventos que el cliente debe escuchar
+
+| Evento | Payload | Cuándo se dispara |
+|---|---|---|
+| `RecibirMensaje` | `MensajeChatDto` | Cuando llega un mensaje nuevo dirigido al usuario conectado. |
+| `MensajeEnviado` | `MensajeChatDto` | Confirmación al emisor de que su mensaje fue guardado y entregado. |

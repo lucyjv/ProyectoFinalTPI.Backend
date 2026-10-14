@@ -11,6 +11,8 @@ using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Repositorio;
 using ProyectoFinalTPI.Backend.Repositorio.Data;
 using ProyectoFinalTPI.Backend.Servicio;
+using ProyectoFinalTPI.Backend.Services;   // ── NUEVO: PresenciaService y LimpiezaMensajesService
+using ProyectoFinalTPI.Backend.Hubs;       // ── NUEVO: ChatHub
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,9 +20,21 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins("http://localhost:3001")
-              .AllowAnyHeader()
-              .AllowAnyMethod();
+        if (builder.Environment.IsDevelopment())
+        {
+            // En desarrollo permitimos cualquier origen para facilitar pruebas locales
+            policy.SetIsOriginAllowed(_ => true)
+                  .AllowAnyHeader()
+                  .AllowAnyMethod()
+                  .AllowCredentials();
+        }
+        else
+        {
+            policy.WithOrigins("http://localhost:3001")
+                  .AllowAnyHeader()
+                  .AllowAnyMethod()
+                  .AllowCredentials();
+        }
     });
 });
 
@@ -65,6 +79,20 @@ builder.Services.AddSingleton<
 
 // Auth
 builder.Services.AddScoped<IAuthServicio, AuthServicio>();
+
+// ── Chat ───────────────────────────────────────────────────────────────
+builder.Services.AddSignalR();
+
+// Singleton: el diccionario de presencia debe vivir toda la app.
+builder.Services.AddSingleton<PresenciaService>();
+
+// Scoped: ChatServicio usa IHubContext y el repositorio, ambos compatibles con Scoped.
+builder.Services.AddScoped<IChatServicio, ChatServicio>();
+builder.Services.AddScoped<IMensajeChatRepositorio, MensajeChatRepositorio>();
+
+// Hosted service: corre en background y limpia mensajes expirados cada hora.
+builder.Services.AddHostedService<LimpiezaMensajesService>();
+// ─────────────────────────────────────────────────────────────────────────────
 
 var claveJwt = builder.Configuration["Jwt:Clave"]
     ?? (builder.Environment.EnvironmentName == "Testing"
@@ -174,6 +202,10 @@ app.UseAuthorization();
 
 app.MapStaticAssets();
 app.MapControllers();
+
+// ── Ruta del Hub de chat ───────────────────────────────────────────────
+app.MapHub<ChatHub>("/hubs/chat");
+// ─────────────────────────────────────────────────────────────────────────────
 
 app.MapControllerRoute(
     name: "default",
