@@ -63,25 +63,33 @@ namespace ProyectoFinalTPI.Backend.Controllers
                 var esRepost = p.PublicacionOriginal != null;
                 var original = p.PublicacionOriginal;
 
-                var year = esRepost && original != null
-                    ? (original.Fecha.Year <= 2015 ? original.Fecha.Year : (original.PublicacionOriginal != null ? original.PublicacionOriginal.Fecha.Year : original.Fecha.Year))
+                var rootOriginal = original;
+                while (rootOriginal?.PublicacionOriginal != null && string.IsNullOrEmpty(rootOriginal.Descripcion))
+                {
+                    rootOriginal = rootOriginal.PublicacionOriginal;
+                }
+                var rootId = rootOriginal?.Id ?? original?.Id;
+                var rootAuthor = rootOriginal?.Usuario?.Username ?? original?.Usuario?.Username ?? "Desconocido";
+
+                var year = esRepost && rootOriginal != null
+                    ? (rootOriginal.Fecha.Year <= 2015 ? rootOriginal.Fecha.Year : rootOriginal.Fecha.Year)
                     : p.Fecha.Year;
-                var place = p.Lugar != null ? p.Lugar.Nombre : (original?.Lugar?.Nombre ?? "");
-                var lat = p.Lugar != null ? p.Lugar.Coordenadas.Y : (original?.Lugar?.Coordenadas.Y ?? 0);
-                var lng = p.Lugar != null ? p.Lugar.Coordenadas.X : (original?.Lugar?.Coordenadas.X ?? 0);
-                var description = esRepost && original != null
-                    ? (string.IsNullOrEmpty(original.Descripcion) ? p.Descripcion : original.Descripcion)
+                var place = p.Lugar != null ? p.Lugar.Nombre : (rootOriginal?.Lugar?.Nombre ?? "");
+                var lat = p.Lugar != null ? p.Lugar.Coordenadas.Y : (rootOriginal?.Lugar?.Coordenadas.Y ?? 0);
+                var lng = p.Lugar != null ? p.Lugar.Coordenadas.X : (rootOriginal?.Lugar?.Coordenadas.X ?? 0);
+                var description = esRepost && rootOriginal != null
+                    ? (string.IsNullOrEmpty(rootOriginal.Descripcion) ? p.Descripcion : rootOriginal.Descripcion)
                     : p.Descripcion;
                 var urlMedia = !string.IsNullOrEmpty(p.UrlMultimedia)
                     ? p.UrlMultimedia
-                    : (original?.UrlMultimedia ?? string.Empty);
+                    : (rootOriginal?.UrlMultimedia ?? string.Empty);
                 var tipoMedia = !string.IsNullOrEmpty(p.UrlMultimedia)
                     ? p.TipoMultimedia
-                    : (original?.TipoMultimedia ?? p.TipoMultimedia);
+                    : (rootOriginal?.TipoMultimedia ?? p.TipoMultimedia);
 
                 return new {
                     id = p.Id.ToString(),
-                    title = p.Titulo,
+                    title = rootOriginal?.Titulo ?? p.Titulo,
                     year = year,
                     author = p.Usuario?.Username ?? "Desconocido",
                     place = place,
@@ -96,7 +104,9 @@ namespace ProyectoFinalTPI.Backend.Controllers
                         kind = tipoMedia == MultimediaEnum.Video ? "video" : "image"
                     } : null,
                     repost = esRepost && original != null ? new {
-                        author = original.Usuario?.Username ?? "Desconocido",
+                        id = p.Id.ToString(),
+                        originalId = rootId?.ToString() ?? original.Id.ToString(),
+                        author = rootAuthor,
                         comment = !string.IsNullOrEmpty(p.Descripcion) ? p.Descripcion : null
                     } : null
                 };
@@ -233,6 +243,46 @@ namespace ProyectoFinalTPI.Backend.Controllers
                     $"/api/publicaciones/{id}",
                     new { id });
             }, "compartir la publicación", cancellationToken);
+        }
+
+        [HttpDelete("compartir/{originalId:int}")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public Task<IActionResult> EliminarRepost(
+            int originalId,
+            [FromQuery] int? autorId = null,
+            CancellationToken cancellationToken = default)
+        {
+            var autorIdAutenticado = ObtenerUsuarioIdAutenticado();
+            var autorIdFinal = (autorIdAutenticado.HasValue && autorIdAutenticado.Value > 0)
+                ? autorIdAutenticado.Value
+                : autorId;
+
+            return EjecutarOperacion(async () =>
+            {
+                await _publicacionServicio.EliminarRepost(originalId, autorIdFinal, cancellationToken);
+                return Ok(new { mensaje = "Repost eliminado con éxito.", id = originalId });
+            }, "eliminar el repost", cancellationToken);
+        }
+
+        [HttpDelete("{id:int}")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public Task<IActionResult> Eliminar(
+            int id,
+            [FromQuery] int? autorId = null,
+            CancellationToken cancellationToken = default)
+        {
+            var autorIdAutenticado = ObtenerUsuarioIdAutenticado();
+            var autorIdFinal = (autorIdAutenticado.HasValue && autorIdAutenticado.Value > 0)
+                ? autorIdAutenticado.Value
+                : autorId;
+
+            return EjecutarOperacion(async () =>
+            {
+                await _publicacionServicio.Eliminar(id, autorIdFinal, cancellationToken);
+                return Ok(new { mensaje = "Publicación eliminada con éxito.", id });
+            }, "eliminar la publicación", cancellationToken);
         }
 
         [HttpPost("{publicacionId:int}/etiquetas")]

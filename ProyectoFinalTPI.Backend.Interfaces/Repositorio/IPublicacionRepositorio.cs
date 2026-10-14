@@ -23,5 +23,7 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Repositorio
         int limite, CancellationToken cancellationToken = default);
         Task<List<PublicacionDetalleDto>> ObtenerPublicacionesPorIds(IReadOnlyCollection<int> publicacionesIds, CancellationToken cancellationToken = default);
         Task<Dictionary<CategoriaEnum, int>> ObtenerCantidadPorCategoriaDelUsuario(int usuarioId, DateTime desde, CancellationToken cancellationToken = default);
+        Task<bool> Eliminar(int id, int? autorId = null, CancellationToken cancellationToken = default);
+        Task<bool> EliminarRepost(int originalId, int? autorId = null, CancellationToken cancellationToken = default);
     }
 }
