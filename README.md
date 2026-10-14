@@ -199,9 +199,63 @@ Más detalles en [Integracion/README.md](ProyectoFinalTPI.Backend.Tests/Integrac
 | `GET` | `/api/publicaciones/{id}/resumen` | Devuelve una vista resumida para mostrar al seleccionar un pin. |
 | `GET` | `/api/publicaciones/{id}` | Devuelve el detalle de una publicación, con descripción completa, autor, multimedia y ubicación. |
 | `GET` | `/api/publicaciones/{id}/comentarios` | Devuelve los comentarios visibles de una publicación, paginados y ordenados del más reciente al más antiguo. |
+| `POST` | `/api/publicaciones/{publicacionId}/comentarios` | Crea un comentario asociado a la publicación indicada en la URL. Recibe contenido y usuarioId en JSON. |
 
 Las consultas públicas excluyen las publicaciones ocultas. Los comentarios se consultan por separado del detalle.
 Las etiquetas se almacenan en Neo4j como relaciones entre los nodos `Usuario` y `Publicacion`, cuyos datos maestros permanecen en PostgreSQL.
+
+### Crear un comentario
+
+En Postman, seleccionar **POST**, **Body → raw → JSON**:
+
+```http
+POST /api/publicaciones/25/comentarios
+Content-Type: application/json
+```
+
+```json
+{
+  "contenido": "¡Qué lindo recuerdo!",
+  "usuarioId": 1
+}
+```
+
+El ID de la publicación se toma de la URL (25 en este ejemplo).
+`usuarioId` debe corresponder a un usuario existente; se recibe temporalmente
+en el body, igual que `AutorId` al crear publicaciones, hasta integrar el usuario
+autenticado del token en estas acciones.
+
+El contenido es obligatorio y no puede estar vacío ni contener solo espacios.
+Se eliminan los espacios al principio y al final. El servidor asigna la fecha
+UTC y guarda el comentario como visible.
+
+Devuelve **201 Created** con el comentario:
+
+```json
+{
+  "id": 8,
+  "contenido": "¡Qué lindo recuerdo!",
+  "fechaCreacion": "2026-10-13T15:00:00Z",
+  "autor": {
+    "id": 1,
+    "username": "usuarioTest"
+  }
+}
+```
+
+Los IDs y la fecha de esta respuesta son ilustrativos. El comentario se puede
+consultar mediante `GET /api/publicaciones/25/comentarios`.
+
+- **400:** contenido o identificadores inválidos. Las validaciones del request
+  incluyen `errors` por campo.
+- **404:** el usuario no existe o la publicación no existe o está oculta.
+- **500:** falla inesperada, con mensaje público y detalle técnico en los logs.
+
+Los errores usan `ProblemDetails`. Se utiliza la tabla de comentarios existente,
+por lo que este endpoint no requiere una migración nueva. El detalle y el feed
+calculan `cantidadComentarios` contando solo los comentarios visibles de cada
+publicación. El contador de likes continúa en cero y `dioLike` en false hasta
+implementar esa lógica.
 
 ### Endpoints del feed
 

@@ -11,6 +11,7 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Servicio
         List<Publicacion> ObtenerPublicacionPorCategoria(CategoriaEnum categoria);
 
         Task<int> Crear(CrearPublicacionDto dto);
+        Task<ComentarioDto> CrearComentario(int publicacionId, CrearComentarioDto dto, CancellationToken cancellationToken = default);
         Task<int> Compartir(CompartirPublicacionDto dto, CancellationToken cancellationToken = default);
         Task<ResultadoMapaDto> ObtenerPines(PublicacionFiltroDto filtro, CancellationToken cancellationToken = default);
         Task<PublicacionResumenDto> ObtenerResumenPorId(int id, CancellationToken cancellationToken = default);
