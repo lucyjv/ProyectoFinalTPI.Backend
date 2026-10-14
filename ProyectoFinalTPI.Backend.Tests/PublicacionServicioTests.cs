@@ -179,6 +179,50 @@ namespace ProyectoFinalTPI.Backend.Tests
         }
 
         [Fact]
+        public async Task QueSeElimineUnaPublicacionCorrectamente()
+        {
+            _repositorio.EliminarResultado = true;
+            await _servicio.Eliminar(5, 10);
+            Assert.Equal(5, _repositorio.IdEliminado);
+            Assert.Equal(10, _repositorio.AutorEliminado);
+        }
+
+        [Fact]
+        public async Task QueFalleAlEliminarSiElIdEsInvalido()
+        {
+            await Assert.ThrowsAsync<ArgumentException>(() => _servicio.Eliminar(0));
+        }
+
+        [Fact]
+        public async Task QueFalleAlEliminarSiLaPublicacionNoExiste()
+        {
+            _repositorio.EliminarResultado = false;
+            await Assert.ThrowsAsync<KeyNotFoundException>(() => _servicio.Eliminar(99));
+        }
+
+        [Fact]
+        public async Task QueSeElimineUnRepostCorrectamente()
+        {
+            _repositorio.EliminarResultado = true;
+            await _servicio.EliminarRepost(5, 10);
+            Assert.Equal(5, _repositorio.IdEliminado);
+            Assert.Equal(10, _repositorio.AutorEliminado);
+        }
+
+        [Fact]
+        public async Task QueFalleAlEliminarRepostSiElIdEsInvalido()
+        {
+            await Assert.ThrowsAsync<ArgumentException>(() => _servicio.EliminarRepost(0));
+        }
+
+        [Fact]
+        public async Task QueFalleAlEliminarRepostSiNoExiste()
+        {
+            _repositorio.EliminarResultado = false;
+            await Assert.ThrowsAsync<KeyNotFoundException>(() => _servicio.EliminarRepost(99));
+        }
+
+        [Fact]
         public async Task QueNoSeObtenganPinesConUnFiltroNulo()
         {
             //Arrange
@@ -670,6 +714,21 @@ namespace ProyectoFinalTPI.Backend.Tests
             public List<Publicacion> ObtenerPublicacionPorCategoria(CategoriaEnum categoria) => throw new NotImplementedException();
             public Task<List<PublicacionDetalleDto>> ObtenerPublicacionesParaVos(IReadOnlyCollection<CategoriaEnum> categorias, DateTime fechaCorte, CursorCronologicoDto? cursor, int limite, CancellationToken cancellationToken = default) => throw new NotImplementedException();
             public Task<Dictionary<CategoriaEnum, int>> ObtenerCantidadPorCategoriaDelUsuario(int usuarioId, DateTime desde, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+            public bool EliminarResultado { get; set; } = true;
+            public int? IdEliminado { get; private set; }
+            public int? AutorEliminado { get; private set; }
+            public Task<bool> Eliminar(int id, int? autorId = null, CancellationToken cancellationToken = default)
+            {
+                IdEliminado = id;
+                AutorEliminado = autorId;
+                return Task.FromResult(EliminarResultado);
+            }
+            public Task<bool> EliminarRepost(int originalId, int? autorId = null, CancellationToken cancellationToken = default)
+            {
+                IdEliminado = originalId;
+                AutorEliminado = autorId;
+                return Task.FromResult(EliminarResultado);
+            }
         }
 
         private class UsuarioRepositorioFake : IUsuarioRepositorio
@@ -686,6 +745,10 @@ namespace ProyectoFinalTPI.Backend.Tests
             public Task<Usuario?> ObtenerPorIdAsync(int id) => throw new NotImplementedException();
             public Task<List<AutorResumenDto>> ObtenerUsuariosPorIdsAsync(IReadOnlyCollection<int> ids, CancellationToken cancellationToken = default) => throw new NotImplementedException();
             public Task<List<int>> ObtenerIdsExistentesAsync(IReadOnlyCollection<int> ids, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+            public Task<Usuario?> ObtenerPorEmailAsync(string email, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+            public Task<bool> ExistePorEmailAsync(string email, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+            public Task AgregarAsync(Usuario usuario, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+            public Task ActualizarAsync(Usuario usuario, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         }
 
         private class MultimediaServicioFake : IMultimediaServicio

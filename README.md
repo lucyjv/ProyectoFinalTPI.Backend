@@ -127,6 +127,56 @@ cd ProyectoFinalTPI.Backend
 dotnet ef database update --context ApplicationDbContext
 ```
 
+### 3. Carga Automática de Datos de Prueba (Data Seeder)
+
+El proyecto incluye un mecanismo de **seed automático** ([`DataSeeder.cs`](ProyectoFinalTPI.Backend/DataSeeder.cs)) para poblar la base de datos con usuarios y publicaciones geolocalizadas de prueba la primera vez que se inicia el backend.
+
+#### ¿Cómo funciona?
+
+1. **Detección automática al iniciar:** Al levantar la API en entorno de desarrollo (`Development`), el seeder comprueba si la tabla `Usuarios` contiene registros (`!db.Usuarios.Any()`).
+2. **Lectura de datos (`seed.json`):** Si la base está vacía, busca y lee el archivo `seed.json` en la raíz de la solución. Este archivo contiene los 37 autores y todas las memorias históricas de las décadas de los 70s, 80s, 90s y 2000s con coordenadas geográficas reales.
+3. **Poblado de entidades:**
+   - **Usuarios:** Crea un `Usuario_Personal` para cada autor del seed con correo generado y reputación inicial.
+   - **Lugares:** Inserta las coordenadas espaciales con geometría `Point(lng, lat)` y SRID 4326 en PostgreSQL/PostGIS.
+   - **Publicaciones:** Crea las publicaciones vinculándolas a su lugar, categoría, multimedia y autor.
+4. **Idempotencia:** Si la base ya tiene usuarios, el seeder no se vuelve a ejecutar para proteger los datos existentes.
+
+#### Credenciales de prueba para iniciar sesión
+
+Todos los usuarios creados por el seeder tienen el mismo formato de correo y contraseña:
+
+| Campo | Formato / Valor | Ejemplos |
+|---|---|---|
+| **Email** | `<nombre_sin_tildes>@example.com` | `miguel@example.com`, `susana@example.com`, `diego@example.com` |
+| **Contraseña** | `password123` | `password123` |
+
+> [!NOTE]
+> En el primer inicio de sesión a través de `/api/auth/login`, `AuthServicio` valida la contraseña inicial en texto plano y la migra automáticamente a un hash **BCrypt**.
+
+#### ¿Cómo reiniciar o forzar una nueva carga del Seeder?
+
+Si durante el desarrollo deseas limpiar la base de datos y volver a cargar el set de datos inicial:
+
+```powershell
+# 1. Posicionarse en ProyectoFinalTPI.Backend
+cd ProyectoFinalTPI.Backend
+
+# 2. Eliminar y volver a aplicar las migraciones
+dotnet ef database drop --context ApplicationDbContext
+dotnet ef database update --context ApplicationDbContext
+
+# 3. Al iniciar la aplicación, detectará la base vacía y resembrará automáticamente
+dotnet run
+```
+
+#### ¿Cómo regenerar `seed.json` desde el Frontend?
+
+Si se agregan nuevas memorias o autores en el frontend (`src/eras/registry.ts`), se puede actualizar `seed.json` ejecutando el script en la raíz de la solución:
+
+```powershell
+npx tsx export-seed.ts
+```
+
 ---
 
 ## 🔄 Flujo de Trabajo para Modificaciones (Importante)
@@ -193,7 +243,12 @@ Más detalles en [Integracion/README.md](ProyectoFinalTPI.Backend.Tests/Integrac
 
 | Método | Ruta | Descripción |
 |---|---|---|
+| `GET` | `/api/publicaciones` | Devuelve todas las publicaciones visibles con sus datos completos (autor, año, lugar, coordenadas, multimedia, categoría) y metadatos de reposts o citas (`repost`: `id`, `originalId`, `author`, `comment`). |
+| `GET` | `/api/publicaciones/test-users` | Devuelve la lista de usuarios de prueba (`id`, `username`) disponibles en la base de datos para desarrollo y testing local. |
 | `POST` | `/api/publicaciones` | Crea una publicación con sus datos, ubicación y multimedia. Recibe `multipart/form-data`, con un archivo o una URL HTTPS. |
+| `POST` | `/api/publicaciones/compartir` | Comparte una publicación existente. Recibe `publicacionOriginalId`, `descripcion` (opcional) y `autorId`. Si `descripcion` está vacía o es null, genera un repost simple (desenrollando a la publicación raíz original); si contiene texto, genera un repost con cita (*quote tweet*) directo a dicha publicación. |
+| `DELETE` | `/api/publicaciones/compartir/{originalId}` | Deshace/elimina el repost simple que el usuario autenticado (o especificado por query `autorId`) realizó sobre la publicación original. No elimina quote tweets ni la publicación original. |
+| `DELETE` | `/api/publicaciones/{id}` | Elimina una publicación propia por su `id`. Si la solicitud incluye autenticación JWT, valida que el usuario sea el autor de la misma. |
 | `POST` | `/api/publicaciones/{id}/etiquetas` | Etiqueta uno o más usuarios en una publicación existente. Recibe `usuariosIds` en JSON; repetir una etiqueta existente no la duplica. |
 | `GET` | `/api/publicaciones/mapa` | Devuelve los pines del área visible del mapa. Permite filtrar por categoría y fecha del recuerdo. |
 | `GET` | `/api/publicaciones/{id}/resumen` | Devuelve una vista resumida para mostrar al seleccionar un pin. |
@@ -302,29 +357,72 @@ Ambos reciben un cuerpo JSON:
 ```
 
 ### Autenticación JWT y Swagger
-Nuevos secrets requeridos
+
+#### Nuevos secrets requeridos
 
 Agregar estos tres comandos a la configuración inicial de User Secrets (junto a los existentes):
 
+```powershell
 dotnet user-secrets set "Jwt:Clave" "nostalgia-clave-secreta-super-segura-2026" --project "./ProyectoFinalTPI.Backend/ProyectoFinalTPI.Backend.csproj"
 dotnet user-secrets set "Jwt:Emisor" "nostalgia-backend" --project "./ProyectoFinalTPI.Backend/ProyectoFinalTPI.Backend.csproj"
 dotnet user-secrets set "Jwt:Audiencia" "nostalgia-frontend" --project "./ProyectoFinalTPI.Backend/ProyectoFinalTPI.Backend.csproj"
+```
 
 La tabla de variables de entorno para producción se amplía con:
 
-Clave de User Secrets	Variable de entorno para producción
-Jwt:Clave	Jwt__Clave
-Jwt:Emisor	Jwt__Emisor
-Jwt:Audiencia	Jwt__Audiencia
-Swagger
+| Clave de User Secrets | Variable de entorno para producción |
+|---|---|
+| `Jwt:Clave` | `Jwt__Clave` |
+| `Jwt:Emisor` | `Jwt__Emisor` |
+| `Jwt:Audiencia` | `Jwt__Audiencia` |
 
-Con la aplicación corriendo, la documentación interactiva está disponible en: http://localhost:5000/swagger
+#### Swagger
 
-Para probar endpoints protegidos: obtener un token desde POST /api/auth/login y pegarlo en el botón Authorize.
+Con la aplicación corriendo, la documentación interactiva está disponible en: `http://localhost:5199/swagger` (o `http://localhost:5000/swagger` según el launch profile).
+
+Para probar endpoints protegidos: obtener un token desde `POST /api/auth/login` y pegarlo en el botón **Authorize** (`Bearer <token>`).
 
 ### Endpoints de autenticación
-Método	Ruta	Descripción
-| `POST` |	`/api/auth/registro` |	Registra un nuevo usuario. Recibe username, email y contraseña en JSON. Devuelve 201 con token JWT.
-| `POST` |	`/api/auth/login` |	Autentica un usuario existente. Recibe email y contraseña en JSON. Devuelve 200 con token JWT.
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `POST` | `/api/auth/registro` | Registra un nuevo usuario. Recibe `username`, `email` y `contrasena` en JSON. Devuelve `201 Created` con token JWT. |
+| `POST` | `/api/auth/login` | Autentica un usuario existente. Recibe `email` y `contrasena` en JSON. Devuelve `200 OK` con token JWT. |
 
 Las contraseñas se almacenan hasheadas con BCrypt. El token JWT tiene validez de 7 días e incluye el id, email, username y rol del usuario.
+
+## Chat en tiempo real (SignalR)
+
+El chat privado entre usuarios utiliza **SignalR** sobre WebSockets. A diferencia de los endpoints HTTP del resto de la API, la comunicación ocurre a través de un **Hub** persistente: el cliente establece una conexión que permanece abierta y el servidor puede enviar mensajes en cualquier momento sin que el cliente los solicite.
+
+### Funcionamiento interno
+
+- **`PresenciaService`** mantiene en memoria un diccionario `UsuarioId → ConnectionId`. Al conectarse, el usuario queda registrado como "en línea"; al desconectarse, se elimina del registro.
+- **`ChatServicio`** persiste los mensajes en PostgreSQL con una fecha de expiración de **7 días**. Los mensajes solo se pueden enviar si el destinatario está en línea en ese momento.
+- **`LimpiezaMensajesService`** es un servicio en background que elimina automáticamente los mensajes expirados cada hora.
+
+### Ruta del Hub
+
+```
+/hubs/chat
+```
+
+El token JWT se envía por query string (mecanismo estándar de SignalR, ya que el handshake WebSocket no admite headers personalizados):
+
+```
+ws://localhost:{puerto}/hubs/chat?access_token=<TOKEN_JWT>
+```
+
+### Métodos invocables desde el cliente
+
+| Método | Parámetros | Descripción |
+|---|---|---|
+| `EnviarMensaje` | `destinatarioId: int, contenido: string` | Envía un mensaje privado. Falla si el destinatario está offline, el contenido está vacío o supera los 2000 caracteres. |
+| `ObtenerHistorial` | `otroUsuarioId: int` | Devuelve los mensajes no expirados entre el usuario autenticado y el otro, ordenados cronológicamente. |
+
+### Eventos que el cliente debe escuchar
+
+| Evento | Payload | Cuándo se dispara |
+|---|---|---|
+| `RecibirMensaje` | `MensajeChatDto` | Cuando llega un mensaje nuevo dirigido al usuario conectado. |
+| `MensajeEnviado` | `MensajeChatDto` | Confirmación al emisor de que su mensaje fue guardado y entregado. |

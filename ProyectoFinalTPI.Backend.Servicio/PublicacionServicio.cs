@@ -140,17 +140,29 @@ namespace ProyectoFinalTPI.Backend.Servicio
             if (original == null)
                 throw new KeyNotFoundException("La publicacion original no existe o no esta disponible.");
 
+            // Si la publicación a compartir es un repost SIMPLE (sin comentario propio),
+            // enlazamos con la publicación que fue reposteada para evitar cadenas de retweets simples.
+            // Pero si es una publicación con contenido propio (un quote tweet con su propia descripción),
+            // se enlaza directamente a ella para permitir repostearla o hacer un quote al quote.
+            var targetOriginal = original;
+            while (targetOriginal.PublicacionOriginalId.HasValue && string.IsNullOrEmpty(targetOriginal.Descripcion))
+            {
+                var padre = await _publicacionRepositorio.ObtenerPorId(targetOriginal.PublicacionOriginalId.Value, cancellationToken);
+                if (padre == null) break;
+                targetOriginal = padre;
+            }
+
             var publicacion = new Publicacion
             {
-                Titulo = original.Titulo, 
+                Titulo = targetOriginal.Titulo, 
                 Descripcion = dto.Descripcion,
-                Fecha = DateTime.UtcNow,
-                Categoria = original.Categoria,
-                UrlMultimedia = original.UrlMultimedia,
-                TipoMultimedia = original.TipoMultimedia,
-                LugarId = original.LugarId,
+                Fecha = targetOriginal.Fecha,
+                Categoria = targetOriginal.Categoria,
+                UrlMultimedia = targetOriginal.UrlMultimedia,
+                TipoMultimedia = targetOriginal.TipoMultimedia,
+                LugarId = targetOriginal.LugarId,
                 UsuarioId = dto.AutorId,
-                PublicacionOriginalId = original.Id,
+                PublicacionOriginalId = targetOriginal.Id,
                 FechaCreación = DateTime.UtcNow,
                 EstaOculto = false
             };
@@ -488,6 +500,34 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 Items = items,
                 SiguienteCursor = null
             };
+        }
+
+        public async Task Eliminar(int id, int? autorId = null, CancellationToken cancellationToken = default)
+        {
+            if (id <= 0)
+            {
+                throw new ArgumentException("El ID de la publicación debe ser mayor que cero.");
+            }
+
+            var eliminado = await _publicacionRepositorio.Eliminar(id, autorId, cancellationToken);
+            if (!eliminado)
+            {
+                throw new KeyNotFoundException("La publicación no existe o no se pudo eliminar.");
+            }
+        }
+
+        public async Task EliminarRepost(int originalId, int? autorId = null, CancellationToken cancellationToken = default)
+        {
+            if (originalId <= 0)
+            {
+                throw new ArgumentException("El ID de la publicación debe ser mayor que cero.");
+            }
+
+            var eliminado = await _publicacionRepositorio.EliminarRepost(originalId, autorId, cancellationToken);
+            if (!eliminado)
+            {
+                throw new KeyNotFoundException("El repost no existe o no se pudo eliminar.");
+            }
         }
 
     }

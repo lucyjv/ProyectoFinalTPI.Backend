@@ -172,6 +172,44 @@ namespace ProyectoFinalTPI.Backend.Tests
         }
 
         [Fact]
+        public async Task QueSeDevuelvaOkAlEliminarPublicacion()
+        {
+            var result = await _controller.Eliminar(5, 10);
+            var ok = Assert.IsType<OkObjectResult>(result);
+            Assert.Equal(200, ok.StatusCode);
+            Assert.Equal(5, _servicio.IdEliminado);
+            Assert.Equal(10, _servicio.AutorEliminado);
+        }
+
+        [Fact]
+        public async Task QueSeDevuelvaNotFoundAlEliminarPublicacionInexistente()
+        {
+            _servicio.Error = new KeyNotFoundException("No existe");
+            var result = await _controller.Eliminar(99);
+            var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
+            Assert.Equal(404, respuesta.StatusCode);
+        }
+
+        [Fact]
+        public async Task QueSeDevuelvaOkAlEliminarRepost()
+        {
+            var result = await _controller.EliminarRepost(5, 10);
+            var ok = Assert.IsType<OkObjectResult>(result);
+            Assert.Equal(200, ok.StatusCode);
+            Assert.Equal(5, _servicio.IdEliminado);
+            Assert.Equal(10, _servicio.AutorEliminado);
+        }
+
+        [Fact]
+        public async Task QueSeDevuelvaNotFoundAlEliminarRepostInexistente()
+        {
+            _servicio.Error = new KeyNotFoundException("No existe");
+            var result = await _controller.EliminarRepost(99);
+            var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
+            Assert.Equal(404, respuesta.StatusCode);
+        }
+
+        [Fact]
         public async Task QueSeDevuelvaOkConLosPinesDelMapa()
         {
             //Arrange
@@ -714,6 +752,23 @@ namespace ProyectoFinalTPI.Backend.Tests
             public List<Publicacion> ObtenerPublicacionPorCategoria(CategoriaEnum categoria) => throw new NotImplementedException();
             public Task<ResultadoPaginadoDto<PublicacionDetalleDto>> ObtenerFeedSeguidos(int usuarioId, string? cursor, int limite, CancellationToken cancellationToken = default) => throw new NotImplementedException();
             public Task<ResultadoPaginadoDto<PublicacionDetalleDto>> ObtenerPublicacionesParaVos(int usuarioId, string? cursor, int limite, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
+            public int? IdEliminado { get; private set; }
+            public int? AutorEliminado { get; private set; }
+
+            public Task Eliminar(int id, int? autorId = null, CancellationToken cancellationToken = default)
+            {
+                IdEliminado = id;
+                AutorEliminado = autorId;
+                return Error == null ? Task.CompletedTask : Task.FromException(Error);
+            }
+
+            public Task EliminarRepost(int originalId, int? autorId = null, CancellationToken cancellationToken = default)
+            {
+                IdEliminado = originalId;
+                AutorEliminado = autorId;
+                return Error == null ? Task.CompletedTask : Task.FromException(Error);
+            }
         }
 
         private class EtiquetadoServicioFake : IEtiquetadoPublicacionServicio
