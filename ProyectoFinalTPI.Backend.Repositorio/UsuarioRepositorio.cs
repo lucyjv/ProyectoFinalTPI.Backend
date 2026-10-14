@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Dtos.Usuario;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
@@ -69,6 +69,30 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                 .Where(usuario => ids.Contains(usuario.Id))
                 .Select(usuario => usuario.Id)
                 .ToListAsync(cancellationToken);
+        }
+
+        public async Task<Usuario?> ObtenerPorEmailAsync(string email, CancellationToken cancellationToken = default)
+        {
+            return await _context.Usuarios
+                .FirstOrDefaultAsync(u => u.Email == email, cancellationToken);
+        }
+
+        public async Task<bool> ExistePorEmailAsync(string email, CancellationToken cancellationToken = default)
+        {
+            return await _context.Usuarios
+                .AnyAsync(u => u.Email == email, cancellationToken);
+        }
+
+        public async Task AgregarAsync(Usuario usuario, CancellationToken cancellationToken = default)
+        {
+            await _context.Usuarios.AddAsync(usuario, cancellationToken);
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+
+        public async Task ActualizarAsync(Usuario usuario, CancellationToken cancellationToken = default)
+        {
+            _context.Usuarios.Update(usuario);
+            await _context.SaveChangesAsync(cancellationToken);
         }
     }
 }
