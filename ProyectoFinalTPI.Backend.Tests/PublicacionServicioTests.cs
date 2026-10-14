@@ -742,6 +742,10 @@ namespace ProyectoFinalTPI.Backend.Tests
             public Task<Usuario?> ObtenerPorIdAsync(int id) => throw new NotImplementedException();
             public Task<List<AutorResumenDto>> ObtenerUsuariosPorIdsAsync(IReadOnlyCollection<int> ids, CancellationToken cancellationToken = default) => throw new NotImplementedException();
             public Task<List<int>> ObtenerIdsExistentesAsync(IReadOnlyCollection<int> ids, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+            public Task<Usuario?> ObtenerPorEmailAsync(string email, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+            public Task<bool> ExistePorEmailAsync(string email, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+            public Task AgregarAsync(Usuario usuario, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+            public Task ActualizarAsync(Usuario usuario, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         }
 
         private class MultimediaServicioFake : IMultimediaServicio
