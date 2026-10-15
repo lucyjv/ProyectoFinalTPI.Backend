@@ -207,6 +207,8 @@ if (args.Contains("--seed-only"))
         throw new InvalidOperationException("--seed-only requiere el entorno Development.");
     return;
 }
+app.UseMiddleware<ProyectoFinalTPI.Backend.Middlewares.ManejoExcepcionesMiddleware>();
+
 app.UseRouting();
 
 app.UseCors("AllowFrontend");

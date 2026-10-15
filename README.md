@@ -268,6 +268,55 @@ Los metadatos `groupId` y `hashtags` permanecen en el JSON, pero este seeder sol
 carga usuarios, lugares y publicaciones: no crea grupos ni relaciones en Neo4j.
 Los bloques editoriales `facts` y `music` no se importan como publicaciones.
 
+### Manejo centralizado de errores
+
+`ManejoExcepcionesMiddleware`, ubicado en `ProyectoFinalTPI.Backend/Middlewares`,
+centraliza las excepciones no manejadas de las solicitudes HTTP. Se registra una
+sola vez en `Program.cs`, antes de `UseRouting`:
+
+```csharp
+app.UseMiddleware<ProyectoFinalTPI.Backend.Middlewares.ManejoExcepcionesMiddleware>();
+```
+
+Aplica automáticamente a todos los controladores, incluidos los que se agreguen
+en el futuro. No hace falta invocarlo desde cada acción. El middleware ejecuta
+`await next(context)` dentro de un `try`: continúa hacia el controlador y, si
+el controlador o un servicio lanza una excepción, la captura y genera la respuesta.
+
+| Excepción | Código HTTP | Título |
+|---|---|---|
+| `ArgumentException` | `400` | Solicitud inválida |
+| `KeyNotFoundException` | `404` | Recurso no encontrado |
+| Cualquier otra excepción no manejada | `500` | Error interno del servidor |
+
+Las respuestas usan `ProblemDetails` con `Content-Type: application/problem+json`
+y los campos `status`, `title`, `detail`, `instance` (ruta de la solicitud) y
+`traceId`. Para 400 y 404, `detail` contiene el mensaje de la excepción, por lo
+que debe ser apto para mostrar al cliente. Para 500, devuelve el mensaje genérico
+«No se pudo completar la operación. Intentá nuevamente más tarde.» y registra
+la excepción completa, el método, la ruta y el `traceId` en los logs.
+
+Por ejemplo, una acción de Publicaciones llama directamente al servicio:
+
+```csharp
+return Ok(await _publicacionServicio.ObtenerDetallePorId(id, cancellationToken));
+```
+
+Si el servicio lanza `KeyNotFoundException`, el middleware genera el 404.
+Los métodos `EjecutarOperacion` y `CrearProblema` ya no son necesarios en
+`PublicacionesController`.
+
+Si otro controlador captura una excepción con su propio `try/catch` y devuelve
+una respuesta, esa excepción no llega al middleware. Si la vuelve a lanzar con
+`throw;`, sí llega. Las respuestas explícitas como `BadRequest(...)` y
+`NotFound(...)`, y las respuestas automáticas de validación de modelos, no se
+modifican: no son excepciones.
+
+Las cancelaciones (`OperationCanceledException` cuando `RequestAborted` está
+cancelado) se propagan sin convertirse en 500. Si la respuesta ya comenzó a
+enviarse, el middleware también propaga la excepción porque ya no puede
+reemplazarla por un `ProblemDetails`.
+
 ### Endpoints de publicaciones
 
 | Método | Ruta | Descripción |

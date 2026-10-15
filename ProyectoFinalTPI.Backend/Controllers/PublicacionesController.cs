@@ -1,12 +1,14 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging.Abstractions;
 using ProyectoFinalTPI.Backend.Dtos;
 using ProyectoFinalTPI.Backend.Dtos.Comentario;
 using ProyectoFinalTPI.Backend.Dtos.Mapa;
 using ProyectoFinalTPI.Backend.Dtos.Publicacion;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Requests.Publicaciones;
+using ProyectoFinalTPI.Backend.Mappings;
 
 using Microsoft.EntityFrameworkCore;
 using ProyectoFinalTPI.Backend.Repositorio.Data;
@@ -29,12 +31,12 @@ namespace ProyectoFinalTPI.Backend.Controllers
         public PublicacionesController(
             IPublicacionServicio publicacionServicio,
             IEtiquetadoPublicacionServicio etiquetadoPublicacionServicio,
-            ILogger<PublicacionesController> logger,
+            ILogger<PublicacionesController>? logger = null,
             ApplicationDbContext context = null!)
         {
             _publicacionServicio = publicacionServicio;
             _etiquetadoPublicacionServicio = etiquetadoPublicacionServicio;
-            _logger = logger;
+            _logger = logger ?? NullLogger<PublicacionesController>.Instance;
             _context = context;
         }
 
@@ -48,69 +50,69 @@ namespace ProyectoFinalTPI.Backend.Controllers
         public async Task<IActionResult> GetAll()
         {
             var publicaciones = await _context.Publicaciones
-                .Include(p => p.Lugar)
-                .Include(p => p.Usuario)
-                .Include(p => p.PublicacionOriginal)
-                    .ThenInclude(po => po!.Usuario)
-                .Include(p => p.PublicacionOriginal)
-                    .ThenInclude(po => po!.Lugar)
-                .Include(p => p.PublicacionOriginal)
-                    .ThenInclude(po => po!.PublicacionOriginal)
-                .Where(p => !p.EstaOculto && (p.PublicacionOriginal == null || !p.PublicacionOriginal.EstaOculto))
-                .OrderByDescending(p => p.FechaCreación)
-                .ToListAsync();
+            .Include(p => p.Lugar)
+            .Include(p => p.Usuario)
+            .Include(p => p.PublicacionOriginal)
+                .ThenInclude(po => po!.Usuario)
+            .Include(p => p.PublicacionOriginal)
+                .ThenInclude(po => po!.Lugar)
+            .Include(p => p.PublicacionOriginal)
+                .ThenInclude(po => po!.PublicacionOriginal)
+            .Where(p => !p.EstaOculto && (p.PublicacionOriginal == null || !p.PublicacionOriginal.EstaOculto))
+            .OrderByDescending(p => p.FechaCreación)
+            .ToListAsync();
 
             var result = publicaciones.Select(p => {
-                var esRepost = p.PublicacionOriginal != null;
-                var original = p.PublicacionOriginal;
+            var esRepost = p.PublicacionOriginal != null;
+            var original = p.PublicacionOriginal;
 
-                var rootOriginal = original;
-                while (rootOriginal?.PublicacionOriginal != null && string.IsNullOrEmpty(rootOriginal.Descripcion))
-                {
-                    rootOriginal = rootOriginal.PublicacionOriginal;
-                }
-                var rootId = rootOriginal?.Id ?? original?.Id;
-                var rootAuthor = rootOriginal?.Usuario?.Username ?? original?.Usuario?.Username ?? "Desconocido";
+            var rootOriginal = original;
+            while (rootOriginal?.PublicacionOriginal != null && string.IsNullOrEmpty(rootOriginal.Descripcion))
+            {
+                rootOriginal = rootOriginal.PublicacionOriginal;
+            }
+            var rootId = rootOriginal?.Id ?? original?.Id;
+            var rootAuthor = rootOriginal?.Usuario?.Username ?? original?.Usuario?.Username ?? "Desconocido";
 
-                var year = esRepost && rootOriginal != null
-                    ? (rootOriginal.Fecha.Year <= 2015 ? rootOriginal.Fecha.Year : rootOriginal.Fecha.Year)
-                    : p.Fecha.Year;
-                var place = p.Lugar != null ? p.Lugar.Nombre : (rootOriginal?.Lugar?.Nombre ?? "");
-                var lat = p.Lugar != null ? p.Lugar.Coordenadas.Y : (rootOriginal?.Lugar?.Coordenadas.Y ?? 0);
-                var lng = p.Lugar != null ? p.Lugar.Coordenadas.X : (rootOriginal?.Lugar?.Coordenadas.X ?? 0);
-                var description = esRepost && rootOriginal != null
-                    ? (string.IsNullOrEmpty(rootOriginal.Descripcion) ? p.Descripcion : rootOriginal.Descripcion)
-                    : p.Descripcion;
-                var urlMedia = !string.IsNullOrEmpty(p.UrlMultimedia)
-                    ? p.UrlMultimedia
-                    : (rootOriginal?.UrlMultimedia ?? string.Empty);
-                var tipoMedia = !string.IsNullOrEmpty(p.UrlMultimedia)
-                    ? p.TipoMultimedia
-                    : (rootOriginal?.TipoMultimedia ?? p.TipoMultimedia);
+            var year = esRepost && rootOriginal != null
+                ? (rootOriginal.Fecha.Year <= 2015 ? rootOriginal.Fecha.Year : rootOriginal.Fecha.Year)
+                : p.Fecha.Year;
+            var place = p.Lugar != null ? p.Lugar.Nombre : (rootOriginal?.Lugar?.Nombre ?? "");
+            var lat = p.Lugar != null ? p.Lugar.Coordenadas.Y : (rootOriginal?.Lugar?.Coordenadas.Y ?? 0);
+            var lng = p.Lugar != null ? p.Lugar.Coordenadas.X : (rootOriginal?.Lugar?.Coordenadas.X ?? 0);
+            var description = esRepost && rootOriginal != null
+                ? (string.IsNullOrEmpty(rootOriginal.Descripcion) ? p.Descripcion : rootOriginal.Descripcion)
+                : p.Descripcion;
+            var urlMedia = !string.IsNullOrEmpty(p.UrlMultimedia)
+                ? p.UrlMultimedia
+                : (rootOriginal?.UrlMultimedia ?? string.Empty);
+            var tipoMedia = !string.IsNullOrEmpty(p.UrlMultimedia)
+                ? p.TipoMultimedia
+                : (rootOriginal?.TipoMultimedia ?? p.TipoMultimedia);
 
-                return new {
+            return new {
+                id = p.Id.ToString(),
+                title = rootOriginal?.Titulo ?? p.Titulo,
+                year = year,
+                author = p.Usuario?.Username ?? "Desconocido",
+                place = place,
+                lat = lat,
+                lng = lng,
+                description = description,
+                category = p.Categoria.ToString().Replace("Recuerdos_Personales", "Personales"),
+                source = "db",
+                image = tipoMedia == MultimediaEnum.Foto ? urlMedia : null,
+                media = (!string.IsNullOrEmpty(urlMedia) && tipoMedia != MultimediaEnum.Foto) ? new {
+                    url = urlMedia,
+                    kind = tipoMedia == MultimediaEnum.Video ? "video" : "image"
+                } : null,
+                repost = esRepost && original != null ? new {
                     id = p.Id.ToString(),
-                    title = rootOriginal?.Titulo ?? p.Titulo,
-                    year = year,
-                    author = p.Usuario?.Username ?? "Desconocido",
-                    place = place,
-                    lat = lat,
-                    lng = lng,
-                    description = description,
-                    category = p.Categoria.ToString().Replace("Recuerdos_Personales", "Personales"),
-                    source = "db",
-                    image = tipoMedia == MultimediaEnum.Foto ? urlMedia : null,
-                    media = (!string.IsNullOrEmpty(urlMedia) && tipoMedia != MultimediaEnum.Foto) ? new {
-                        url = urlMedia,
-                        kind = tipoMedia == MultimediaEnum.Video ? "video" : "image"
-                    } : null,
-                    repost = esRepost && original != null ? new {
-                        id = p.Id.ToString(),
-                        originalId = rootId?.ToString() ?? original.Id.ToString(),
-                        author = rootAuthor,
-                        comment = !string.IsNullOrEmpty(p.Descripcion) ? p.Descripcion : null
-                    } : null
-                };
+                    originalId = rootId?.ToString() ?? original.Id.ToString(),
+                    author = rootAuthor,
+                    comment = !string.IsNullOrEmpty(p.Descripcion) ? p.Descripcion : null
+                } : null
+            };
             });
 
             return Ok(result);
@@ -133,66 +135,62 @@ namespace ProyectoFinalTPI.Backend.Controllers
 
         [HttpGet("mapa")]
         [ProducesResponseType(typeof(ResultadoMapaDto), StatusCodes.Status200OK)]
-        public Task<ActionResult<ResultadoMapaDto>> ObtenerMapa(
+        public async Task<ActionResult<ResultadoMapaDto>> ObtenerMapa(
             [FromQuery] PublicacionFiltroDto filtro,
             CancellationToken cancellationToken)
         {
-            return EjecutarConsulta(() => _publicacionServicio.ObtenerPines(
-                filtro, cancellationToken), "obtener el mapa", cancellationToken);
+            return Ok(await _publicacionServicio.ObtenerPines(
+                filtro, cancellationToken));
         }
 
         [HttpGet("{id:int}/resumen")]
         [ProducesResponseType(typeof(PublicacionResumenDto), StatusCodes.Status200OK)]
-        public Task<ActionResult<PublicacionResumenDto>> ObtenerResumen(
+        public async Task<ActionResult<PublicacionResumenDto>> ObtenerResumen(
             int id,
             CancellationToken cancellationToken)
         {
-            return EjecutarConsulta(() => _publicacionServicio.ObtenerResumenPorId(
-                id, cancellationToken), "obtener el resumen de la publicación", cancellationToken);
+            return Ok(await _publicacionServicio.ObtenerResumenPorId(
+                id, cancellationToken));
         }
 
         [HttpGet("{id:int}")]
         [ProducesResponseType(typeof(PublicacionDetalleDto), StatusCodes.Status200OK)]
-        public Task<ActionResult<PublicacionDetalleDto>> ObtenerDetalle(
+        public async Task<ActionResult<PublicacionDetalleDto>> ObtenerDetalle(
             int id,
             CancellationToken cancellationToken)
         {
-            return EjecutarConsulta(() => _publicacionServicio.ObtenerDetallePorId(
-                id, cancellationToken), "obtener el detalle de la publicación", cancellationToken);
+            return Ok(await _publicacionServicio.ObtenerDetallePorId(
+                id, cancellationToken));
         }
 
         [HttpGet("{id:int}/comentarios")]
         [ProducesResponseType(typeof(ResultadoPaginadoDto<ComentarioDto>), StatusCodes.Status200OK)]
-        public Task<ActionResult<ResultadoPaginadoDto<ComentarioDto>>> ObtenerComentarios(
+        public async Task<ActionResult<ResultadoPaginadoDto<ComentarioDto>>> ObtenerComentarios(
             int id,
             [FromQuery] string? cursor = null,
             [FromQuery] int limite = 20,
             CancellationToken cancellationToken = default)
         {
-            return EjecutarConsulta(() => _publicacionServicio.ObtenerHilosComentarios(
+            return await EjecutarConsulta(() => _publicacionServicio.ObtenerHilosComentarios(
                 id, cursor, limite, ObtenerUsuarioIdAutenticado(), cancellationToken), "obtener los comentarios", cancellationToken);
         }
 
         [Authorize]
         [HttpPost("{publicacionId:int}/comentarios")]
         [ProducesResponseType(typeof(ComentarioDto), StatusCodes.Status201Created)]
-        public Task<IActionResult> CrearComentario(
+        public async Task<IActionResult> CrearComentario(
             int publicacionId,
             [FromBody] CrearComentarioRequest request,
             CancellationToken cancellationToken = default)
         {
             var usuarioId = ObtenerUsuarioIdAutenticado();
-            if (!usuarioId.HasValue) return Task.FromResult<IActionResult>(Unauthorized());
-            return EjecutarOperacion(async () =>
+            if (!usuarioId.HasValue) return Unauthorized();
+            return await EjecutarOperacion(async () =>
             {
-                var dto = new CrearComentarioDto
-                {
-                    Contenido = request.Contenido,
-                    UsuarioId = usuarioId.Value,
-                    ComentarioPadreId = request.ComentarioPadreId
-                };
                 var comentario = await _publicacionServicio.CrearComentario(
-                    publicacionId, dto, cancellationToken);
+                    publicacionId,
+                    request.ToCrearComentarioDto(usuarioId.Value),
+                    cancellationToken);
 
                 return StatusCode(StatusCodes.Status201Created, comentario);
             }, "crear el comentario", cancellationToken);
@@ -235,44 +233,26 @@ namespace ProyectoFinalTPI.Backend.Controllers
 
         [HttpPost]
         [ProducesResponseType(StatusCodes.Status201Created)]
-        public Task<IActionResult> Crear([FromForm] CrearPublicacionRequest request)
+        public async Task<IActionResult> Crear([FromForm] CrearPublicacionRequest request)
         {
             var autorIdAutenticado = ObtenerUsuarioIdAutenticado();
             var autorIdFinal = (autorIdAutenticado.HasValue && autorIdAutenticado.Value > 0)
                 ? autorIdAutenticado.Value
                 : request.AutorId;
 
-            return EjecutarOperacion(async () =>
-            {
-                using var stream = request.Archivo?.OpenReadStream();
+            using var stream = request.Archivo?.OpenReadStream();
 
-                var dto = new CrearPublicacionDto
-                {
-                    Titulo = request.Titulo,
-                    Descripcion = request.Descripcion,
-                    Fecha = request.Fecha,
-                    Categoria = request.Categoria,
-                    NombreLugar = request.NombreLugar,
-                    Latitud = request.Latitud,
-                    Longitud = request.Longitud,
-                    TipoMultimedia = request.TipoMultimedia,
-                    Archivo = stream,
-                    NombreArchivo = request.Archivo?.FileName,
-                    UrlArchivo = request.UrlArchivo,
-                    AutorId = autorIdFinal
-                };
+            var id = await _publicacionServicio.Crear(
+                request.ToCrearPublicacionDto(autorIdFinal, stream));
 
-                var id = await _publicacionServicio.Crear(dto);
-
-                return Created(
-                    $"/api/publicaciones/{id}",
-                    new { id });
-            }, "crear la publicación", HttpContext?.RequestAborted ?? default);
+            return Created(
+                $"/api/publicaciones/{id}",
+                new { id });
         }
 
         [HttpPost("compartir")]
         [ProducesResponseType(StatusCodes.Status201Created)]
-        public Task<IActionResult> Compartir(
+        public async Task<IActionResult> Compartir(
             [FromBody] CompartirPublicacionRequest request,
             CancellationToken cancellationToken = default)
         {
@@ -281,27 +261,18 @@ namespace ProyectoFinalTPI.Backend.Controllers
                 ? autorIdAutenticado.Value
                 : request.AutorId;
 
-            return EjecutarOperacion(async () =>
-            {
-                var dto = new CompartirPublicacionDto
-                {
-                    PublicacionOriginalId = request.PublicacionOriginalId,
-                    AutorId = autorIdFinal,
-                    Descripcion = request.Descripcion ?? string.Empty
-                };
+            var id = await _publicacionServicio.Compartir(
+                request.ToCompartirPublicacionDto(autorIdFinal), cancellationToken);
 
-                var id = await _publicacionServicio.Compartir(dto, cancellationToken);
-
-                return Created(
-                    $"/api/publicaciones/{id}",
-                    new { id });
-            }, "compartir la publicación", cancellationToken);
+            return Created(
+                $"/api/publicaciones/{id}",
+                new { id });
         }
 
         [HttpDelete("compartir/{originalId:int}")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public Task<IActionResult> EliminarRepost(
+        public async Task<IActionResult> EliminarRepost(
             int originalId,
             [FromQuery] int? autorId = null,
             CancellationToken cancellationToken = default)
@@ -311,17 +282,14 @@ namespace ProyectoFinalTPI.Backend.Controllers
                 ? autorIdAutenticado.Value
                 : autorId;
 
-            return EjecutarOperacion(async () =>
-            {
-                await _publicacionServicio.EliminarRepost(originalId, autorIdFinal, cancellationToken);
-                return Ok(new { mensaje = "Repost eliminado con éxito.", id = originalId });
-            }, "eliminar el repost", cancellationToken);
+            await _publicacionServicio.EliminarRepost(originalId, autorIdFinal, cancellationToken);
+            return Ok(new { mensaje = "Repost eliminado con éxito.", id = originalId });
         }
 
         [HttpDelete("{id:int}")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public Task<IActionResult> Eliminar(
+        public async Task<IActionResult> Eliminar(
             int id,
             [FromQuery] int? autorId = null,
             CancellationToken cancellationToken = default)
@@ -331,69 +299,73 @@ namespace ProyectoFinalTPI.Backend.Controllers
                 ? autorIdAutenticado.Value
                 : autorId;
 
-            return EjecutarOperacion(async () =>
-            {
-                await _publicacionServicio.Eliminar(id, autorIdFinal, cancellationToken);
-                return Ok(new { mensaje = "Publicación eliminada con éxito.", id });
-            }, "eliminar la publicación", cancellationToken);
+            await _publicacionServicio.Eliminar(id, autorIdFinal, cancellationToken);
+            return Ok(new { mensaje = "Publicación eliminada con éxito.", id });
         }
 
         [HttpPost("{publicacionId:int}/etiquetas")]
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status200OK)]
-        public Task<IActionResult> EtiquetarUsuarios(
+        public async Task<IActionResult> EtiquetarUsuarios(
             int publicacionId, [FromBody] EtiquetarUsuariosRequest request, CancellationToken cancellationToken)
         {
-            return EjecutarOperacion(async () =>
+            var cantidadEtiquetasNuevas = await _etiquetadoPublicacionServicio.EtiquetarUsuarios(
+                publicacionId, request.UsuariosIds, cancellationToken);
+
+            var respuesta = new
             {
-                var cantidadEtiquetasNuevas = await _etiquetadoPublicacionServicio.EtiquetarUsuarios(
-                    publicacionId, request.UsuariosIds, cancellationToken);
+                mensaje = cantidadEtiquetasNuevas > 0
+                    ? "Se etiquetaron los usuarios en la publicacion."
+                    : "usuarios ya etiquetados en la publicacion",
+                publicacionId,
+                cantidadEtiquetasNuevas
+            };
 
-                var respuesta = new
-                {
-                    mensaje = cantidadEtiquetasNuevas > 0
-                        ? "Se etiquetaron los usuarios en la publicacion."
-                        : "usuarios ya etiquetados en la publicacion",
-                    publicacionId,
-                    cantidadEtiquetasNuevas
-                };
-
-                return cantidadEtiquetasNuevas > 0
-                    ? StatusCode(StatusCodes.Status201Created, respuesta)
-                    : Ok(respuesta);
-            }, "etiquetar usuarios en la publicación", cancellationToken);
+            return cantidadEtiquetasNuevas > 0
+                ? StatusCode(StatusCodes.Status201Created, respuesta)
+                : Ok(respuesta);
         }
 
-        // Todas las acciones comparten el mismo contrato de errores.
         private async Task<IActionResult> EjecutarOperacion(
-            Func<Task<IActionResult>> accion, string operacion, CancellationToken cancellationToken)
+            Func<Task<IActionResult>> accion,
+            string operacion,
+            CancellationToken cancellationToken)
         {
             try
             {
                 return await accion();
             }
             catch (OperationCanceledException) when (
-                cancellationToken.IsCancellationRequested || (HttpContext?.RequestAborted.IsCancellationRequested ?? false))
+                cancellationToken.IsCancellationRequested ||
+                (HttpContext?.RequestAborted.IsCancellationRequested ?? false))
             {
-                // Una solicitud cancelada no debe convertirse en un error interno.
                 throw;
             }
             catch (ArgumentException exception)
             {
-                return CrearProblema(400, "Solicitud inválida", exception.Message);
+                return CrearProblema(
+                    StatusCodes.Status400BadRequest,
+                    "Solicitud inválida",
+                    exception.Message);
             }
             catch (KeyNotFoundException exception)
             {
-                return CrearProblema(404, "Recurso no encontrado", exception.Message);
+                return CrearProblema(
+                    StatusCodes.Status404NotFound,
+                    "Recurso no encontrado",
+                    exception.Message);
             }
             catch (Exception exception)
             {
                 _logger.LogError(
                     exception,
                     "Error al {Operacion}. TraceId: {TraceId}",
-                    operacion, HttpContext?.TraceIdentifier ?? "N/A");
+                    operacion,
+                    HttpContext?.TraceIdentifier ?? "N/A");
 
-                return CrearProblema(500, "Error interno del servidor",
+                return CrearProblema(
+                    StatusCodes.Status500InternalServerError,
+                    "Error interno del servidor",
                     $"No se pudo {operacion}. Intentá nuevamente más tarde.");
             }
         }
@@ -407,15 +379,14 @@ namespace ProyectoFinalTPI.Backend.Controllers
                 Detail = detalle,
                 Instance = HttpContext?.Request.Path
             };
+
             if (HttpContext != null)
             {
                 problema.Extensions["traceId"] = HttpContext.TraceIdentifier;
             }
 
-            var respuesta = new ObjectResult(problema) { StatusCode = estado };
-            respuesta.ContentTypes.Add("application/problem+json");
-            return respuesta;
+            return StatusCode(estado, problema);
         }
+
     }
 }
-
