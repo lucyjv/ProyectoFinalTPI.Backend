@@ -19,6 +19,13 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Servicio
         Task<PublicacionDetalleDto> ObtenerDetallePorId(int id, CancellationToken cancellationToken = default);
         Task<ResultadoPaginadoDto<ComentarioDto>> ObtenerComentarios(int publicacionId, string? cursor, int limite, 
             CancellationToken cancellationToken = default);
+        Task<ResultadoPaginadoDto<ComentarioDto>> ObtenerHilosComentarios(int publicacionId, string? cursor, int limite,
+            int? usuarioId, CancellationToken cancellationToken = default) =>
+            ObtenerComentarios(publicacionId, cursor, limite, cancellationToken);
+        Task<ComentarioDto> EstablecerReaccionComentario(int publicacionId, int comentarioId, int usuarioId, string tipo,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        Task<ComentarioDto> QuitarReaccionComentario(int publicacionId, int comentarioId, int usuarioId,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
         Task<ResultadoPaginadoDto<PublicacionDetalleDto>> ObtenerFeedSeguidos(int usuarioId, string? cursor, int limite,
             CancellationToken cancellationToken = default);
         Task<ResultadoPaginadoDto<PublicacionDetalleDto>>ObtenerPublicacionesParaVos(int usuarioId, string? cursor, int limite,

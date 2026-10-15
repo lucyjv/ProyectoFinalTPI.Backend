@@ -20,6 +20,9 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
         public DbSet<Usuario_Interactivo> Usuario_Interactivos { get; set; }
         public DbSet<Usuario_Marca> Usuario_Marcas { get; set; }
         public DbSet<Usuario_Personal> Usuario_Personales { get; set; }
+        public DbSet<SesionUsuario> SesionesUsuario { get; set; }
+        public DbSet<Comentario> Comentarios { get; set; }
+        public DbSet<ReaccionComentario> ReaccionesComentario { get; set; }
 
         // ── Chat ──────────────────────────────────────────────────────────────
         public DbSet<MensajeChat> MensajesChat { get; set; }
@@ -38,6 +41,25 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
                 .HasValue<Usuario_Marca>("Usuario_Marca")
                 .HasValue<Moderador>("Moderador");
 
+            modelBuilder.Entity<Usuario>()
+                .HasIndex(usuario => usuario.Email)
+                .IsUnique();
+
+            modelBuilder.Entity<SesionUsuario>(entity =>
+            {
+                entity.ToTable("sesiones_usuario");
+                entity.HasKey(sesion => sesion.Id);
+                entity.Property(sesion => sesion.RefreshTokenHash).IsRequired().HasMaxLength(64);
+                entity.Property(sesion => sesion.UserAgent).HasMaxLength(512);
+                entity.Property(sesion => sesion.Version).IsRowVersion();
+                entity.HasIndex(sesion => sesion.UsuarioId);
+                entity.HasIndex(sesion => sesion.FechaExpiracion);
+                entity.HasOne(sesion => sesion.Usuario)
+                    .WithMany()
+                    .HasForeignKey(sesion => sesion.UsuarioId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
             modelBuilder.Entity<Lugar>(entity =>
             {
                 entity.ToTable("lugares");
@@ -50,6 +72,39 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
                 .WithMany()
                 .HasForeignKey(p => p.PublicacionOriginalId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<Comentario>(entity =>
+            {
+                entity.ToTable("Comentario");
+                entity.Property(comentario => comentario.Contenido).IsRequired();
+                entity.HasIndex(comentario => new { comentario.PublicacionId, comentario.ComentarioPadreId, comentario.FechaCreacion });
+                entity.HasOne(comentario => comentario.Publicacion)
+                    .WithMany(publicacion => publicacion.Comentarios)
+                    .HasForeignKey(comentario => comentario.PublicacionId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(comentario => comentario.Usuario)
+                    .WithMany()
+                    .HasForeignKey(comentario => comentario.UsuarioId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(comentario => comentario.ComentarioPadre)
+                    .WithMany(comentario => comentario.Respuestas)
+                    .HasForeignKey(comentario => comentario.ComentarioPadreId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<ReaccionComentario>(entity =>
+            {
+                entity.ToTable("reacciones_comentario");
+                entity.HasKey(reaccion => new { reaccion.ComentarioId, reaccion.UsuarioId });
+                entity.HasOne(reaccion => reaccion.Comentario)
+                    .WithMany(comentario => comentario.Reacciones)
+                    .HasForeignKey(reaccion => reaccion.ComentarioId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(reaccion => reaccion.Usuario)
+                    .WithMany()
+                    .HasForeignKey(reaccion => reaccion.UsuarioId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
 
             // ── Configuración de MensajeChat ──────────────────────────────────
             modelBuilder.Entity<MensajeChat>(entity =>

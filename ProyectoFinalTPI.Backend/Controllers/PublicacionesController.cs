@@ -1,5 +1,7 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging.Abstractions;
 using ProyectoFinalTPI.Backend.Dtos;
 using ProyectoFinalTPI.Backend.Dtos.Comentario;
 using ProyectoFinalTPI.Backend.Dtos.Mapa;
@@ -23,15 +25,18 @@ namespace ProyectoFinalTPI.Backend.Controllers
     {
         private readonly IPublicacionServicio _publicacionServicio;
         private readonly IEtiquetadoPublicacionServicio _etiquetadoPublicacionServicio;
+        private readonly ILogger<PublicacionesController> _logger;
         private readonly ApplicationDbContext _context;
 
         public PublicacionesController(
             IPublicacionServicio publicacionServicio,
             IEtiquetadoPublicacionServicio etiquetadoPublicacionServicio,
+            ILogger<PublicacionesController>? logger = null,
             ApplicationDbContext context = null!)
         {
             _publicacionServicio = publicacionServicio;
             _etiquetadoPublicacionServicio = etiquetadoPublicacionServicio;
+            _logger = logger ?? NullLogger<PublicacionesController>.Instance;
             _context = context;
         }
 
@@ -41,7 +46,7 @@ namespace ProyectoFinalTPI.Backend.Controllers
             return Ok(_context.Usuarios.Select(u => new { u.Id, u.Username }).ToList());
         }
 
-        /*[HttpGet]
+        [HttpGet]
         public async Task<IActionResult> GetAll()
         {
             var publicaciones = await _context.Publicaciones
@@ -111,7 +116,7 @@ namespace ProyectoFinalTPI.Backend.Controllers
             });
 
             return Ok(result);
-        }*/
+        }
 
         private int? ObtenerUsuarioIdAutenticado()
         {
@@ -166,10 +171,11 @@ namespace ProyectoFinalTPI.Backend.Controllers
             [FromQuery] int limite = 20,
             CancellationToken cancellationToken = default)
         {
-            return Ok(await _publicacionServicio.ObtenerComentarios(
-                id, cursor, limite, cancellationToken));
+            return await EjecutarConsulta(() => _publicacionServicio.ObtenerHilosComentarios(
+                id, cursor, limite, ObtenerUsuarioIdAutenticado(), cancellationToken), "obtener los comentarios", cancellationToken);
         }
 
+        [Authorize]
         [HttpPost("{publicacionId:int}/comentarios")]
         [ProducesResponseType(typeof(ComentarioDto), StatusCodes.Status201Created)]
         public async Task<IActionResult> CrearComentario(
@@ -177,10 +183,52 @@ namespace ProyectoFinalTPI.Backend.Controllers
             [FromBody] CrearComentarioRequest request,
             CancellationToken cancellationToken = default)
         {
-            var comentario = await _publicacionServicio.CrearComentario(
-                publicacionId, request.ToCrearComentarioDto(), cancellationToken);
+            var usuarioId = ObtenerUsuarioIdAutenticado();
+            if (!usuarioId.HasValue) return Unauthorized();
+            return await EjecutarOperacion(async () =>
+            {
+                var comentario = await _publicacionServicio.CrearComentario(
+                    publicacionId,
+                    request.ToCrearComentarioDto(usuarioId.Value),
+                    cancellationToken);
 
-            return StatusCode(StatusCodes.Status201Created, comentario);
+                return StatusCode(StatusCodes.Status201Created, comentario);
+            }, "crear el comentario", cancellationToken);
+        }
+
+        [Authorize]
+        [HttpPut("{publicacionId:int}/comentarios/{comentarioId:int}/reaccion")]
+        [ProducesResponseType(typeof(ComentarioDto), StatusCodes.Status200OK)]
+        public Task<IActionResult> EstablecerReaccionComentario(
+            int publicacionId, int comentarioId, [FromBody] ReaccionComentarioRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            var usuarioId = ObtenerUsuarioIdAutenticado();
+            if (!usuarioId.HasValue) return Task.FromResult<IActionResult>(Unauthorized());
+            return EjecutarOperacion(async () => Ok(await _publicacionServicio.EstablecerReaccionComentario(
+                publicacionId, comentarioId, usuarioId.Value, request.Tipo, cancellationToken)),
+                "reaccionar al comentario", cancellationToken);
+        }
+
+        [Authorize]
+        [HttpDelete("{publicacionId:int}/comentarios/{comentarioId:int}/reaccion")]
+        [ProducesResponseType(typeof(ComentarioDto), StatusCodes.Status200OK)]
+        public Task<IActionResult> QuitarReaccionComentario(
+            int publicacionId, int comentarioId, CancellationToken cancellationToken = default)
+        {
+            var usuarioId = ObtenerUsuarioIdAutenticado();
+            if (!usuarioId.HasValue) return Task.FromResult<IActionResult>(Unauthorized());
+            return EjecutarOperacion(async () => Ok(await _publicacionServicio.QuitarReaccionComentario(
+                publicacionId, comentarioId, usuarioId.Value, cancellationToken)),
+                "quitar la reacciÃ³n del comentario", cancellationToken);
+        }
+
+        private async Task<ActionResult<T>> EjecutarConsulta<T>(
+            Func<Task<T>> consulta, string operacion, CancellationToken cancellationToken)
+        {
+            var resultado = await EjecutarOperacion(
+                async () => Ok(await consulta()), operacion, cancellationToken);
+            return (ActionResult)resultado;
         }
 
         [HttpPost]
@@ -276,6 +324,68 @@ namespace ProyectoFinalTPI.Backend.Controllers
             return cantidadEtiquetasNuevas > 0
                 ? StatusCode(StatusCodes.Status201Created, respuesta)
                 : Ok(respuesta);
+        }
+
+        private async Task<IActionResult> EjecutarOperacion(
+            Func<Task<IActionResult>> accion,
+            string operacion,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                return await accion();
+            }
+            catch (OperationCanceledException) when (
+                cancellationToken.IsCancellationRequested ||
+                (HttpContext?.RequestAborted.IsCancellationRequested ?? false))
+            {
+                throw;
+            }
+            catch (ArgumentException exception)
+            {
+                return CrearProblema(
+                    StatusCodes.Status400BadRequest,
+                    "Solicitud inválida",
+                    exception.Message);
+            }
+            catch (KeyNotFoundException exception)
+            {
+                return CrearProblema(
+                    StatusCodes.Status404NotFound,
+                    "Recurso no encontrado",
+                    exception.Message);
+            }
+            catch (Exception exception)
+            {
+                _logger.LogError(
+                    exception,
+                    "Error al {Operacion}. TraceId: {TraceId}",
+                    operacion,
+                    HttpContext?.TraceIdentifier ?? "N/A");
+
+                return CrearProblema(
+                    StatusCodes.Status500InternalServerError,
+                    "Error interno del servidor",
+                    $"No se pudo {operacion}. Intentá nuevamente más tarde.");
+            }
+        }
+
+        private ObjectResult CrearProblema(int estado, string titulo, string detalle)
+        {
+            var problema = new ProblemDetails
+            {
+                Status = estado,
+                Title = titulo,
+                Detail = detalle,
+                Instance = HttpContext?.Request.Path
+            };
+
+            if (HttpContext != null)
+            {
+                problema.Extensions["traceId"] = HttpContext.TraceIdentifier;
+            }
+
+            return StatusCode(estado, problema);
         }
 
     }

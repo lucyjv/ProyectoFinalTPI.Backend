@@ -32,6 +32,9 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("ComentarioPadreId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Contenido")
                         .IsRequired()
                         .HasColumnType("text");
@@ -50,11 +53,13 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("PublicacionId");
+                    b.HasIndex("ComentarioPadreId");
 
                     b.HasIndex("UsuarioId");
 
-                    b.ToTable("Comentario");
+                    b.HasIndex("PublicacionId", "ComentarioPadreId", "FechaCreacion");
+
+                    b.ToTable("Comentario", (string)null);
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Lugar", b =>
@@ -207,6 +212,72 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.ToTable("Publicaciones");
                 });
 
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.ReaccionComentario", b =>
+                {
+                    b.Property<int>("ComentarioId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UsuarioId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Tipo")
+                        .HasColumnType("integer");
+
+                    b.HasKey("ComentarioId", "UsuarioId");
+
+                    b.HasIndex("UsuarioId");
+
+                    b.ToTable("reacciones_comentario", (string)null);
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.SesionUsuario", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("FechaExpiracion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("FechaRevocacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RefreshTokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("UltimoUso")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UserAgent")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<int>("UsuarioId")
+                        .HasColumnType("integer");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FechaExpiracion");
+
+                    b.HasIndex("UsuarioId");
+
+                    b.ToTable("sesiones_usuario", (string)null);
+                });
+
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Usuario", b =>
                 {
                     b.Property<int>("Id")
@@ -239,6 +310,9 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                         .HasColumnType("character varying(21)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("Email")
+                        .IsUnique();
 
                     b.ToTable("Usuario", (string)null);
 
@@ -315,6 +389,11 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Comentario", b =>
                 {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Comentario", "ComentarioPadre")
+                        .WithMany("Respuestas")
+                        .HasForeignKey("ComentarioPadreId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
                     b.HasOne("ProyectoFinalTPI.Backend.Entidades.Publicacion", "Publicacion")
                         .WithMany("Comentarios")
                         .HasForeignKey("PublicacionId")
@@ -326,6 +405,8 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                         .HasForeignKey("UsuarioId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("ComentarioPadre");
 
                     b.Navigation("Publicacion");
 
@@ -375,6 +456,43 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Navigation("PublicacionOriginal");
 
                     b.Navigation("Usuario");
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.ReaccionComentario", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Comentario", "Comentario")
+                        .WithMany("Reacciones")
+                        .HasForeignKey("ComentarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario", "Usuario")
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Comentario");
+
+                    b.Navigation("Usuario");
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.SesionUsuario", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario", "Usuario")
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Usuario");
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Comentario", b =>
+                {
+                    b.Navigation("Reacciones");
+
+                    b.Navigation("Respuestas");
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Publicacion", b =>

@@ -52,25 +52,44 @@ namespace ProyectoFinalTPI.Backend.Servicio
             if (string.IsNullOrWhiteSpace(dto.Contenido))
                 throw new ArgumentException("Debe indicar el contenido del comentario.");
 
+            if (dto.Contenido.Trim().Length > 1000)
+                throw new ArgumentException("El comentario no puede superar los 1000 caracteres.");
+
             cancellationToken.ThrowIfCancellationRequested();
             var usuario = await _usuarioRepositorio.ObtenerPorIdAsync(dto.UsuarioId)
                 ?? throw new KeyNotFoundException("El usuario indicado no existe.");
             var publicacion = await _publicacionRepositorio.ObtenerPorId(publicacionId, cancellationToken)
                 ?? throw new KeyNotFoundException("La publicación no existe o no está disponible.");
 
+            Comentario? comentarioPadre = null;
+            if (dto.ComentarioPadreId.HasValue)
+            {
+                comentarioPadre = await _publicacionRepositorio.ObtenerComentario(
+                    publicacionId, dto.ComentarioPadreId.Value, cancellationToken)
+                    ?? throw new KeyNotFoundException("El comentario al que querÃ©s responder no existe.");
+                if (comentarioPadre.ComentarioPadreId.HasValue)
+                    throw new ArgumentException("Solo se puede responder a comentarios principales.");
+            }
+
             var comentario = new Comentario
             {
                 Contenido = dto.Contenido.Trim(),
                 FechaCreacion = DateTime.UtcNow,
                 EstaOculto = false,
+                PublicacionId = publicacion.Id,
                 Usuario = usuario,
-                Publicacion = publicacion
+                UsuarioId = usuario.Id,
+                Publicacion = publicacion,
+                ComentarioPadreId = comentarioPadre?.Id,
+                ComentarioPadre = comentarioPadre
             };
 
             var id = await _publicacionRepositorio.CrearComentario(comentario, cancellationToken);
             return new ComentarioDto
             {
                 Id = id,
+                PublicacionId = publicacion.Id,
+                ComentarioPadreId = comentario.ComentarioPadreId,
                 Contenido = comentario.Contenido,
                 FechaCreacion = comentario.FechaCreacion,
                 Autor = new AutorResumenDto
@@ -79,6 +98,50 @@ namespace ProyectoFinalTPI.Backend.Servicio
                     Username = usuario.Username
                 }
             };
+        }
+
+        public async Task<ResultadoPaginadoDto<ComentarioDto>> ObtenerHilosComentarios(
+            int publicacionId, string? cursor, int limite, int? usuarioId,
+            CancellationToken cancellationToken = default)
+        {
+            if (publicacionId <= 0) throw new ArgumentException("El ID de la publicaciÃ³n debe ser mayor que cero.");
+            if (limite < 1 || limite > 50) throw new ArgumentException("El lÃ­mite debe estar entre 1 y 50.");
+            if (!await _publicacionRepositorio.ExistePublicacionVisible(publicacionId, cancellationToken))
+                throw new KeyNotFoundException("La publicaciÃ³n no existe o no estÃ¡ disponible.");
+
+            var comentarios = await _publicacionRepositorio.ObtenerHilosComentarios(
+                publicacionId, CursorCronologicoCodec.Leer(cursor), limite, usuarioId, cancellationToken);
+            var items = comentarios.Take(limite).ToList();
+            return new ResultadoPaginadoDto<ComentarioDto>
+            {
+                Items = items,
+                SiguienteCursor = comentarios.Count > limite
+                    ? CursorCronologicoCodec.Crear(items[^1].FechaCreacion, items[^1].Id)
+                    : null
+            };
+        }
+
+        public async Task<ComentarioDto> EstablecerReaccionComentario(
+            int publicacionId, int comentarioId, int usuarioId, string tipo,
+            CancellationToken cancellationToken = default)
+        {
+            if (!Enum.TryParse<TipoReaccionComentario>(tipo, true, out var reaccion))
+                throw new ArgumentException("La reacciÃ³n indicada no es vÃ¡lida.");
+            var comentario = await _publicacionRepositorio.ObtenerComentario(publicacionId, comentarioId, cancellationToken)
+                ?? throw new KeyNotFoundException("El comentario no existe o no estÃ¡ disponible.");
+            await _publicacionRepositorio.EstablecerReaccionComentario(comentario.Id, usuarioId, reaccion, cancellationToken);
+            return await _publicacionRepositorio.ObtenerComentarioDto(publicacionId, comentarioId, usuarioId, cancellationToken)
+                ?? throw new KeyNotFoundException("El comentario no existe o no estÃ¡ disponible.");
+        }
+
+        public async Task<ComentarioDto> QuitarReaccionComentario(
+            int publicacionId, int comentarioId, int usuarioId, CancellationToken cancellationToken = default)
+        {
+            var comentario = await _publicacionRepositorio.ObtenerComentario(publicacionId, comentarioId, cancellationToken)
+                ?? throw new KeyNotFoundException("El comentario no existe o no estÃ¡ disponible.");
+            await _publicacionRepositorio.QuitarReaccionComentario(comentario.Id, usuarioId, cancellationToken);
+            return await _publicacionRepositorio.ObtenerComentarioDto(publicacionId, comentarioId, usuarioId, cancellationToken)
+                ?? throw new KeyNotFoundException("El comentario no existe o no estÃ¡ disponible.");
         }
 
         public async Task<int> Crear(CrearPublicacionDto dto)

@@ -23,6 +23,7 @@ namespace ProyectoFinalTPI.Backend.Tests;
 public class AuthServicioTests
 {
     private readonly Mock<IUsuarioRepositorio> _repositorioMock = new();
+    private readonly Mock<ISesionUsuarioRepositorio> _sesionesMock = new();
     private readonly IConfiguration _configuracion;
 
     public AuthServicioTests()
@@ -35,9 +36,12 @@ public class AuthServicioTests
                 ["Jwt:Audiencia"] = "nostalgia-frontend"
             })
             .Build();
+        _sesionesMock
+            .Setup(r => r.AgregarAsync(It.IsAny<SesionUsuario>(), default))
+            .Returns(Task.CompletedTask);
     }
 
-    private AuthServicio CrearServicio() => new(_repositorioMock.Object, _configuracion);
+    private AuthServicio CrearServicio() => new(_repositorioMock.Object, _sesionesMock.Object, _configuracion);
 
     [Fact]
     public async Task Registro_hashea_la_contraseña_antes_de_persistir()
@@ -99,11 +103,13 @@ public class AuthServicioTests
             Contraseña = "contraseña123"
         });
 
-        Assert.False(string.IsNullOrEmpty(resultado.Token));
+        Assert.False(string.IsNullOrEmpty(resultado.Respuesta.Token));
         var handler = new JwtSecurityTokenHandler();
-        Assert.True(handler.CanReadToken(resultado.Token));
-        var jwt = handler.ReadJwtToken(resultado.Token);
+        Assert.True(handler.CanReadToken(resultado.Respuesta.Token));
+        var jwt = handler.ReadJwtToken(resultado.Respuesta.Token);
         Assert.Equal("nostalgia-backend", jwt.Issuer);
+        Assert.NotNull(jwt.Claims.SingleOrDefault(claim => claim.Type == "sid"));
+        Assert.False(string.IsNullOrWhiteSpace(resultado.RefreshToken));
     }
 
     [Fact]
@@ -161,9 +167,92 @@ public class AuthServicioTests
             Contraseña = "contraseña123"
         });
 
-        Assert.Equal(5, resultado.UsuarioId);
-        Assert.Equal("testuser", resultado.Username);
-        Assert.False(string.IsNullOrEmpty(resultado.Token));
+        Assert.Equal(5, resultado.Respuesta.UsuarioId);
+        Assert.Equal("testuser", resultado.Respuesta.Username);
+        Assert.False(string.IsNullOrEmpty(resultado.Respuesta.Token));
+    }
+
+    [Fact]
+    public async Task Refresh_rota_el_token_y_el_anterior_deja_de_ser_valido()
+    {
+        var usuario = new Usuario_Personal
+        {
+            Id = 5,
+            Username = "testuser",
+            Email = "test@example.com",
+            Contraseña = BCrypt.Net.BCrypt.HashPassword("contraseña123")
+        };
+        _repositorioMock
+            .Setup(r => r.ObtenerPorEmailAsync("test@example.com", default))
+            .ReturnsAsync(usuario);
+
+        SesionUsuario? sesion = null;
+        _sesionesMock
+            .Setup(r => r.AgregarAsync(It.IsAny<SesionUsuario>(), default))
+            .Callback<SesionUsuario, CancellationToken>((valor, _) => sesion = valor)
+            .Returns(Task.CompletedTask);
+
+        var login = await CrearServicio().LoginAsync(new LoginDto
+        {
+            Email = "test@example.com",
+            Contraseña = "contraseña123"
+        });
+        Assert.NotNull(sesion);
+
+        _sesionesMock
+            .Setup(r => r.ObtenerPorIdAsync(sesion.Id, default))
+            .ReturnsAsync(sesion);
+        _sesionesMock
+            .Setup(r => r.RotarAsync(sesion, It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), default))
+            .Callback<SesionUsuario, string, DateTime, DateTime, CancellationToken>((valor, hash, expiracion, ultimoUso, _) =>
+            {
+                valor.RefreshTokenHash = hash;
+                valor.FechaExpiracion = expiracion;
+                valor.UltimoUso = ultimoUso;
+            })
+            .ReturnsAsync(true);
+
+        var renovada = await CrearServicio().RenovarAsync(login.RefreshToken);
+
+        Assert.NotEqual(login.RefreshToken, renovada.RefreshToken);
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            CrearServicio().RenovarAsync(login.RefreshToken));
+    }
+
+    [Fact]
+    public async Task Logout_revoca_la_sesion_persistida()
+    {
+        var usuario = new Usuario_Personal
+        {
+            Id = 5,
+            Username = "testuser",
+            Email = "test@example.com",
+            Contraseña = BCrypt.Net.BCrypt.HashPassword("contraseña123")
+        };
+        _repositorioMock
+            .Setup(r => r.ObtenerPorEmailAsync("test@example.com", default))
+            .ReturnsAsync(usuario);
+
+        SesionUsuario? sesion = null;
+        _sesionesMock
+            .Setup(r => r.AgregarAsync(It.IsAny<SesionUsuario>(), default))
+            .Callback<SesionUsuario, CancellationToken>((valor, _) => sesion = valor)
+            .Returns(Task.CompletedTask);
+        var login = await CrearServicio().LoginAsync(new LoginDto
+        {
+            Email = "test@example.com",
+            Contraseña = "contraseña123"
+        });
+        Assert.NotNull(sesion);
+        _sesionesMock
+            .Setup(r => r.ObtenerPorIdAsync(sesion.Id, default))
+            .ReturnsAsync(sesion);
+
+        await CrearServicio().CerrarSesionAsync(login.RefreshToken);
+
+        _sesionesMock.Verify(
+            r => r.RevocarAsync(sesion, It.IsAny<DateTime>(), default),
+            Times.Once);
     }
 }
 
@@ -190,6 +279,10 @@ public class AuthIntegracionTests
         Assert.NotNull(body);
         Assert.True(body.UsuarioId > 0);
         Assert.Equal("testuser", body.Username);
+        var cookie = Assert.Single(response.Headers.GetValues("Set-Cookie"));
+        Assert.Contains("httponly", cookie, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("secure", cookie, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("samesite=strict", cookie, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -261,6 +354,38 @@ public class AuthIntegracionTests
         var body = await response.Content.ReadFromJsonAsync<AuthRespuesta>();
         Assert.NotNull(body);
         Assert.False(string.IsNullOrEmpty(body.Token));
+    }
+
+    [Fact]
+    public async Task Refresh_rota_cookie_y_logout_impide_volver_a_usarla()
+    {
+        await using var factory = new AuthFactory();
+        using var client = factory.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions
+        {
+            HandleCookies = false
+        });
+        var registro = await client.PostAsJsonAsync("/api/auth/registro", new
+        {
+            Username = "testuser",
+            Email = "test@example.com",
+            Contraseña = "contraseña123"
+        });
+        var primeraCookie = Assert.Single(registro.Headers.GetValues("Set-Cookie")).Split(';')[0];
+
+        using var refreshRequest = new HttpRequestMessage(HttpMethod.Post, "/api/auth/refresh");
+        refreshRequest.Headers.Add("Cookie", primeraCookie);
+        var refresh = await client.SendAsync(refreshRequest);
+        Assert.Equal(HttpStatusCode.OK, refresh.StatusCode);
+        var segundaCookie = Assert.Single(refresh.Headers.GetValues("Set-Cookie")).Split(';')[0];
+        Assert.NotEqual(primeraCookie, segundaCookie);
+
+        using var logoutRequest = new HttpRequestMessage(HttpMethod.Post, "/api/auth/logout");
+        logoutRequest.Headers.Add("Cookie", segundaCookie);
+        Assert.Equal(HttpStatusCode.NoContent, (await client.SendAsync(logoutRequest)).StatusCode);
+
+        using var refreshRevocadoRequest = new HttpRequestMessage(HttpMethod.Post, "/api/auth/refresh");
+        refreshRevocadoRequest.Headers.Add("Cookie", segundaCookie);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.SendAsync(refreshRevocadoRequest)).StatusCode);
     }
 
     [Fact]

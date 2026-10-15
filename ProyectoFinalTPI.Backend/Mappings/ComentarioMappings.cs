@@ -5,12 +5,15 @@ namespace ProyectoFinalTPI.Backend.Mappings;
 
 public static class ComentarioMappings
 {
-    public static CrearComentarioDto ToCrearComentarioDto(this CrearComentarioRequest request)
+    public static CrearComentarioDto ToCrearComentarioDto(
+        this CrearComentarioRequest request,
+        int usuarioId)
     {
         return new CrearComentarioDto
         {
             Contenido = request.Contenido,
-            UsuarioId = request.UsuarioId
+            UsuarioId = usuarioId,
+            ComentarioPadreId = request.ComentarioPadreId
         };
     }
 }
