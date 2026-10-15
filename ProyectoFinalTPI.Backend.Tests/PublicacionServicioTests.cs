@@ -513,7 +513,7 @@ namespace ProyectoFinalTPI.Backend.Tests
             Assert.Equal(10, sesion.UsuarioId);
             Assert.Equal(new[] { 7, 3 }, sesion.PublicacionesIds);
         }
-
+        
         [Fact]
         public async Task QueSeContinueLaSesionSinVolverAGenerarRecomendaciones()
         {
@@ -620,6 +620,9 @@ namespace ProyectoFinalTPI.Backend.Tests
         // Estos dobles reemplazan las dependencias externas del servicio.
         private class PublicacionRepositorioFake : IPublicacionRepositorio
         {
+            public Task<int> CrearComentario(Comentario comentario, CancellationToken cancellationToken = default)
+                => throw new NotImplementedException();
+
             public int IdCreado { get; set; } = 1;
             public Publicacion? Creada { get; private set; }
             public Publicacion? Original { get; set; }

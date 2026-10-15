@@ -1,6 +1,7 @@
 using NetTopologySuite.Geometries;
 using ProyectoFinalTPI.Backend.Dtos;
 using ProyectoFinalTPI.Backend.Dtos.Comentario;
+using ProyectoFinalTPI.Backend.Dtos.Usuario;
 using ProyectoFinalTPI.Backend.Dtos.Mapa;
 using ProyectoFinalTPI.Backend.Dtos.Publicacion;
 using ProyectoFinalTPI.Backend.Entidades;
@@ -38,6 +39,46 @@ namespace ProyectoFinalTPI.Backend.Servicio
         public List<Publicacion> ObtenerPublicacionPorCategoria(CategoriaEnum categoria)
         {
             return _publicacionRepositorio.ObtenerPublicacionPorCategoria(categoria);
+        }
+
+        public async Task<ComentarioDto> CrearComentario(
+            int publicacionId, CrearComentarioDto dto, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(dto);
+            if (publicacionId <= 0)
+                throw new ArgumentException("El ID de la publicación debe ser mayor que cero.");
+            if (dto.UsuarioId <= 0)
+                throw new ArgumentException("El ID del usuario debe ser mayor que cero.");
+            if (string.IsNullOrWhiteSpace(dto.Contenido))
+                throw new ArgumentException("Debe indicar el contenido del comentario.");
+
+            cancellationToken.ThrowIfCancellationRequested();
+            var usuario = await _usuarioRepositorio.ObtenerPorIdAsync(dto.UsuarioId)
+                ?? throw new KeyNotFoundException("El usuario indicado no existe.");
+            var publicacion = await _publicacionRepositorio.ObtenerPorId(publicacionId, cancellationToken)
+                ?? throw new KeyNotFoundException("La publicación no existe o no está disponible.");
+
+            var comentario = new Comentario
+            {
+                Contenido = dto.Contenido.Trim(),
+                FechaCreacion = DateTime.UtcNow,
+                EstaOculto = false,
+                Usuario = usuario,
+                Publicacion = publicacion
+            };
+
+            var id = await _publicacionRepositorio.CrearComentario(comentario, cancellationToken);
+            return new ComentarioDto
+            {
+                Id = id,
+                Contenido = comentario.Contenido,
+                FechaCreacion = comentario.FechaCreacion,
+                Autor = new AutorResumenDto
+                {
+                    Id = usuario.Id,
+                    Username = usuario.Username
+                }
+            };
         }
 
         public async Task<int> Crear(CrearPublicacionDto dto)

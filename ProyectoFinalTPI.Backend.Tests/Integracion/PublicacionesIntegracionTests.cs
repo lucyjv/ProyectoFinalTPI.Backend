@@ -37,6 +37,176 @@ public class PublicacionesIntegracionTests : IClassFixture<PostgisFixture>
     };
 
     [Fact]
+    public async Task QueSeCreeUnComentarioYSePuedaConsultarPorGet()
+    {
+        //Arrange
+        await using var factory = new PublicacionesApiFactory(_postgres);
+        using var client = factory.CreateClient();
+        using var scope = factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var publicacion = new Publicacion
+        {
+            Id = 1, Titulo = "Recuerdo", Usuario = usuario, Lugar = lugar,
+            Fecha = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+        };
+        context.Publicaciones.Add(publicacion);
+        await context.SaveChangesAsync();
+        var desde = DateTime.UtcNow;
+
+        //Act
+        using var response = await client.PostAsJsonAsync("/api/publicaciones/1/comentarios",
+            new { contenido = "  Qué lindo recuerdo  ", usuarioId = usuario.Id });
+        var result = await response.Content.ReadFromJsonAsync<ComentarioDto>();
+        using var consulta = await client.GetAsync("/api/publicaciones/1/comentarios");
+        var pagina = await consulta.Content.ReadFromJsonAsync<ResultadoPaginadoDto<ComentarioDto>>();
+        context.ChangeTracker.Clear();
+        var guardado = await context.Set<Comentario>()
+            .Include(c => c.Publicacion).Include(c => c.Usuario).SingleAsync();
+
+        //Assert
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.NotNull(result);
+        Assert.Equal("Qué lindo recuerdo", result.Contenido);
+        Assert.Equal(usuario.Id, result.Autor.Id);
+        Assert.Equal(1, guardado.Publicacion.Id);
+        Assert.False(guardado.EstaOculto);
+        Assert.InRange(guardado.FechaCreacion, desde, DateTime.UtcNow);
+        Assert.Equal(HttpStatusCode.OK, consulta.StatusCode);
+        Assert.NotNull(pagina);
+        Assert.Equal(result.Id, Assert.Single(pagina.Items).Id);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public async Task QueNoSeCreeUnComentarioConContenidoVacio(string? contenido)
+    {
+        //Arrange
+        await using var factory = new PublicacionesApiFactory(_postgres);
+        using var client = factory.CreateClient();
+        using var scope = factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var publicacion = new Publicacion
+        {
+            Id = 1, Titulo = "Recuerdo", Usuario = usuario, Lugar = lugar,
+            Fecha = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+        };
+        context.Publicaciones.Add(publicacion);
+        await context.SaveChangesAsync();
+
+        //Act
+        using var response = await client.PostAsJsonAsync("/api/publicaciones/1/comentarios",
+            new { contenido, usuarioId = usuario.Id });
+        var result = await response.Content.ReadFromJsonAsync<ValidationProblemDetails>();
+
+        //Assert
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.NotNull(result);
+        Assert.Equal(400, result.Status);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        Assert.True(!string.IsNullOrWhiteSpace(result.Detail) || result.Errors.Count > 0);
+        Assert.Empty(await context.Set<Comentario>().ToListAsync());
+    }
+
+    [Fact]
+    public async Task QueNoSeCreeUnComentarioSiElUsuarioNoExiste()
+    {
+        //Arrange
+        await using var factory = new PublicacionesApiFactory(_postgres);
+        using var client = factory.CreateClient();
+        using var scope = factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var publicacion = new Publicacion
+        {
+            Id = 1, Titulo = "Recuerdo", Usuario = usuario, Lugar = lugar,
+            Fecha = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+        };
+        context.Publicaciones.Add(publicacion);
+        await context.SaveChangesAsync();
+
+        //Act
+        using var response = await client.PostAsJsonAsync("/api/publicaciones/1/comentarios",
+            new { contenido = "Comentario", usuarioId = 99 });
+        var result = await response.Content.ReadFromJsonAsync<ProblemDetails>();
+
+        //Assert
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.NotNull(result);
+        Assert.Equal(404, result.Status);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        Assert.False(string.IsNullOrWhiteSpace(result.Detail));
+        Assert.Empty(await context.Set<Comentario>().ToListAsync());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task QueNoSeCreeUnComentarioSiLaPublicacionNoEstaDisponible(bool oculta)
+    {
+        //Arrange
+        await using var factory = new PublicacionesApiFactory(_postgres);
+        using var client = factory.CreateClient();
+        using var scope = factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var publicacion = new Publicacion
+        {
+            Id = 1, Titulo = "Recuerdo", Usuario = usuario, Lugar = lugar,
+            Fecha = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+        };
+        context.Publicaciones.Add(publicacion);
+        publicacion.EstaOculto = oculta;
+        await context.SaveChangesAsync();
+
+        //Act
+        using var response = await client.PostAsJsonAsync($"/api/publicaciones/{(oculta ? 1 : 99)}/comentarios",
+            new { contenido = "Comentario", usuarioId = usuario.Id });
+        var result = await response.Content.ReadFromJsonAsync<ProblemDetails>();
+
+        //Assert
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.NotNull(result);
+        Assert.Equal(404, result.Status);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        Assert.False(string.IsNullOrWhiteSpace(result.Detail));
+        Assert.Empty(await context.Set<Comentario>().ToListAsync());
+    }
+
+    [Theory]
+    [InlineData(0, 10)]
+    [InlineData(-1, 10)]
+    [InlineData(1, 0)]
+    [InlineData(1, -1)]
+    public async Task QueNoSeCreeUnComentarioConIdsInvalidos(int publicacionId, int usuarioId)
+    {
+        //Arrange
+        await using var factory = new PublicacionesApiFactory(_postgres);
+        using var client = factory.CreateClient();
+        using var scope = factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var publicacion = new Publicacion
+        {
+            Id = 1, Titulo = "Recuerdo", Usuario = usuario, Lugar = lugar,
+            Fecha = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+        };
+        context.Publicaciones.Add(publicacion);
+        await context.SaveChangesAsync();
+
+        //Act
+        using var response = await client.PostAsJsonAsync($"/api/publicaciones/{publicacionId}/comentarios",
+            new { contenido = "Comentario", usuarioId });
+        var result = await response.Content.ReadFromJsonAsync<ValidationProblemDetails>();
+
+        //Assert
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.NotNull(result);
+        Assert.Equal(400, result.Status);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        Assert.True(!string.IsNullOrWhiteSpace(result.Detail) || result.Errors.Count > 0);
+        Assert.Empty(await context.Set<Comentario>().ToListAsync());
+    }
+
+    [Fact]
     public async Task QueSeObtenganLosPinesDePublicacionesVisiblesDentroDelArea()
     {
         //Arrange

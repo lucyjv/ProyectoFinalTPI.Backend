@@ -172,6 +172,27 @@ namespace ProyectoFinalTPI.Backend.Controllers
                 id, cursor, limite, cancellationToken), "obtener los comentarios", cancellationToken);
         }
 
+        [HttpPost("{publicacionId:int}/comentarios")]
+        [ProducesResponseType(typeof(ComentarioDto), StatusCodes.Status201Created)]
+        public Task<IActionResult> CrearComentario(
+            int publicacionId,
+            [FromBody] CrearComentarioRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            return EjecutarOperacion(async () =>
+            {
+                var dto = new CrearComentarioDto
+                {
+                    Contenido = request.Contenido,
+                    UsuarioId = request.UsuarioId
+                };
+                var comentario = await _publicacionServicio.CrearComentario(
+                    publicacionId, dto, cancellationToken);
+
+                return StatusCode(StatusCodes.Status201Created, comentario);
+            }, "crear el comentario", cancellationToken);
+        }
+
         private async Task<ActionResult<T>> EjecutarConsulta<T>(
             Func<Task<T>> consulta, string operacion, CancellationToken cancellationToken)
         {

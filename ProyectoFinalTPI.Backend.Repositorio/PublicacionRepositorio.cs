@@ -47,6 +47,13 @@ namespace ProyectoFinalTPI.Backend.Repositorio
             return publicacion.Id;
         }
 
+        public async Task<int> CrearComentario(Comentario comentario, CancellationToken cancellationToken = default)
+        {
+            await _context.Set<Comentario>().AddAsync(comentario, cancellationToken);
+            await _context.SaveChangesAsync(cancellationToken);
+            return comentario.Id;
+        }
+
         public async Task<Publicacion?> ObtenerPorId(int id, CancellationToken cancellationToken = default)
         {
             return await _context.Publicaciones
@@ -161,9 +168,9 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                         Longitud = p.Lugar.Coordenadas.X
                     },
 
-                    // TODO: reemplazar por contadores e interacción reales.
+                    // TODO: implementar el contador de likes y la interacción del usuario.
                     CantidadLikes = 0,
-                    CantidadComentarios = 0,
+                    CantidadComentarios = p.Comentarios.Count(c => !c.EstaOculto),
                     DioLike = false
                 })
                 .SingleOrDefaultAsync(cancellationToken);
@@ -229,9 +236,9 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                         Longitud = p.Lugar.Coordenadas.X
                     },
 
-                    // TODO: reemplazar por contadores e interacción reales.
+                    // TODO: implementar el contador de likes y la interacción del usuario.
                     CantidadLikes = 0,
-                    CantidadComentarios = 0,
+                    CantidadComentarios = p.Comentarios.Count(c => !c.EstaOculto),
                     DioLike = false
                 })
                 .Take(limite + 1)
@@ -340,9 +347,9 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                         Longitud = p.Lugar.Coordenadas.X
                     },
 
-                    // TODO: reemplazar por contadores e interacción reales.
+                    // TODO: implementar el contador de likes y la interacción del usuario.
                     CantidadLikes = 0,
-                    CantidadComentarios = 0,
+                    CantidadComentarios = p.Comentarios.Count(c => !c.EstaOculto),
                     DioLike = false
                 })
                 .Take(limite + 1)
@@ -392,9 +399,9 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                         Longitud = p.Lugar.Coordenadas.X
                     },
 
-                    // TODO: reemplazar por contadores e interacción reales.
+                    // TODO: implementar el contador de likes y la interacción del usuario.
                     CantidadLikes = 0,
-                    CantidadComentarios = 0,
+                    CantidadComentarios = p.Comentarios.Count(c => !c.EstaOculto),
                     DioLike = false
                 })
                 .ToListAsync(cancellationToken);
