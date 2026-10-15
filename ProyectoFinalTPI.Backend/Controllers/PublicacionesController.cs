@@ -6,6 +6,7 @@ using ProyectoFinalTPI.Backend.Dtos.Mapa;
 using ProyectoFinalTPI.Backend.Dtos.Publicacion;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Requests.Publicaciones;
+using ProyectoFinalTPI.Backend.Mappings;
 
 using Microsoft.EntityFrameworkCore;
 using ProyectoFinalTPI.Backend.Repositorio.Data;
@@ -40,7 +41,7 @@ namespace ProyectoFinalTPI.Backend.Controllers
             return Ok(_context.Usuarios.Select(u => new { u.Id, u.Username }).ToList());
         }
 
-        [HttpGet]
+        /*[HttpGet]
         public async Task<IActionResult> GetAll()
         {
             var publicaciones = await _context.Publicaciones
@@ -110,7 +111,7 @@ namespace ProyectoFinalTPI.Backend.Controllers
             });
 
             return Ok(result);
-        }
+        }*/
 
         private int? ObtenerUsuarioIdAutenticado()
         {
@@ -176,13 +177,8 @@ namespace ProyectoFinalTPI.Backend.Controllers
             [FromBody] CrearComentarioRequest request,
             CancellationToken cancellationToken = default)
         {
-            var dto = new CrearComentarioDto
-            {
-                Contenido = request.Contenido,
-                UsuarioId = request.UsuarioId
-            };
             var comentario = await _publicacionServicio.CrearComentario(
-                publicacionId, dto, cancellationToken);
+                publicacionId, request.ToCrearComentarioDto(), cancellationToken);
 
             return StatusCode(StatusCodes.Status201Created, comentario);
         }
@@ -198,23 +194,8 @@ namespace ProyectoFinalTPI.Backend.Controllers
 
             using var stream = request.Archivo?.OpenReadStream();
 
-            var dto = new CrearPublicacionDto
-            {
-                Titulo = request.Titulo,
-                Descripcion = request.Descripcion,
-                Fecha = request.Fecha,
-                Categoria = request.Categoria,
-                NombreLugar = request.NombreLugar,
-                Latitud = request.Latitud,
-                Longitud = request.Longitud,
-                TipoMultimedia = request.TipoMultimedia,
-                Archivo = stream,
-                NombreArchivo = request.Archivo?.FileName,
-                UrlArchivo = request.UrlArchivo,
-                AutorId = autorIdFinal
-            };
-
-            var id = await _publicacionServicio.Crear(dto);
+            var id = await _publicacionServicio.Crear(
+                request.ToCrearPublicacionDto(autorIdFinal, stream));
 
             return Created(
                 $"/api/publicaciones/{id}",
@@ -232,14 +213,8 @@ namespace ProyectoFinalTPI.Backend.Controllers
                 ? autorIdAutenticado.Value
                 : request.AutorId;
 
-            var dto = new CompartirPublicacionDto
-            {
-                PublicacionOriginalId = request.PublicacionOriginalId,
-                AutorId = autorIdFinal,
-                Descripcion = request.Descripcion ?? string.Empty
-            };
-
-            var id = await _publicacionServicio.Compartir(dto, cancellationToken);
+            var id = await _publicacionServicio.Compartir(
+                request.ToCompartirPublicacionDto(autorIdFinal), cancellationToken);
 
             return Created(
                 $"/api/publicaciones/{id}",
