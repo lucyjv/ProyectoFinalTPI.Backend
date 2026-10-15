@@ -281,6 +281,7 @@
     },
     {
       "id": "vinilos-70-2",
+      "image": "https://upload.wikimedia.org/wikipedia/commons/a/a1/Vintage_vinyl_records_%28Unsplash%29.jpg",
       "hashtags": [
         "vinilos",
         "rocknacional"
@@ -298,6 +299,7 @@
     },
     {
       "id": "vinilos-70-3",
+      "image": "https://upload.wikimedia.org/wikipedia/commons/a/a1/Vintage_vinyl_records_%28Unsplash%29.jpg",
       "hashtags": [
         "vinilos"
       ],
@@ -317,6 +319,7 @@
       "lat": -34.6065,
       "lng": -58.4355,
       "id": "demo-21",
+      "image": "https://quehacerenba.com/wp-content/uploads/2023/07/img_0845.jpg",
       "hashtags": [
         "recuerdosdelbarrio"
       ],
@@ -332,6 +335,7 @@
       "lat": -32.9475,
       "lng": -60.6304,
       "id": "demo-22",
+      "image": "https://upload.wikimedia.org/wikipedia/commons/a/a1/Vintage_vinyl_records_%28Unsplash%29.jpg",
       "title": "La bolsa de discos frente al río",
       "year": 1976,
       "category": "Música",
@@ -344,6 +348,7 @@
       "lat": -31.4167,
       "lng": -64.1835,
       "id": "demo-23",
+      "image": "https://upload.wikimedia.org/wikipedia/commons/b/bf/Plaza_San_Mart%C3%ADn_C%C3%B3rdoba_2011-03-06.jpg",
       "title": "La revista que pasó de mano en mano",
       "year": 1974,
       "category": "Personales",
@@ -356,6 +361,7 @@
       "lat": -32.8951,
       "lng": -68.8794,
       "id": "demo-24",
+      "image": "https://upload.wikimedia.org/wikipedia/commons/5/51/Lago_del_Parque_General_San_Martin.jpg",
       "title": "El aniversario bajo los árboles",
       "year": 1975,
       "category": "Acontecimientos",
@@ -368,6 +374,7 @@
       "lat": -38.0068,
       "lng": -57.5433,
       "id": "demo-25",
+      "image": "https://upload.wikimedia.org/wikipedia/commons/d/d2/Popcorn_in_cinema_IMG_7715.jpg",
       "title": "La cartelera anotada en el diario",
       "year": 1978,
       "category": "Cine",
@@ -380,6 +387,7 @@
       "lat": -41.1335,
       "lng": -71.3102,
       "id": "demo-26",
+      "image": "https://upload.wikimedia.org/wikipedia/commons/a/a9/Bariloche_Centro_Civico.jpg",
       "title": "La postal para contar el viaje",
       "year": 1973,
       "category": "Televisión",
@@ -392,6 +400,7 @@
       "lat": -24.7892,
       "lng": -65.4103,
       "id": "demo-27",
+      "image": "https://upload.wikimedia.org/wikipedia/commons/7/71/Plaza_9_de_Julio_Salta.jpg",
       "title": "La maquinita dibujada en el cuaderno",
       "year": 1979,
       "category": "Videojuegos",
@@ -653,6 +662,7 @@
       "lat": -31.4167,
       "lng": -64.1835,
       "id": "demo-9",
+      "image": "https://upload.wikimedia.org/wikipedia/commons/b/bf/Plaza_San_Mart%C3%ADn_C%C3%B3rdoba_2011-03-06.jpg",
       "title": "La plaza antes del primer viaje solos",
       "year": 1995,
       "category": "Lugares",
@@ -665,6 +675,7 @@
       "lat": -32.8951,
       "lng": -68.8794,
       "id": "demo-10",
+      "image": "https://upload.wikimedia.org/wikipedia/commons/5/51/Lago_del_Parque_General_San_Martin.jpg",
       "title": "Los diez años de Sofi al lado del lago",
       "year": 1998,
       "category": "Acontecimientos",
@@ -677,6 +688,7 @@
       "lat": -38.0068,
       "lng": -57.5433,
       "id": "demo-11",
+      "image": "https://upload.wikimedia.org/wikipedia/commons/d/d2/Popcorn_in_cinema_IMG_7715.jpg",
       "title": "La lista del videoclub en una servilleta",
       "year": 1996,
       "category": "Cine",
@@ -689,6 +701,7 @@
       "lat": -41.1335,
       "lng": -71.3102,
       "id": "demo-12",
+      "image": "https://upload.wikimedia.org/wikipedia/commons/a/a9/Bariloche_Centro_Civico.jpg",
       "title": "Una sitcom inventada en Bariloche",
       "year": 1992,
       "category": "Televisión",
@@ -701,6 +714,7 @@
       "lat": -24.7892,
       "lng": -65.4103,
       "id": "demo-13",
+      "image": "https://upload.wikimedia.org/wikipedia/commons/0/05/Nintendo_Game_Boy_DMG-01-0242.jpg",
       "title": "El récord de la Game Boy en Plaza 9 de Julio",
       "year": 1999,
       "category": "Videojuegos",
@@ -710,6 +724,7 @@
     },
     {
       "id": "cine-2000-1",
+      "image": "https://upload.wikimedia.org/wikipedia/commons/d/d2/Popcorn_in_cinema_IMG_7715.jpg",
       "groupId": "cine-2000",
       "title": "La fila para ver El retorno del rey",
       "year": 2004,
@@ -723,6 +738,7 @@
     },
     {
       "id": "cine-2000-2",
+      "image": "https://upload.wikimedia.org/wikipedia/commons/d/d2/Popcorn_in_cinema_IMG_7715.jpg",
       "groupId": "cine-2000",
       "title": "Harry Potter y una salida después del colegio",
       "year": 2005,
@@ -736,6 +752,7 @@
     },
     {
       "id": "cine-2000-3",
+      "image": "https://upload.wikimedia.org/wikipedia/commons/d/d2/Popcorn_in_cinema_IMG_7715.jpg",
       "groupId": "cine-2000",
       "title": "Shrek en DVD y el sillón lleno",
       "year": 2002,
@@ -827,6 +844,7 @@
     },
     {
       "id": "demo-19",
+      "image": "https://upload.wikimedia.org/wikipedia/commons/a/a9/Bariloche_Centro_Civico.jpg",
       "title": "Una portada de serie en el Centro Cívico",
       "year": 2006,
       "author": "Nacho",
@@ -839,6 +857,7 @@
     },
     {
       "id": "demo-20",
+      "image": "https://upload.wikimedia.org/wikipedia/commons/0/05/Nintendo_Game_Boy_DMG-01-0242.jpg",
       "title": "Una consola, cuatro turnos y un helado",
       "year": 2008,
       "author": "Luli",
