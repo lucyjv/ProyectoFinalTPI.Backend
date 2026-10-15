@@ -48,6 +48,12 @@ namespace ProyectoFinalTPI.Backend
                     throw new InvalidOperationException($"Usuario ambiguo en seed: {datos.Username}.");
 
                 if (coincidencias.Count == 1)
+                var seedJsonPath = Path.Combine(env.ContentRootPath, "seed.json");
+                if (!File.Exists(seedJsonPath))
+                {
+                    seedJsonPath = Path.Combine(env.ContentRootPath, "..", "..", "seed.json");
+                }
+                if (File.Exists(seedJsonPath))
                 {
                     if (coincidencias[0] is not Usuario_Personal personal ||
                         !string.Equals(personal.Username, datos.Username, StringComparison.OrdinalIgnoreCase))
@@ -180,17 +186,18 @@ namespace ProyectoFinalTPI.Backend
 
     public class SeedMemory
     {
-        public string Id { get; set; } = string.Empty;
-        public string Title { get; set; } = string.Empty;
-        public int Year { get; set; }
-        public string Author { get; set; } = string.Empty;
-        public string Place { get; set; } = string.Empty;
-        public double Lat { get; set; }
-        public double Lng { get; set; }
-        public string Description { get; set; } = string.Empty;
-        public string Category { get; set; } = string.Empty;
-        public string? Image { get; set; }
-        public SeedMedia? Media { get; set; }
+        public string id { get; set; } = string.Empty;
+        public string title { get; set; } = string.Empty;
+        public int year { get; set; }
+        public string author { get; set; } = string.Empty;
+        public string place { get; set; } = string.Empty;
+        public double lat { get; set; }
+        public double lng { get; set; }
+        public string description { get; set; } = string.Empty;
+        public string category { get; set; } = string.Empty;
+        public string source { get; set; } = string.Empty;
+        public string image { get; set; } = string.Empty;
+        public SeedMedia? media { get; set; }
     }
 
     public class SeedMedia
