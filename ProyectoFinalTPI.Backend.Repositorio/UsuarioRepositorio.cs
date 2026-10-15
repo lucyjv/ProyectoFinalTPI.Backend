@@ -73,14 +73,16 @@ namespace ProyectoFinalTPI.Backend.Repositorio
 
         public async Task<Usuario?> ObtenerPorEmailAsync(string email, CancellationToken cancellationToken = default)
         {
+            var emailNormalizado = email.Trim().ToLower();
             return await _context.Usuarios
-                .FirstOrDefaultAsync(u => u.Email == email, cancellationToken);
+                .FirstOrDefaultAsync(u => u.Email.ToLower() == emailNormalizado, cancellationToken);
         }
 
         public async Task<bool> ExistePorEmailAsync(string email, CancellationToken cancellationToken = default)
         {
+            var emailNormalizado = email.Trim().ToLower();
             return await _context.Usuarios
-                .AnyAsync(u => u.Email == email, cancellationToken);
+                .AnyAsync(u => u.Email.ToLower() == emailNormalizado, cancellationToken);
         }
 
         public async Task AgregarAsync(Usuario usuario, CancellationToken cancellationToken = default)

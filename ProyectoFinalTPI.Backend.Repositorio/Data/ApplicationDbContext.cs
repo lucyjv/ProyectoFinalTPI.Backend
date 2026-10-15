@@ -20,6 +20,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
         public DbSet<Usuario_Interactivo> Usuario_Interactivos { get; set; }
         public DbSet<Usuario_Marca> Usuario_Marcas { get; set; }
         public DbSet<Usuario_Personal> Usuario_Personales { get; set; }
+        public DbSet<SesionUsuario> SesionesUsuario { get; set; }
 
         // ── Chat ──────────────────────────────────────────────────────────────
         public DbSet<MensajeChat> MensajesChat { get; set; }
@@ -37,6 +38,25 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
                 .HasValue<Usuario_Personal>("Usuario_Personal")
                 .HasValue<Usuario_Marca>("Usuario_Marca")
                 .HasValue<Moderador>("Moderador");
+
+            modelBuilder.Entity<Usuario>()
+                .HasIndex(usuario => usuario.Email)
+                .IsUnique();
+
+            modelBuilder.Entity<SesionUsuario>(entity =>
+            {
+                entity.ToTable("sesiones_usuario");
+                entity.HasKey(sesion => sesion.Id);
+                entity.Property(sesion => sesion.RefreshTokenHash).IsRequired().HasMaxLength(64);
+                entity.Property(sesion => sesion.UserAgent).HasMaxLength(512);
+                entity.Property(sesion => sesion.Version).IsRowVersion();
+                entity.HasIndex(sesion => sesion.UsuarioId);
+                entity.HasIndex(sesion => sesion.FechaExpiracion);
+                entity.HasOne(sesion => sesion.Usuario)
+                    .WithMany()
+                    .HasForeignKey(sesion => sesion.UsuarioId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
 
             modelBuilder.Entity<Lugar>(entity =>
             {

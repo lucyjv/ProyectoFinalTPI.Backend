@@ -1,4 +1,5 @@
 using System.Text;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -16,25 +17,31 @@ using ProyectoFinalTPI.Backend.Hubs;       // ── NUEVO: ChatHub
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("auth-intentos", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "desconocida",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+});
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        if (builder.Environment.IsDevelopment())
-        {
-            // En desarrollo permitimos cualquier origen para facilitar pruebas locales
-            policy.SetIsOriginAllowed(_ => true)
-                  .AllowAnyHeader()
-                  .AllowAnyMethod()
-                  .AllowCredentials();
-        }
-        else
-        {
-            policy.WithOrigins("http://localhost:3001")
-                  .AllowAnyHeader()
-                  .AllowAnyMethod()
-                  .AllowCredentials();
-        }
+        var origenes = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+            ?? ["http://localhost:3001", "https://localhost:3001"];
+        policy.WithOrigins(origenes)
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials();
     });
 });
 
@@ -66,6 +73,7 @@ builder.Services.AddScoped<IPublicacionRepositorio, PublicacionRepositorio>();
 builder.Services.AddScoped<IPublicacionServicio, PublicacionServicio>();
 builder.Services.AddScoped<IEtiquetadoPublicacionServicio, EtiquetadoPublicacionServicio>();
 builder.Services.AddScoped<IUsuarioRepositorio, UsuarioRepositorio>();
+builder.Services.AddScoped<ISesionUsuarioRepositorio, SesionUsuarioRepositorio>();
 builder.Services.AddScoped<ISeguimientoServicio, SeguimientoServicio>();
 builder.Services.AddScoped<IMultimediaServicio, MultimediaServicio>();
 builder.Services.AddScoped<IInteresServicio, InteresServicio>();
@@ -102,6 +110,7 @@ var claveJwt = builder.Configuration["Jwt:Clave"]
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
+        options.MapInboundClaims = false;
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
@@ -110,7 +119,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateIssuerSigningKey = true,
             ValidIssuer = builder.Configuration["Jwt:Emisor"] ?? "nostalgia-backend",
             ValidAudience = builder.Configuration["Jwt:Audiencia"] ?? "nostalgia-frontend",
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(claveJwt))
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(claveJwt)),
+            ClockSkew = TimeSpan.FromSeconds(30)
         };
 
         // Necesario para que SignalR (chat) pueda recibir el token por query string
@@ -123,6 +133,19 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
                     context.Token = accessToken;
                 return Task.CompletedTask;
+            },
+            OnTokenValidated = async context =>
+            {
+                var sid = context.Principal?.FindFirst("sid")?.Value;
+                if (!Guid.TryParseExact(sid, "N", out var sesionId))
+                {
+                    context.Fail("El token no contiene una sesión válida.");
+                    return;
+                }
+
+                var sesiones = context.HttpContext.RequestServices.GetRequiredService<ISesionUsuarioRepositorio>();
+                if (!await sesiones.EstaActivaAsync(sesionId, context.HttpContext.RequestAborted))
+                    context.Fail("La sesión fue revocada o expiró.");
             }
         };
     });
@@ -187,6 +210,7 @@ if (args.Contains("--seed-only"))
 app.UseRouting();
 
 app.UseCors("AllowFrontend");
+app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization();
