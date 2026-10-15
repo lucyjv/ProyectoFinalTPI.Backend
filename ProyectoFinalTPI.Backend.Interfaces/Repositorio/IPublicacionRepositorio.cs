@@ -19,6 +19,16 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Repositorio
         Task<List<PublicacionDetalleDto>> ObtenerFeedSeguidos(IReadOnlyCollection<int> autoresIds, CursorCronologicoDto? cursor, int limite,
     CancellationToken cancellationToken = default);
         Task<List<ComentarioDto>> ObtenerComentarios(int publicacionId, CursorCronologicoDto? cursor, int limite, CancellationToken cancellationToken = default);
+        Task<List<ComentarioDto>> ObtenerHilosComentarios(int publicacionId, CursorCronologicoDto? cursor, int limite, int? usuarioId,
+            CancellationToken cancellationToken = default) => ObtenerComentarios(publicacionId, cursor, limite, cancellationToken);
+        Task<Comentario?> ObtenerComentario(int publicacionId, int comentarioId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<Comentario?>(null);
+        Task<ComentarioDto?> ObtenerComentarioDto(int publicacionId, int comentarioId, int? usuarioId,
+            CancellationToken cancellationToken = default) => Task.FromResult<ComentarioDto?>(null);
+        Task EstablecerReaccionComentario(int comentarioId, int usuarioId, TipoReaccionComentario tipo,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        Task QuitarReaccionComentario(int comentarioId, int usuarioId,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
         Task<bool> ExistePublicacionVisible(int id, CancellationToken cancellationToken = default);
         Task<List<PublicacionDetalleDto>> ObtenerPublicacionesParaVos(IReadOnlyCollection<CategoriaEnum> categorias, DateTime fechaCorte, CursorCronologicoDto? cursor,
         int limite, CancellationToken cancellationToken = default);

@@ -4,5 +4,6 @@ namespace ProyectoFinalTPI.Backend.Dtos.Comentario
     {
         public string Contenido { get; set; } = string.Empty;
         public int UsuarioId { get; set; }
+        public int? ComentarioPadreId { get; set; }
     }
 }

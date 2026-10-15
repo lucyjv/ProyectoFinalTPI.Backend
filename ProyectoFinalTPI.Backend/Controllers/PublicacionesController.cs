@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ProyectoFinalTPI.Backend.Dtos;
 using ProyectoFinalTPI.Backend.Dtos.Comentario;
@@ -168,10 +169,11 @@ namespace ProyectoFinalTPI.Backend.Controllers
             [FromQuery] int limite = 20,
             CancellationToken cancellationToken = default)
         {
-            return EjecutarConsulta(() => _publicacionServicio.ObtenerComentarios(
-                id, cursor, limite, cancellationToken), "obtener los comentarios", cancellationToken);
+            return EjecutarConsulta(() => _publicacionServicio.ObtenerHilosComentarios(
+                id, cursor, limite, ObtenerUsuarioIdAutenticado(), cancellationToken), "obtener los comentarios", cancellationToken);
         }
 
+        [Authorize]
         [HttpPost("{publicacionId:int}/comentarios")]
         [ProducesResponseType(typeof(ComentarioDto), StatusCodes.Status201Created)]
         public Task<IActionResult> CrearComentario(
@@ -179,18 +181,48 @@ namespace ProyectoFinalTPI.Backend.Controllers
             [FromBody] CrearComentarioRequest request,
             CancellationToken cancellationToken = default)
         {
+            var usuarioId = ObtenerUsuarioIdAutenticado();
+            if (!usuarioId.HasValue) return Task.FromResult<IActionResult>(Unauthorized());
             return EjecutarOperacion(async () =>
             {
                 var dto = new CrearComentarioDto
                 {
                     Contenido = request.Contenido,
-                    UsuarioId = request.UsuarioId
+                    UsuarioId = usuarioId.Value,
+                    ComentarioPadreId = request.ComentarioPadreId
                 };
                 var comentario = await _publicacionServicio.CrearComentario(
                     publicacionId, dto, cancellationToken);
 
                 return StatusCode(StatusCodes.Status201Created, comentario);
             }, "crear el comentario", cancellationToken);
+        }
+
+        [Authorize]
+        [HttpPut("{publicacionId:int}/comentarios/{comentarioId:int}/reaccion")]
+        [ProducesResponseType(typeof(ComentarioDto), StatusCodes.Status200OK)]
+        public Task<IActionResult> EstablecerReaccionComentario(
+            int publicacionId, int comentarioId, [FromBody] ReaccionComentarioRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            var usuarioId = ObtenerUsuarioIdAutenticado();
+            if (!usuarioId.HasValue) return Task.FromResult<IActionResult>(Unauthorized());
+            return EjecutarOperacion(async () => Ok(await _publicacionServicio.EstablecerReaccionComentario(
+                publicacionId, comentarioId, usuarioId.Value, request.Tipo, cancellationToken)),
+                "reaccionar al comentario", cancellationToken);
+        }
+
+        [Authorize]
+        [HttpDelete("{publicacionId:int}/comentarios/{comentarioId:int}/reaccion")]
+        [ProducesResponseType(typeof(ComentarioDto), StatusCodes.Status200OK)]
+        public Task<IActionResult> QuitarReaccionComentario(
+            int publicacionId, int comentarioId, CancellationToken cancellationToken = default)
+        {
+            var usuarioId = ObtenerUsuarioIdAutenticado();
+            if (!usuarioId.HasValue) return Task.FromResult<IActionResult>(Unauthorized());
+            return EjecutarOperacion(async () => Ok(await _publicacionServicio.QuitarReaccionComentario(
+                publicacionId, comentarioId, usuarioId.Value, cancellationToken)),
+                "quitar la reacciÃ³n del comentario", cancellationToken);
         }
 
         private async Task<ActionResult<T>> EjecutarConsulta<T>(
