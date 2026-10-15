@@ -23,7 +23,7 @@ namespace ProyectoFinalTPI.Backend.Tests
         public PublicacionesControllerTests()
         {
             _controller = new PublicacionesController(
-                _servicio, _etiquetado, NullLogger<PublicacionesController>.Instance)
+                _servicio, _etiquetado)
             {
                 ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
             };
@@ -96,7 +96,7 @@ namespace ProyectoFinalTPI.Backend.Tests
             _servicio.Error = new KeyNotFoundException("El usuario indicado no existe.");
 
             //Act
-            var result = await _controller.Crear(new CrearPublicacionRequest());
+            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () => await _controller.Crear(new CrearPublicacionRequest()));
 
             //Assert
             var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
@@ -161,7 +161,7 @@ namespace ProyectoFinalTPI.Backend.Tests
             _servicio.Error = new KeyNotFoundException("La publicación no está disponible.");
 
             //Act
-            var result = await _controller.Compartir(new CompartirPublicacionRequest());
+            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () => await _controller.Compartir(new CompartirPublicacionRequest()));
 
             //Assert
             var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
@@ -185,7 +185,7 @@ namespace ProyectoFinalTPI.Backend.Tests
         public async Task QueSeDevuelvaNotFoundAlEliminarPublicacionInexistente()
         {
             _servicio.Error = new KeyNotFoundException("No existe");
-            var result = await _controller.Eliminar(99);
+            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () => await _controller.Eliminar(99));
             var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
             Assert.Equal(404, respuesta.StatusCode);
         }
@@ -204,7 +204,7 @@ namespace ProyectoFinalTPI.Backend.Tests
         public async Task QueSeDevuelvaNotFoundAlEliminarRepostInexistente()
         {
             _servicio.Error = new KeyNotFoundException("No existe");
-            var result = await _controller.EliminarRepost(99);
+            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () => await _controller.EliminarRepost(99));
             var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
             Assert.Equal(404, respuesta.StatusCode);
         }
@@ -250,7 +250,7 @@ namespace ProyectoFinalTPI.Backend.Tests
             _servicio.Error = new ArgumentException("Datos inválidos");
 
             //Act
-            var result = (await _controller.ObtenerMapa(new PublicacionFiltroDto(), default)).Result;
+            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () => (await _controller.ObtenerMapa(new PublicacionFiltroDto(), default)).Result);
 
             //Assert
             var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
@@ -282,7 +282,7 @@ namespace ProyectoFinalTPI.Backend.Tests
             _servicio.Error = new ArgumentException("Datos inválidos");
 
             //Act
-            var result = (await _controller.ObtenerResumen(0, default)).Result;
+            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () => (await _controller.ObtenerResumen(0, default)).Result);
 
             //Assert
             var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
@@ -299,7 +299,7 @@ namespace ProyectoFinalTPI.Backend.Tests
             _servicio.Error = new KeyNotFoundException("La publicación no está disponible.");
 
             //Act
-            var result = (await _controller.ObtenerResumen(99, default)).Result;
+            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () => (await _controller.ObtenerResumen(99, default)).Result);
 
             //Assert
             var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
@@ -331,7 +331,7 @@ namespace ProyectoFinalTPI.Backend.Tests
             _servicio.Error = new ArgumentException("Datos inválidos");
 
             //Act
-            var result = (await _controller.ObtenerDetalle(0, default)).Result;
+            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () => (await _controller.ObtenerDetalle(0, default)).Result);
 
             //Assert
             var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
@@ -348,7 +348,7 @@ namespace ProyectoFinalTPI.Backend.Tests
             _servicio.Error = new KeyNotFoundException("La publicación no está disponible.");
 
             //Act
-            var result = (await _controller.ObtenerDetalle(99, default)).Result;
+            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () => (await _controller.ObtenerDetalle(99, default)).Result);
 
             //Assert
             var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
@@ -411,7 +411,7 @@ namespace ProyectoFinalTPI.Backend.Tests
             _servicio.Error = new ArgumentException("Datos inválidos");
 
             //Act
-            var result = (await _controller.ObtenerComentarios(5, "inválido", 20)).Result;
+            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () => (await _controller.ObtenerComentarios(5, "inválido", 20)).Result);
 
             //Assert
             var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
@@ -428,7 +428,7 @@ namespace ProyectoFinalTPI.Backend.Tests
             _servicio.Error = new KeyNotFoundException("La publicación no está disponible.");
 
             //Act
-            var result = (await _controller.ObtenerComentarios(99)).Result;
+            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () => (await _controller.ObtenerComentarios(99)).Result);
 
             //Assert
             var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
@@ -491,7 +491,7 @@ namespace ProyectoFinalTPI.Backend.Tests
             _etiquetado.Error = new ArgumentException("Datos inválidos");
 
             //Act
-            var result = await _controller.EtiquetarUsuarios(5, new EtiquetarUsuariosRequest(), default);
+            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () => await _controller.EtiquetarUsuarios(5, new EtiquetarUsuariosRequest(), default));
 
             //Assert
             var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
@@ -508,7 +508,7 @@ namespace ProyectoFinalTPI.Backend.Tests
             _etiquetado.Error = new KeyNotFoundException("El usuario no existe.");
 
             //Act
-            var result = await _controller.EtiquetarUsuarios(5, new EtiquetarUsuariosRequest(), default);
+            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () => await _controller.EtiquetarUsuarios(5, new EtiquetarUsuariosRequest(), default));
 
             //Assert
             var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
@@ -525,7 +525,7 @@ namespace ProyectoFinalTPI.Backend.Tests
             _etiquetado.Error = new InvalidOperationException("credenciales internas");
 
             //Act
-            var result = await _controller.EtiquetarUsuarios(5, new EtiquetarUsuariosRequest(), default);
+            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () => await _controller.EtiquetarUsuarios(5, new EtiquetarUsuariosRequest(), default));
 
             //Assert
             var respuesta = Assert.IsType<ObjectResult>(result);
@@ -565,7 +565,7 @@ namespace ProyectoFinalTPI.Backend.Tests
             _servicio.Error = new InvalidOperationException("credenciales internas");
 
             //Act
-            var result = operacion switch
+            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () => operacion switch
             {
                 "crear" => await _controller.Crear(new CrearPublicacionRequest()),
                 "compartir" => await _controller.Compartir(new CompartirPublicacionRequest()),
@@ -573,7 +573,7 @@ namespace ProyectoFinalTPI.Backend.Tests
                 "resumen" => (await _controller.ObtenerResumen(5, default)).Result,
                 "detalle" => (await _controller.ObtenerDetalle(5, default)).Result,
                 _ => (await _controller.ObtenerComentarios(5)).Result
-            };
+            });
 
             //Assert
             var respuesta = Assert.IsType<ObjectResult>(result);
@@ -593,9 +593,9 @@ namespace ProyectoFinalTPI.Backend.Tests
             _servicio.Error = new ArgumentException("Datos inválidos");
 
             //Act
-            var result = compartir
+            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () => compartir
                 ? await _controller.Compartir(new CompartirPublicacionRequest())
-                : await _controller.Crear(new CrearPublicacionRequest());
+                : await _controller.Crear(new CrearPublicacionRequest()));
 
             //Assert
             var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
@@ -613,13 +613,13 @@ namespace ProyectoFinalTPI.Backend.Tests
             _controller.HttpContext.Request.Path = "/api/publicaciones";
 
             //Act
-            var result = await _controller.Crear(request);
+            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () => await _controller.Crear(request));
 
             //Assert
             var respuesta = Assert.IsType<ObjectResult>(result);
             var problema = Assert.IsType<ProblemDetails>(respuesta.Value);
             Assert.Equal(500, respuesta.StatusCode);
-            Assert.Equal("prueba-archivo", problema.Extensions["traceId"]);
+            Assert.Equal("prueba-archivo", ((JsonElement)problema.Extensions["traceId"]!).GetString());
             Assert.Equal("/api/publicaciones", problema.Instance);
             Assert.Contains("application/problem+json", respuesta.ContentTypes);
             Assert.DoesNotContain("ruta interna", JsonSerializer.Serialize(problema));
