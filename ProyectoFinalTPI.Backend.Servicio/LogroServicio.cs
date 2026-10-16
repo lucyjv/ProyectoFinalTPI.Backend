@@ -24,19 +24,23 @@ namespace ProyectoFinalTPI.Backend.Servicio
             _logrosUsuariosRepositorio = logrosUsuariosRepositorio;
         }
 
-        public void EvaluarLogroUnaPublicacion(int idUsuario)
+        public void EvaluarLogro(int idUsuario, int idLogro)
         {
-            bool ya_logrado = _logrosUsuariosRepositorio.ExisteRegistro(idUsuario, 1);
+            bool ya_logrado = _logrosUsuariosRepositorio.ExisteRegistro(idUsuario, idLogro);
             if (ya_logrado)
             {
                 return;
             }
-            var nuevoLogroDesbloqueado = CrearLogroUsuario(idUsuario, 2, DateTime.UtcNow);
+            var nuevoLogroDesbloqueado = CrearLogroDeUsuario(idUsuario, idLogro, DateTime.UtcNow);
 
             _logrosUsuariosRepositorio.Guardar(nuevoLogroDesbloqueado);
         }
+        public void MostrarLogrosDeUsuario(int idUsuario)
+        {
+            _logrosUsuariosRepositorio.ObtenerPorUsuario(idUsuario);
+        }
 
-        private Logros_Usuarios CrearLogroUsuario(int idUsuario, int idLogro, DateTime fechaDesbloqueo)
+        private Logros_Usuarios CrearLogroDeUsuario(int idUsuario, int idLogro, DateTime fechaDesbloqueo)
         {
             var LogroUsuario = new Logros_Usuarios
             {

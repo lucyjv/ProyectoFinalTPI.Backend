@@ -40,7 +40,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 FechaCreacion = DateTime.UtcNow
             };
 
-            _context.Usuarios.Add(usuario);
+            _context.Usuarios.Add(usuario); //repositorio
             await _context.SaveChangesAsync();
 
             return GenerarRespuesta(usuario);
