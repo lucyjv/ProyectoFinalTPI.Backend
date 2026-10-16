@@ -17,21 +17,67 @@ namespace ProyectoFinalTPI.Backend.Servicio
         private readonly IPublicacionRepositorio _publicacionRepositorio;
         private readonly IUsuarioRepositorio _usuarioRepositorio;
         private readonly IMultimediaServicio _multimediaServicio;
-        private readonly IRecomendacionServicio _recomendacionServicio;
         private readonly ISesionFypRepositorio _sesionFypRepositorio;
         private readonly ISeguimientoServicio _seguimientoServicio;
-        private readonly IMeGustaPublicacionServicio? _meGustaPublicacionServicio;
         public PublicacionServicio(IPublicacionRepositorio publicacionRepositorio, IUsuarioRepositorio usuarioRepositorio, 
-            IMultimediaServicio multimediaServicio, IRecomendacionServicio recomendacionServicio, ISesionFypRepositorio sesionFypRepositorio,
-            ISeguimientoServicio seguimientoServicio, IMeGustaPublicacionServicio? meGustaPublicacionServicio = null)
+            IMultimediaServicio multimediaServicio, ISesionFypRepositorio sesionFypRepositorio,
+            ISeguimientoServicio seguimientoServicio)
         {
             _publicacionRepositorio = publicacionRepositorio;
             _usuarioRepositorio = usuarioRepositorio;
             _multimediaServicio = multimediaServicio;
-            _recomendacionServicio = recomendacionServicio;
             _sesionFypRepositorio = sesionFypRepositorio;
             _seguimientoServicio = seguimientoServicio;
-            _meGustaPublicacionServicio = meGustaPublicacionServicio;
+        }
+
+        public async Task<MeGustaPublicacionDto> DarLike(
+            int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
+        {
+            await ValidarInteraccionConPublicacion(publicacionId, usuarioId, cancellationToken);
+            await _publicacionRepositorio.CrearLike(publicacionId, usuarioId, cancellationToken);
+            
+            //vuelve a consultar a Neo4j para saber camo quedo esa publicacion (cantidad de likes, quien le dio MG) y arma el DTO
+            return await _publicacionRepositorio.ObtenerEstadoLike(publicacionId, usuarioId, cancellationToken);
+        }
+
+        public async Task<MeGustaPublicacionDto> QuitarLike(
+            int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
+        {
+            await ValidarInteraccionConPublicacion(publicacionId, usuarioId, cancellationToken);
+            await _publicacionRepositorio.QuitarLike(publicacionId, usuarioId, cancellationToken);
+            return await _publicacionRepositorio.ObtenerEstadoLike(publicacionId, usuarioId, cancellationToken);
+        }
+
+        public async Task CompletarResumenesLikes(
+            IReadOnlyCollection<PublicacionDetalleDto> publicaciones, int usuarioId,
+            CancellationToken cancellationToken = default)
+        {
+            if (publicaciones.Count == 0) return;
+
+            var resumenes = await _publicacionRepositorio.ObtenerResumenLikes(
+                publicaciones.Select(publicacion => publicacion.Id).Distinct().ToArray(),
+                usuarioId,
+                cancellationToken);
+
+            foreach (var publicacion in publicaciones)
+                if (resumenes.TryGetValue(publicacion.Id, out var resumen))
+                {
+                    publicacion.CantidadLikes = resumen.Cantidad;
+                    publicacion.DioLike = resumen.DioLike;
+                }
+        }
+
+        private async Task ValidarInteraccionConPublicacion(
+            int publicacionId, int usuarioId, CancellationToken cancellationToken)
+        {
+            if (publicacionId <= 0)
+                throw new ArgumentException("El ID de publicacion es erroneo");
+            if (usuarioId <= 0)
+                throw new ArgumentException("El ID de usuario es erroneo");
+            if (!await _usuarioRepositorio.ExisteUsuario(usuarioId, cancellationToken))
+                throw new KeyNotFoundException("El usuario autenticado no existe");
+            if (!await _publicacionRepositorio.ExistePublicacionVisible(publicacionId, cancellationToken))
+                throw new KeyNotFoundException("La publicacion no existe o no esta disponible");
         }
 
         public List<Publicacion> ObtenerPublicaciones()
@@ -281,10 +327,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 .Take(limite)
                 .ToList();
 
-            if (_meGustaPublicacionServicio != null)
-            {
-                await _meGustaPublicacionServicio.CompletarResumenes(items, usuarioId, cancellationToken);
-            }
+            await CompletarResumenesLikes(items, usuarioId, cancellationToken);
 
             string? siguienteCursor = null;
 
@@ -331,23 +374,16 @@ namespace ProyectoFinalTPI.Backend.Servicio
             {
                 const int cantidadMaximaRecomendaciones = 500;
 
-                var recomendaciones =
-                    await _recomendacionServicio.GenerarRecomendacionParaUsuario(
-                        usuarioId,
-                        cantidadMaximaRecomendaciones,
-                        cancellationToken);
+                var recomendaciones = await ObtenerRecomendacionesPorLikes(
+                    usuarioId, cantidadMaximaRecomendaciones, cancellationToken);
 
-                sesion = _sesionFypRepositorio.Crear(
-                    usuarioId,
-                    recomendaciones);
+                sesion = _sesionFypRepositorio.Crear( usuarioId,recomendaciones);
 
                 posicion = 0;
             }
             else
             {
-                sesion = _sesionFypRepositorio.Obtener(
-                    cursorDecodificado.SesionId,
-                    usuarioId)
+                sesion = _sesionFypRepositorio.Obtener(cursorDecodificado.SesionId,usuarioId)
                     ?? throw new SesionFypNoDisponibleException();
 
                 posicion = cursorDecodificado.Posicion;
@@ -388,10 +424,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
                         // la página actual ya está completa.
                         if (items.Count == limite)
                         {
-                            if (_meGustaPublicacionServicio != null)
-                            {
-                                await _meGustaPublicacionServicio.CompletarResumenes(items, usuarioId, cancellationToken);
-                            }
+                            await CompletarResumenesLikes(items, usuarioId, cancellationToken);
 
                             return new ResultadoPaginadoDto<PublicacionDetalleDto>
                             {
@@ -409,16 +442,31 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 }
             }
 
-            if (_meGustaPublicacionServicio != null)
-            {
-                await _meGustaPublicacionServicio.CompletarResumenes(items, usuarioId, cancellationToken);
-            }
+            await CompletarResumenesLikes(items, usuarioId, cancellationToken);
 
             return new ResultadoPaginadoDto<PublicacionDetalleDto>
             {
                 Items = items,
                 SiguienteCursor = null
             };
+        }
+
+        private async Task<IReadOnlyList<int>> ObtenerRecomendacionesPorLikes(
+            int usuarioId, int cantidadMaxima, CancellationToken cancellationToken)
+        {
+            // Obtiene una lista de IDs de publicaciones recomendadas para el usuario
+            var idsRecomendados = await _publicacionRepositorio.ObtenerPublicacionesRelacionadasPorLikes(
+                usuarioId, cantidadMaxima, cancellationToken);
+            if (idsRecomendados.Count == 0) return Array.Empty<int>();
+
+            // Busca los detalles de esas publicaciones para convertirlas en PublicacionDetalleDto
+            var publicacionesVisibles = await _publicacionRepositorio.ObtenerPublicacionesPorIds(
+                idsRecomendados, cancellationToken);
+
+            // Filtran las recomendaciones con solo los ID de publicaciones visibles,
+            // manteniendo el orden por relevancia que devolvio Neo4j
+            var idsVisibles = publicacionesVisibles.Select(publicacion => publicacion.Id).ToHashSet();
+            return idsRecomendados.Where(idsVisibles.Contains).ToArray();
         }
 
         public async Task Eliminar(int id, int? autorId = null, CancellationToken cancellationToken = default)

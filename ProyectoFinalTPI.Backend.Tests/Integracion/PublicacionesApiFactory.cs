@@ -5,8 +5,10 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Neo4j.Driver;
 using Npgsql;
 using ProyectoFinalTPI.Backend.Entidades;
+using ProyectoFinalTPI.Backend.Tests;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Repositorio.Data;
 
@@ -39,6 +41,8 @@ public sealed class PublicacionesApiFactory : WebApplicationFactory<Program>
                 o.UseNpgsql(_connectionString, npgsql => npgsql.UseNetTopologySuite()));
             services.RemoveAll<IMultimediaServicio>();
             services.AddSingleton<IMultimediaServicio>(Media);
+            services.RemoveAll<IDriver>();
+            services.AddSingleton(CrearNeo4jDriverFake());
         });
     }
 
@@ -84,6 +88,51 @@ public sealed class PublicacionesApiFactory : WebApplicationFactory<Program>
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         db.Usuarios.Add(new Usuario_Personal { Id = 1, Username = "test", Email = "test@example.com" });
         await db.SaveChangesAsync();
+    }
+
+    private static IDriver CrearNeo4jDriverFake()
+    {
+        var cursor = TestDispatchProxy<IResultCursor>.Create((metodo, _) =>
+        {
+            if (metodo.Name == nameof(IAsyncEnumerable<IRecord>.GetAsyncEnumerator))
+                return new EmptyRecordEnumerator();
+            if (metodo.Name == nameof(IAsyncDisposable.DisposeAsync))
+                return ValueTask.CompletedTask;
+
+            throw new NotSupportedException($"No se esperaba llamar a {metodo.Name}.");
+        });
+
+        var queryRunner = TestDispatchProxy<IAsyncQueryRunner>.Create((metodo, _) =>
+            metodo.Name == nameof(IAsyncQueryRunner.RunAsync)
+                ? Task.FromResult(cursor)
+                : throw new NotSupportedException($"No se esperaba llamar a {metodo.Name}."));
+
+        var session = TestDispatchProxy<IAsyncSession>.Create((metodo, argumentos) =>
+        {
+            if (metodo.Name == nameof(IAsyncSession.ExecuteReadAsync))
+                return ((Delegate)argumentos![0]!).DynamicInvoke(queryRunner);
+            if (metodo.Name == nameof(IAsyncDisposable.DisposeAsync))
+                return ValueTask.CompletedTask;
+
+            throw new NotSupportedException($"No se esperaba llamar a {metodo.Name}.");
+        });
+
+        return TestDispatchProxy<IDriver>.Create((metodo, _) =>
+        {
+            if (metodo.Name == nameof(IDriver.AsyncSession))
+                return session;
+            if (metodo.Name == nameof(IAsyncDisposable.DisposeAsync))
+                return ValueTask.CompletedTask;
+
+            throw new NotSupportedException($"No se esperaba llamar a {metodo.Name}.");
+        });
+    }
+
+    private sealed class EmptyRecordEnumerator : IAsyncEnumerator<IRecord>
+    {
+        public IRecord Current => null!;
+        public ValueTask<bool> MoveNextAsync() => ValueTask.FromResult(false);
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 }
 

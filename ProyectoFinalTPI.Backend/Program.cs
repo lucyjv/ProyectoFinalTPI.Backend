@@ -73,14 +73,12 @@ builder.Services.AddScoped<IPublicacionRepositorio, PublicacionRepositorio>();
 builder.Services.AddScoped<IPublicacionServicio, PublicacionServicio>();
 builder.Services.AddScoped<IComentarioRepositorio, ComentarioRepositorio>();
 builder.Services.AddScoped<IComentarioServicio, ComentarioServicio>();
-builder.Services.AddScoped<IMeGustaPublicacionServicio, MeGustaPublicacionServicio>();
 builder.Services.AddScoped<IEtiquetadoPublicacionServicio, EtiquetadoPublicacionServicio>();
 builder.Services.AddScoped<IUsuarioRepositorio, UsuarioRepositorio>();
 builder.Services.AddScoped<ISesionUsuarioRepositorio, SesionUsuarioRepositorio>();
 builder.Services.AddScoped<ISeguimientoServicio, SeguimientoServicio>();
 builder.Services.AddScoped<IMultimediaServicio, MultimediaServicio>();
 builder.Services.AddScoped<IInteresServicio, InteresServicio>();
-builder.Services.AddScoped<IRecomendacionServicio, RecomendacionServicio>();
 builder.Services.AddScoped<IUsuarioServicio, UsuarioServicio>();
 
 builder.Services.AddMemoryCache();

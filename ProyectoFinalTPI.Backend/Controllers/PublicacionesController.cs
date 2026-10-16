@@ -27,20 +27,17 @@ namespace ProyectoFinalTPI.Backend.Controllers
         private readonly IEtiquetadoPublicacionServicio _etiquetadoPublicacionServicio;
         private readonly ILogger<PublicacionesController> _logger;
         private readonly ApplicationDbContext _context;
-        private readonly IMeGustaPublicacionServicio? _meGustaPublicacionServicio;
 
         public PublicacionesController(
             IPublicacionServicio publicacionServicio,
             IEtiquetadoPublicacionServicio etiquetadoPublicacionServicio,
             ILogger<PublicacionesController>? logger = null,
-            ApplicationDbContext context = null!,
-            IMeGustaPublicacionServicio? meGustaPublicacionServicio = null)
+            ApplicationDbContext context = null!)
         {
             _publicacionServicio = publicacionServicio;
             _etiquetadoPublicacionServicio = etiquetadoPublicacionServicio;
             _logger = logger ?? NullLogger<PublicacionesController>.Instance;
             _context = context;
-            _meGustaPublicacionServicio = meGustaPublicacionServicio;
         }
 
         [HttpGet("test-users")]
@@ -163,11 +160,8 @@ namespace ProyectoFinalTPI.Backend.Controllers
             CancellationToken cancellationToken)
         {
             var detalle = await _publicacionServicio.ObtenerDetallePorId(id, cancellationToken);
-            if (_meGustaPublicacionServicio != null)
-            {
-                await _meGustaPublicacionServicio.CompletarResumenes(
-                    [detalle], ObtenerUsuarioIdAutenticado() ?? 0, cancellationToken);
-            }
+            await _publicacionServicio.CompletarResumenesLikes(
+                [detalle], ObtenerUsuarioIdAutenticado() ?? 0, cancellationToken);
 
             return Ok(detalle);
         }
@@ -265,6 +259,32 @@ namespace ProyectoFinalTPI.Backend.Controllers
             return cantidadEtiquetasNuevas > 0
                 ? StatusCode(StatusCodes.Status201Created, respuesta)
                 : Ok(respuesta);
+        }
+
+        [Authorize]
+        [HttpPost("{publicacionId:int}/like")]
+        [ProducesResponseType(typeof(MeGustaPublicacionDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        public async Task<ActionResult<MeGustaPublicacionDto>> DarLike(
+            int publicacionId, CancellationToken cancellationToken = default)
+        {
+            var usuarioId = ObtenerUsuarioIdAutenticado();
+            if (!usuarioId.HasValue || usuarioId.Value <= 0) return Unauthorized();
+
+            return Ok(await _publicacionServicio.DarLike( publicacionId, usuarioId.Value, cancellationToken));
+        }
+
+        [Authorize]
+        [HttpDelete("{publicacionId:int}/like")]
+        [ProducesResponseType(typeof(MeGustaPublicacionDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        public async Task<ActionResult<MeGustaPublicacionDto>> QuitarLike(
+            int publicacionId, CancellationToken cancellationToken = default)
+        {
+            var usuarioId = ObtenerUsuarioIdAutenticado();
+            if (!usuarioId.HasValue || usuarioId.Value <= 0) return Unauthorized();
+
+            return Ok(await _publicacionServicio.QuitarLike( publicacionId, usuarioId.Value, cancellationToken));
         }
 
         private async Task<IActionResult> EjecutarOperacion(

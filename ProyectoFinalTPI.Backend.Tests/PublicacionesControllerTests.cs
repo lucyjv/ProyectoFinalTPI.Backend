@@ -657,6 +657,16 @@ namespace ProyectoFinalTPI.Backend.Tests
                 return Error == null ? Task.FromResult(Detalle) : Task.FromException<PublicacionDetalleDto>(Error);
             }
 
+            public Task<MeGustaPublicacionDto> DarLike(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
+                => throw new NotImplementedException();
+
+            public Task<MeGustaPublicacionDto> QuitarLike(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
+                => throw new NotImplementedException();
+
+            public Task CompletarResumenesLikes(IReadOnlyCollection<PublicacionDetalleDto> publicaciones, int usuarioId,
+                CancellationToken cancellationToken = default)
+                => Task.CompletedTask;
+
             public Task<ResultadoPaginadoDto<ComentarioDto>> ObtenerComentarios(int publicacionId, string? cursor, int limite, CancellationToken cancellationToken = default)
             {
                 IdConsultado = publicacionId;
