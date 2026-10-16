@@ -19,9 +19,10 @@ namespace ProyectoFinalTPI.Backend.Servicio
         private readonly IRecomendacionServicio _recomendacionServicio;
         private readonly ISesionFypRepositorio _sesionFypRepositorio;
         private readonly ISeguimientoServicio _seguimientoServicio;
+        private readonly ILogroServicio _logroServicio;
         public PublicacionServicio(IPublicacionRepositorio publicacionRepositorio, IUsuarioRepositorio usuarioRepositorio, 
             IMultimediaServicio multimediaServicio, IRecomendacionServicio recomendacionServicio, ISesionFypRepositorio sesionFypRepositorio,
-            ISeguimientoServicio seguimientoServicio)
+            ISeguimientoServicio seguimientoServicio, ILogroServicio logroServicio)
         {
             _publicacionRepositorio = publicacionRepositorio;
             _usuarioRepositorio = usuarioRepositorio;
@@ -29,6 +30,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
             _recomendacionServicio = recomendacionServicio;
             _sesionFypRepositorio = sesionFypRepositorio;
             _seguimientoServicio = seguimientoServicio;
+            _logroServicio = logroServicio;
         }
 
         public List<Publicacion> ObtenerPublicaciones()
@@ -39,82 +41,25 @@ namespace ProyectoFinalTPI.Backend.Servicio
         {
             return _publicacionRepositorio.ObtenerPublicacionPorCategoria(categoria);
         }
-
         public async Task<int> Crear(CrearPublicacionDto dto)
         {
-            var existeAutor = await _usuarioRepositorio.ExisteUsuario(dto.AutorId);
+            await VerificarAutorExistente(dto.AutorId);
+            string urlMultimedia = await ProcesarMultimedia(dto);
+            Publicacion publicacion = ConstruirPublicacion(dto, urlMultimedia);
 
-            if(!existeAutor)
-                throw new KeyNotFoundException(
-                    "El usuario indicado no existe.");
+            int idPublicacion = await _publicacionRepositorio.Crear(publicacion);
 
-            var urlMultimedia = await _multimediaServicio.SubirAsync(
-                dto.Archivo,
-                dto.NombreArchivo,
-                dto.UrlArchivo,
-                dto.TipoMultimedia);
+            await VerificaciónLogros(dto, publicacion);
 
-            var lugar = new Lugar
-            {
-                Nombre = dto.NombreLugar,
-
-                Coordenadas = new Point(
-                    dto.Longitud,
-                    dto.Latitud)
-                {
-                    SRID = 4326
-                }
-            };
-
-            var publicacion = new Publicacion
-            {
-                Titulo = dto.Titulo,
-                Descripcion = dto.Descripcion,
-                Fecha = dto.Fecha,
-
-                Categoria = dto.Categoria,
-
-                UrlMultimedia = urlMultimedia,
-                TipoMultimedia = dto.TipoMultimedia,
-
-                Lugar = lugar,
-
-                UsuarioId = dto.AutorId,
-
-                FechaCreación = DateTime.UtcNow,
-                EstaOculto = false,
-                MotivoOculto = null
-            };
-
-            return await _publicacionRepositorio.Crear(publicacion);
+            return idPublicacion;
         }
-
         public async Task<int> Compartir(CompartirPublicacionDto dto, CancellationToken cancellationToken = default)
         {
-            var existeAutor = await _usuarioRepositorio.ExisteUsuario(dto.AutorId);
-            if (!existeAutor)
-                throw new KeyNotFoundException("El usuario indicado no existe.");
+            await VerificarAutorExistente(dto.AutorId);
+            Publicacion original = await VerificarPublicacionExistente(dto.PublicacionOriginalId, cancellationToken);
+            Publicacion publicacionCompartida = ConstruirPublicacionCompartida(dto, original);
 
-            var original = await _publicacionRepositorio.ObtenerPorId(dto.PublicacionOriginalId, cancellationToken);
-            if (original == null)
-                throw new KeyNotFoundException("La publicacion original no existe o no esta disponible.");
-
-            var publicacion = new Publicacion
-            {
-                Titulo = original.Titulo, 
-                Descripcion = dto.Descripcion,
-                Fecha = DateTime.UtcNow,
-                Categoria = original.Categoria,
-                UrlMultimedia = original.UrlMultimedia,
-                TipoMultimedia = original.TipoMultimedia,
-                LugarId = original.LugarId,
-                UsuarioId = dto.AutorId,
-                PublicacionOriginalId = original.Id,
-                FechaCreación = DateTime.UtcNow,
-                EstaOculto = false
-            };
-
-            return await _publicacionRepositorio.Crear(publicacion);
+            return await _publicacionRepositorio.Crear(publicacionCompartida);
         }
 
         public async Task<ResultadoMapaDto> ObtenerPines(PublicacionFiltroDto filtro, CancellationToken cancellationToken = default)
@@ -123,55 +68,8 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
             const int limitePines = 200;
 
-            if (!double.IsFinite(filtro.MinLatitud) ||
-                !double.IsFinite(filtro.MaxLatitud) ||
-                filtro.MinLatitud < -90 ||
-                filtro.MaxLatitud > 90 ||
-                filtro.MinLatitud >= filtro.MaxLatitud)
-            {
-                throw new ArgumentException(
-                    "El rango de latitud debe estar entre -90 y 90, " +
-                    "con el mínimo menor que el máximo.");
-            }
-
-            if (!double.IsFinite(filtro.MinLongitud) ||
-                !double.IsFinite(filtro.MaxLongitud) ||
-                filtro.MinLongitud < -180 ||
-                filtro.MaxLongitud > 180 ||
-                filtro.MinLongitud >= filtro.MaxLongitud)
-            {
-                throw new ArgumentException(
-                    "El rango de longitud debe estar entre -180 y 180, " +
-                    "con el mínimo menor que el máximo.");
-            }
-
-            if (filtro.Categoria.HasValue &&
-                !Enum.IsDefined(typeof(CategoriaEnum), filtro.Categoria.Value))
-            {
-                throw new ArgumentException("La categoría indicada no es válida.");
-            }
-
-            if (filtro.FechaDesde.HasValue &&
-                filtro.FechaDesde.Value.Kind != DateTimeKind.Utc)
-            {
-                throw new ArgumentException(
-                    "La fecha desde debe estar expresada en UTC.");
-            }
-
-            if (filtro.FechaHasta.HasValue &&
-                filtro.FechaHasta.Value.Kind != DateTimeKind.Utc)
-            {
-                throw new ArgumentException(
-                    "La fecha hasta debe estar expresada en UTC.");
-            }
-
-            if (filtro.FechaDesde.HasValue &&
-                filtro.FechaHasta.HasValue &&
-                filtro.FechaDesde.Value >= filtro.FechaHasta.Value)
-            {
-                throw new ArgumentException(
-                    "La fecha desde debe ser anterior a la fecha hasta.");
-            }
+            ValidarCoordenadas(filtro);
+            ValidarFechasYCategorias(filtro);
 
             var pines = await _publicacionRepositorio.ObtenerPines(
                 filtro,
@@ -184,124 +82,55 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 HayMas = pines.Count > limitePines
             };
         }
-
         public async Task<PublicacionResumenDto> ObtenerResumenPorId(int id, CancellationToken cancellationToken = default)
         {
-            if (id <= 0)
-            {
-                throw new ArgumentException(
-                    "El ID de la publicación debe ser mayor que cero.");
-            }
+            ValidarIdPublicacion(id);
 
-            var publicacion = await _publicacionRepositorio.ObtenerResumenPorId(
-                id,
-                cancellationToken);
-
-            if (publicacion == null)
-            {
-                throw new KeyNotFoundException(
-                    "La publicación no existe o no está disponible.");
-            }
-
-            return publicacion;
+            return await _publicacionRepositorio.ObtenerResumenPorId(id, cancellationToken)
+           ?? throw new KeyNotFoundException("La publicación no existe o no está disponible.");
         }
-
         public async Task<PublicacionDetalleDto> ObtenerDetallePorId(int id, CancellationToken cancellationToken = default)
         {
-            if (id <= 0)
-            {
-                throw new ArgumentException(
-                    "El ID de la publicación debe ser mayor que cero.");
-            }
+            ValidarIdPublicacion(id);
 
-            var publicacion = await _publicacionRepositorio.ObtenerDetallePorId(
-                id,
-                cancellationToken);
-
-            if (publicacion == null)
-            {
-                throw new KeyNotFoundException(
-                    "La publicación no existe o no está disponible.");
-            }
-
-            return publicacion;
+            return await _publicacionRepositorio.ObtenerDetallePorId(id, cancellationToken)
+           ?? throw new KeyNotFoundException("La publicación no existe o no está disponible.");
         }
-
         public async Task<ResultadoPaginadoDto<ComentarioDto>> ObtenerComentarios(int publicacionId, string? cursor, int limite,
             CancellationToken cancellationToken = default)
         {
-            if (publicacionId <= 0)
-            {
-                throw new ArgumentException(
-                    "El ID de la publicación debe ser mayor que cero.");
-            }
-
-            if (limite < 1 || limite > 50)
-            {
-                throw new ArgumentException(
-                    "El límite debe estar entre 1 y 50.");
-            }
+            ValidarIdPublicacion(publicacionId);
+            ValidarLimite(limite);
 
             var cursorDecodificado = CursorCronologicoCodec.Leer(cursor);
 
-            var existePublicacion =
-                await _publicacionRepositorio.ExistePublicacionVisible(
-                    publicacionId,
-                    cancellationToken);
-
-            if (!existePublicacion)
-            {
-                throw new KeyNotFoundException(
-                    "La publicación no existe o no está disponible.");
-            }
+            if (!await _publicacionRepositorio.ExistePublicacionVisible(publicacionId, cancellationToken))
+                throw new KeyNotFoundException("La publicación no existe o no está disponible.");
 
             var comentarios = await _publicacionRepositorio.ObtenerComentarios(
                 publicacionId,
                 cursorDecodificado,
                 limite,
                 cancellationToken);
-
-            var hayMas = comentarios.Count > limite;
-
             var items = comentarios
                 .Take(limite)
                 .ToList();
 
-            string? siguienteCursor = null;
-
-            if (hayMas)
-            {
-                var ultimoComentario = items[^1];
-
-                siguienteCursor = CursorCronologicoCodec.Crear(
-                    ultimoComentario.FechaCreacion,
-                    ultimoComentario.Id);
-            }
-
             return new ResultadoPaginadoDto<ComentarioDto>
             {
                 Items = items,
-                SiguienteCursor = siguienteCursor
+                SiguienteCursor = comentarios.Count > limite
+                    ? CursorCronologicoCodec.Crear(items[^1].FechaCreacion, items[^1].Id)
+                    : null
             };
         }
-
         public async Task<ResultadoPaginadoDto<PublicacionDetalleDto>>ObtenerFeedSeguidos(int usuarioId, string? cursor, int limite,
         CancellationToken cancellationToken = default)
         {
-            if (usuarioId <= 0)
-            {
-                throw new ArgumentException(
-                    "El ID del usuario debe ser mayor que cero.");
-            }
-
-            if (limite < 1 || limite > 50)
-            {
-                throw new ArgumentException(
-                    "El límite debe estar entre 1 y 50.");
-            }
+            ValidarIdUsuario(usuarioId);
+            ValidarLimite(limite);
 
             var cursorDecodificado = CursorCronologicoCodec.Leer(cursor);
-
             var autoresIds = await _seguimientoServicio.ObtenerSeguidosIdsAsync(
                 usuarioId,
                 cancellationToken);
@@ -317,48 +146,26 @@ namespace ProyectoFinalTPI.Backend.Servicio
                     cursorDecodificado,
                     limite,
                     cancellationToken);
-
-            var hayMas = publicaciones.Count > limite;
-
             var items = publicaciones
                 .Take(limite)
                 .ToList();
 
-            string? siguienteCursor = null;
-
-            if (hayMas)
-            {
-                var ultimaPublicacion = items[^1];
-
-                siguienteCursor = CursorCronologicoCodec.Crear(
-                    ultimaPublicacion.FechaCreacion,
-                    ultimaPublicacion.Id);
-            }
-
             return new ResultadoPaginadoDto<PublicacionDetalleDto>
             {
                 Items = items,
-                SiguienteCursor = siguienteCursor
+                SiguienteCursor = publicaciones.Count > limite
+            ? CursorCronologicoCodec.Crear(items[^1].FechaCreacion, items[^1].Id)
+            : null
             };
         }
-
         public async Task<ResultadoPaginadoDto<PublicacionDetalleDto>>ObtenerPublicacionesParaVos(
         int usuarioId,
         string? cursor,
         int limite,
         CancellationToken cancellationToken = default)
         {
-            if (usuarioId <= 0)
-            {
-                throw new ArgumentException(
-                    "El ID del usuario debe ser mayor que cero.");
-            }
-
-            if (limite < 1 || limite > 50)
-            {
-                throw new ArgumentException(
-                    "El límite debe estar entre 1 y 50.");
-            }
+            ValidarIdUsuario(usuarioId);
+            ValidarLimite(limite);
 
             var cursorDecodificado = CursorFypCodec.Leer(cursor);
 
@@ -367,12 +174,10 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
             if (cursorDecodificado == null)
             {
-                const int cantidadMaximaRecomendaciones = 500;
-
                 var recomendaciones =
                     await _recomendacionServicio.GenerarRecomendacionParaUsuario(
                         usuarioId,
-                        cantidadMaximaRecomendaciones,
+                        500,
                         cancellationToken);
 
                 sesion = _sesionFypRepositorio.Crear(
@@ -398,7 +203,6 @@ namespace ProyectoFinalTPI.Backend.Servicio
             }
 
             var items = new List<PublicacionDetalleDto>();
-
             const int tamanioLote = 50;
 
             while (posicion < sesion.PublicacionesIds.Count)
@@ -449,5 +253,186 @@ namespace ProyectoFinalTPI.Backend.Servicio
             };
         }
 
+        private async Task VerificaciónLogros(CrearPublicacionDto dto, Publicacion publicacion)
+        {
+            var usuarioId = publicacion.UsuarioId;
+
+            _logroServicio.VerificarYDarLogro(usuarioId, 1); // primera publicación
+
+            var puntoUsuario = new Point(dto.LongitudUsuario, dto.LatitudUsuario) { SRID = 4326 };
+
+            double distanciaEnGrados = publicacion.Lugar.Coordenadas.Distance(puntoUsuario);
+
+            if (distanciaEnGrados <= 0.01)
+            {
+                int publicacionesCercanas = await _publicacionRepositorio.ContarPosteosCercanosAlUsuario(usuarioId, puntoUsuario);
+
+                if (publicacionesCercanas >= 5)
+                {
+                    _logroServicio.VerificarYDarLogro(usuarioId, 3); // 5 recuerdos cercanos
+                }
+            }
+
+            int decadasDelUsuario = await _publicacionRepositorio.ContarPosteosDeDiferentesEpocasDelUsuario(usuarioId);
+            if (decadasDelUsuario >= 3)
+            {
+                _logroServicio.VerificarYDarLogro(usuarioId, 4); // 3 épocas distintas
+            } if (decadasDelUsuario == 6)
+            {
+                _logroServicio.VerificarYDarLogro(usuarioId, 5); // 6 epocas distintas
+            }
+        }
+        private Publicacion ConstruirPublicacion(CrearPublicacionDto dto, string urlMultimedia)
+        {
+            var lugar = new Lugar
+            {
+                Nombre = dto.NombreLugar,
+
+                Coordenadas = new Point(
+                    dto.Longitud,
+                    dto.Latitud)
+                {
+                    SRID = 4326
+                }
+            };
+
+            return new Publicacion
+            {
+                Titulo = dto.Titulo,
+                Descripcion = dto.Descripcion,
+                Fecha = dto.Fecha,
+
+                Categoria = dto.Categoria,
+
+                UrlMultimedia = urlMultimedia,
+                TipoMultimedia = dto.TipoMultimedia,
+
+                Lugar = lugar,
+
+                UsuarioId = dto.AutorId,
+
+                FechaCreación = DateTime.UtcNow,
+                EstaOculto = false,
+                MotivoOculto = null
+            };
+        }
+        private async Task<string> ProcesarMultimedia(CrearPublicacionDto dto)
+        {
+            return await _multimediaServicio.SubirAsync(
+                dto.Archivo,
+                dto.NombreArchivo,
+                dto.UrlArchivo,
+                dto.TipoMultimedia);
+        }
+        private async Task VerificarAutorExistente(int autor)
+        {
+            var existeAutor = await _usuarioRepositorio.ExisteUsuario(autor);
+
+            if (!existeAutor)
+                throw new KeyNotFoundException(
+                    "El usuario indicado no existe.");
+        }
+        private Publicacion ConstruirPublicacionCompartida(CompartirPublicacionDto dto, Publicacion original)
+        {
+            return new Publicacion
+            {
+                Titulo = original.Titulo,
+                Descripcion = dto.Descripcion,
+                Fecha = DateTime.UtcNow,
+                Categoria = original.Categoria,
+                UrlMultimedia = original.UrlMultimedia,
+                TipoMultimedia = original.TipoMultimedia,
+                LugarId = original.LugarId,
+                UsuarioId = dto.AutorId,
+                PublicacionOriginalId = original.Id,
+                FechaCreación = DateTime.UtcNow,
+                EstaOculto = false
+            };
+        }
+        private async Task<Publicacion> VerificarPublicacionExistente(int publicacionOriginalId, CancellationToken cancellationToken)
+        {
+            var original = await _publicacionRepositorio.ObtenerPorId(publicacionOriginalId, cancellationToken);
+            if (original == null)
+                throw new KeyNotFoundException("La publicacion original no existe o no esta disponible.");
+            return original;
+        }
+        private void ValidarFechasYCategorias(PublicacionFiltroDto filtro)
+        {
+            if (filtro.Categoria.HasValue &&
+                            !Enum.IsDefined(typeof(CategoriaEnum), filtro.Categoria.Value))
+            {
+                throw new ArgumentException("La categoría indicada no es válida.");
+            }
+
+            if (filtro.FechaDesde.HasValue &&
+                filtro.FechaDesde.Value.Kind != DateTimeKind.Utc)
+            {
+                throw new ArgumentException(
+                    "La fecha desde debe estar expresada en UTC.");
+            }
+
+            if (filtro.FechaHasta.HasValue &&
+                filtro.FechaHasta.Value.Kind != DateTimeKind.Utc)
+            {
+                throw new ArgumentException(
+                    "La fecha hasta debe estar expresada en UTC.");
+            }
+
+            if (filtro.FechaDesde.HasValue &&
+                filtro.FechaHasta.HasValue &&
+                filtro.FechaDesde.Value >= filtro.FechaHasta.Value)
+            {
+                throw new ArgumentException(
+                    "La fecha desde debe ser anterior a la fecha hasta.");
+            }
+        }
+        private void ValidarCoordenadas(PublicacionFiltroDto filtro)
+        {
+            if (!double.IsFinite(filtro.MinLatitud) ||
+                            !double.IsFinite(filtro.MaxLatitud) ||
+                            filtro.MinLatitud < -90 ||
+                            filtro.MaxLatitud > 90 ||
+                            filtro.MinLatitud >= filtro.MaxLatitud)
+            {
+                throw new ArgumentException(
+                    "El rango de latitud debe estar entre -90 y 90, " +
+                    "con el mínimo menor que el máximo.");
+            }
+
+            if (!double.IsFinite(filtro.MinLongitud) ||
+                !double.IsFinite(filtro.MaxLongitud) ||
+                filtro.MinLongitud < -180 ||
+                filtro.MaxLongitud > 180 ||
+                filtro.MinLongitud >= filtro.MaxLongitud)
+            {
+                throw new ArgumentException(
+                    "El rango de longitud debe estar entre -180 y 180, " +
+                    "con el mínimo menor que el máximo.");
+            }
+        }
+        private void ValidarIdPublicacion(int idPublicacion)
+        {
+            if (idPublicacion <= 0)
+            {
+                throw new ArgumentException(
+                    "El ID de la publicación debe ser mayor que cero.");
+            }
+        }
+        private void ValidarLimite(int limite)
+        {
+            if (limite < 1 || limite > 50)
+            {
+                throw new ArgumentException(
+                    "El límite debe estar entre 1 y 50.");
+            }
+        }
+        private void ValidarIdUsuario(int usuarioId)
+        {
+            if (usuarioId <= 0)
+            {
+                throw new ArgumentException(
+                    "El ID del usuario debe ser mayor que cero.");
+            }
+        }
     }
 }

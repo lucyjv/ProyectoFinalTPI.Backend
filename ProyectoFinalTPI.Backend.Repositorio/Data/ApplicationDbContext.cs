@@ -72,7 +72,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
             });
             modelBuilder.Entity<Logro>().HasData(
                 new Logro { Id = 1, Titulo = "Primer Paso", Descripcion = "Creaste tu primer recuerdo en el mapa.", PuntosRecompensa = 0, UrlIcono = "." },
-                new Logro { Id = 2, Titulo = "Cronista Local", Descripcion = "Tu barrio ya tiene su propio historiador oficial. Publicaste 5 recuerdos en tu localidad.", PuntosRecompensa = 0, UrlIcono = "." },
+                new Logro { Id = 2, Titulo = "Cronista Instantáneo", Descripcion = "Creaste 5 recuerdos cercanos a vos.", PuntosRecompensa = 0, UrlIcono = "." },
                 new Logro { Id = 3, Titulo = "Trotamundos", Descripcion = "Cruzaste fronteras para expandir la memoria. Dejaste anclas emocionales en 3 localidades distintas.", PuntosRecompensa = 0, UrlIcono = "." },
                 new Logro { Id = 4, Titulo = "Voz de una Época", Descripcion = "Tus vivencias conectan de forma única 3 décadas distintas.", PuntosRecompensa = 0, UrlIcono = "." }, 
                 new Logro { Id = 5, Titulo = "Década Completa", Descripcion = "Viviste, recordaste y conquistaste más de medio siglo. Tenés al menos un recuerdo en cada una de las 6 décadas.", PuntosRecompensa = 0, UrlIcono = "." },

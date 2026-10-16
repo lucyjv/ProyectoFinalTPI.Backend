@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using NetTopologySuite.Geometries;
 using ProyectoFinalTPI.Backend.Dtos;
 using ProyectoFinalTPI.Backend.Dtos.Comentario;
 using ProyectoFinalTPI.Backend.Dtos.Lugar;
@@ -419,6 +420,23 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                     resultado => resultado.Categoria,
                     resultado => resultado.Cantidad,
                     cancellationToken);
+        }
+        public async Task<int> ContarPosteosCercanosAlUsuario(int usuarioId, Point gpsUsuario)
+        {
+            return await _context.Publicaciones
+                .Where(p => p.UsuarioId == usuarioId &&
+                            !p.EstaOculto &&
+                            p.Lugar.Coordenadas.Distance(gpsUsuario) < 0.01) //10 cuadras aprox.
+                .CountAsync();
+        }
+        public async Task<int> ContarPosteosDeDiferentesEpocasDelUsuario(int usuarioId)
+        {
+            return await _context.Publicaciones
+                .Where(p => p.UsuarioId == usuarioId &&
+                            !p.EstaOculto)
+                .Select(p => p.DecadaDelRecuerdo)
+                .Distinct()             
+                .CountAsync();
         }
     }
 }

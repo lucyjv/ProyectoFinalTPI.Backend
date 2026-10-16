@@ -1,3 +1,4 @@
+using System.Drawing;
 using ProyectoFinalTPI.Backend.Dtos;
 using ProyectoFinalTPI.Backend.Dtos.Comentario;
 using ProyectoFinalTPI.Backend.Dtos.Publicacion;
@@ -23,5 +24,7 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Repositorio
         int limite, CancellationToken cancellationToken = default);
         Task<List<PublicacionDetalleDto>> ObtenerPublicacionesPorIds(IReadOnlyCollection<int> publicacionesIds, CancellationToken cancellationToken = default);
         Task<Dictionary<CategoriaEnum, int>> ObtenerCantidadPorCategoriaDelUsuario(int usuarioId, DateTime desde, CancellationToken cancellationToken = default);
+        Task<int> ContarPosteosCercanosAlUsuario(int usuarioId, NetTopologySuite.Geometries.Point gpsUsuario);
+        Task<int> ContarPosteosDeDiferentesEpocasDelUsuario(int usuarioId);
     }
 }

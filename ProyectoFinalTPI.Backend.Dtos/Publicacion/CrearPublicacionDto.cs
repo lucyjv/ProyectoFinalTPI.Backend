@@ -14,6 +14,8 @@ namespace ProyectoFinalTPI.Backend.Dtos.Publicacion
 
         public double Latitud { get; set; }
         public double Longitud { get; set; }
+        public double LatitudUsuario { get; set; } 
+        public double LongitudUsuario { get; set; } 
 
         public MultimediaEnum TipoMultimedia { get; set; }
 
