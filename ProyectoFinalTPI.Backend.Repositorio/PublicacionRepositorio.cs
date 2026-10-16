@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Neo4j.Driver;
 using ProyectoFinalTPI.Backend.Dtos;
 using ProyectoFinalTPI.Backend.Dtos.Comentario;
 using ProyectoFinalTPI.Backend.Dtos.Lugar;
@@ -12,12 +13,153 @@ namespace ProyectoFinalTPI.Backend.Repositorio
 {
     public class PublicacionRepositorio : IPublicacionRepositorio
     {
-        private readonly ApplicationDbContext _context;
+        private const string CrearLikeQuery = """
+            MERGE (usuario:Usuario {postgresId: $usuarioId})
+            MERGE (publicacion:Publicacion {postgresId: $publicacionId})
+            MERGE (usuario)-[like:LE_GUSTA]->(publicacion)
+            ON CREATE SET like.creadaEn = datetime()
+            """;
 
-        public PublicacionRepositorio(ApplicationDbContext context)
+        private const string QuitarLikeQuery = """
+            MATCH (:Usuario {postgresId: $usuarioId})-[like:LE_GUSTA]->
+                  (:Publicacion {postgresId: $publicacionId})
+            DELETE like
+            """;
+
+        private const string ObtenerEstadoLikeQuery = """
+            OPTIONAL MATCH (publicacion:Publicacion {postgresId: $publicacionId})
+            OPTIONAL MATCH (usuario:Usuario)-[like:LE_GUSTA]->(publicacion)
+            RETURN count(like) AS cantidadLikes,
+                   count(CASE WHEN usuario.postgresId = $usuarioId THEN 1 END) > 0 AS dioLike
+            """;
+
+        // consulta nos devuelve las publicaciones con alto puntaje como candidatas al feed
+        // busca publicaciones candidatas para el feed usando los likes y las etiquetas guardadas en Neo4j
+        // Busca las publicaciones que le gustaron al usuario --> MATCH (usuario)-[:LE_GUSTA]->(semilla)
+        // Busca a otros usuarios que también dieron like a la semilla y las publicaciones a las que ellos dieron like.
+        //                  APORTA 2
+        // Busca usuarios etiquetados en la semilla y otras publicaciones donde estén etiquetados.
+        //                  APORTA 1
+        // Descarta candidatos sin ID y publicaciones que el usuario ya marcó con like  
+        private const string RecomendacionesPorLikesQuery = """
+            MATCH (usuario:Usuario {postgresId: $usuarioId})-[:LE_GUSTA]->(semilla:Publicacion)
+            CALL {
+                WITH semilla
+                MATCH (otroUsuario:Usuario)-[:LE_GUSTA]->(semilla)
+                MATCH (otroUsuario)-[:LE_GUSTA]->(candidata:Publicacion)
+                RETURN candidata, count(DISTINCT otroUsuario) * 2 AS relevancia
+                UNION
+                WITH semilla
+                MATCH (etiquetado:Usuario)-[:ETIQUETADO_EN]->(semilla)
+                MATCH (etiquetado)-[:ETIQUETADO_EN]->(candidata:Publicacion)
+                RETURN candidata, count(DISTINCT etiquetado) AS relevancia
+            }
+            WITH usuario, candidata, relevancia
+            WHERE candidata.postgresId IS NOT NULL
+              AND NOT (usuario)-[:LE_GUSTA]->(candidata)
+            RETURN candidata.postgresId AS publicacionId, sum(relevancia) AS puntaje
+            ORDER BY puntaje DESC, publicacionId DESC
+            LIMIT $cantidadMaxima
+            """;
+
+        private readonly ApplicationDbContext _context;
+        private readonly IDriver? _neo4jDriver;
+
+        public PublicacionRepositorio(ApplicationDbContext context, IDriver? neo4jDriver = null)
         {
             _context = context;
+            _neo4jDriver = neo4jDriver;
         }
+
+        public async Task CrearLike( int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
+            await session.ExecuteWriteAsync(async transaction =>
+            {
+                await transaction.RunAsync(CrearLikeQuery, new { publicacionId, usuarioId });
+            });
+        }
+
+        public async Task QuitarLike( int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
+            await session.ExecuteWriteAsync(async transaction =>
+            {
+                await transaction.RunAsync(QuitarLikeQuery, new { publicacionId, usuarioId });
+            });
+        }
+
+        public async Task<MeGustaPublicacionDto> ObtenerEstadoLike( int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
+            return await session.ExecuteReadAsync(async transaction =>
+            {
+                var cursor = await transaction.RunAsync( ObtenerEstadoLikeQuery, new { publicacionId, usuarioId });
+                var registro = await cursor.SingleAsync(); // recibe los valores de cantidadLikes y dioLike para pasarlos al DTO
+
+                return new MeGustaPublicacionDto
+                {
+                    PublicacionId = publicacionId,
+                    CantidadLikes = registro["cantidadLikes"].As<int>(),
+                    DioLike = registro["dioLike"].As<bool>()
+                };
+            });
+        }
+
+        public async Task<IReadOnlyDictionary<int, (int Cantidad, bool DioLike)>> ObtenerResumenLikes(
+            IReadOnlyCollection<int> publicacionesIds, int usuarioId, CancellationToken cancellationToken = default)
+        {
+            if (publicacionesIds.Count == 0)
+                return new Dictionary<int, (int Cantidad, bool DioLike)>();
+
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
+            return await session.ExecuteReadAsync(async transaction =>
+            {
+                var cursor = await transaction.RunAsync("""
+                    UNWIND $publicacionesIds AS publicacionId
+                    OPTIONAL MATCH (usuario:Usuario)-[like:LE_GUSTA]->
+                                  (:Publicacion {postgresId: publicacionId})
+                    RETURN publicacionId,
+                           count(like) AS cantidadLikes,
+                           count(CASE WHEN usuario.postgresId = $usuarioId THEN 1 END) > 0 AS dioLike
+                    """, new { publicacionesIds = publicacionesIds.Distinct().ToArray(), usuarioId });
+
+                var resumenes = new Dictionary<int, (int Cantidad, bool DioLike)>();
+                await foreach (var registro in cursor)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    resumenes[registro["publicacionId"].As<int>()] =
+                        (registro["cantidadLikes"].As<int>(), registro["dioLike"].As<bool>());
+                }
+                return (IReadOnlyDictionary<int, (int Cantidad, bool DioLike)>)resumenes;
+            });
+        }
+
+        public async Task<IReadOnlyList<int>> ObtenerPublicacionesRelacionadasPorLikes(
+            int usuarioId, int cantidadMaxima, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
+            return await session.ExecuteReadAsync(async transaction =>
+            {
+                var cursor = await transaction.RunAsync(
+                    RecomendacionesPorLikesQuery, new { usuarioId, cantidadMaxima });
+                var ids = new List<int>();
+                await foreach (var registro in cursor)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    ids.Add(registro["publicacionId"].As<int>());
+                }
+                return (IReadOnlyList<int>)ids;
+            });
+        }
+
+        private IDriver ObtenerNeo4jDriver() => _neo4jDriver ??
+            throw new InvalidOperationException("El driver de Neo4j no esta configurado");
 
         public List<Publicacion> ObtenerTodasPublicaciones()
         {
@@ -160,8 +302,6 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                         Latitud = p.Lugar.Coordenadas.Y,
                         Longitud = p.Lugar.Coordenadas.X
                     },
-
-                    // TODO: implementar el contador de likes y la interacción del usuario.
                     CantidadLikes = 0,
                     CantidadComentarios = p.Comentarios.Count(c => !c.EstaOculto && !c.EstaEliminado),
                     DioLike = false
@@ -228,8 +368,6 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                         Latitud = p.Lugar.Coordenadas.Y,
                         Longitud = p.Lugar.Coordenadas.X
                     },
-
-                    // TODO: implementar el contador de likes y la interacción del usuario.
                     CantidadLikes = 0,
                     CantidadComentarios = p.Comentarios.Count(c => !c.EstaOculto && !c.EstaEliminado),
                     DioLike = false
@@ -302,8 +440,6 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                         Latitud = p.Lugar.Coordenadas.Y,
                         Longitud = p.Lugar.Coordenadas.X
                     },
-
-                    // TODO: implementar el contador de likes y la interacción del usuario.
                     CantidadLikes = 0,
                     CantidadComentarios = p.Comentarios.Count(c => !c.EstaOculto && !c.EstaEliminado),
                     DioLike = false
@@ -354,8 +490,6 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                         Latitud = p.Lugar.Coordenadas.Y,
                         Longitud = p.Lugar.Coordenadas.X
                     },
-
-                    // TODO: implementar el contador de likes y la interacción del usuario.
                     CantidadLikes = 0,
                     CantidadComentarios = p.Comentarios.Count(c => !c.EstaOculto && !c.EstaEliminado),
                     DioLike = false
