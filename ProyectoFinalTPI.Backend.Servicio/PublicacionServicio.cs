@@ -20,9 +20,10 @@ namespace ProyectoFinalTPI.Backend.Servicio
         private readonly IRecomendacionServicio _recomendacionServicio;
         private readonly ISesionFypRepositorio _sesionFypRepositorio;
         private readonly ISeguimientoServicio _seguimientoServicio;
+        private readonly IMeGustaPublicacionServicio? _meGustaPublicacionServicio;
         public PublicacionServicio(IPublicacionRepositorio publicacionRepositorio, IUsuarioRepositorio usuarioRepositorio, 
             IMultimediaServicio multimediaServicio, IRecomendacionServicio recomendacionServicio, ISesionFypRepositorio sesionFypRepositorio,
-            ISeguimientoServicio seguimientoServicio)
+            ISeguimientoServicio seguimientoServicio, IMeGustaPublicacionServicio? meGustaPublicacionServicio = null)
         {
             _publicacionRepositorio = publicacionRepositorio;
             _usuarioRepositorio = usuarioRepositorio;
@@ -30,6 +31,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
             _recomendacionServicio = recomendacionServicio;
             _sesionFypRepositorio = sesionFypRepositorio;
             _seguimientoServicio = seguimientoServicio;
+            _meGustaPublicacionServicio = meGustaPublicacionServicio;
         }
 
         public List<Publicacion> ObtenerPublicaciones()
@@ -279,6 +281,11 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 .Take(limite)
                 .ToList();
 
+            if (_meGustaPublicacionServicio != null)
+            {
+                await _meGustaPublicacionServicio.CompletarResumenes(items, usuarioId, cancellationToken);
+            }
+
             string? siguienteCursor = null;
 
             if (hayMas)
@@ -381,6 +388,11 @@ namespace ProyectoFinalTPI.Backend.Servicio
                         // la página actual ya está completa.
                         if (items.Count == limite)
                         {
+                            if (_meGustaPublicacionServicio != null)
+                            {
+                                await _meGustaPublicacionServicio.CompletarResumenes(items, usuarioId, cancellationToken);
+                            }
+
                             return new ResultadoPaginadoDto<PublicacionDetalleDto>
                             {
                                 Items = items,
@@ -395,6 +407,11 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
                     posicion++;
                 }
+            }
+
+            if (_meGustaPublicacionServicio != null)
+            {
+                await _meGustaPublicacionServicio.CompletarResumenes(items, usuarioId, cancellationToken);
             }
 
             return new ResultadoPaginadoDto<PublicacionDetalleDto>

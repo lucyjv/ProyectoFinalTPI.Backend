@@ -27,17 +27,20 @@ namespace ProyectoFinalTPI.Backend.Controllers
         private readonly IEtiquetadoPublicacionServicio _etiquetadoPublicacionServicio;
         private readonly ILogger<PublicacionesController> _logger;
         private readonly ApplicationDbContext _context;
+        private readonly IMeGustaPublicacionServicio? _meGustaPublicacionServicio;
 
         public PublicacionesController(
             IPublicacionServicio publicacionServicio,
             IEtiquetadoPublicacionServicio etiquetadoPublicacionServicio,
             ILogger<PublicacionesController>? logger = null,
-            ApplicationDbContext context = null!)
+            ApplicationDbContext context = null!,
+            IMeGustaPublicacionServicio? meGustaPublicacionServicio = null)
         {
             _publicacionServicio = publicacionServicio;
             _etiquetadoPublicacionServicio = etiquetadoPublicacionServicio;
             _logger = logger ?? NullLogger<PublicacionesController>.Instance;
             _context = context;
+            _meGustaPublicacionServicio = meGustaPublicacionServicio;
         }
 
         [HttpGet("test-users")]
@@ -159,8 +162,14 @@ namespace ProyectoFinalTPI.Backend.Controllers
             int id,
             CancellationToken cancellationToken)
         {
-            return Ok(await _publicacionServicio.ObtenerDetallePorId(
-                id, cancellationToken));
+            var detalle = await _publicacionServicio.ObtenerDetallePorId(id, cancellationToken);
+            if (_meGustaPublicacionServicio != null)
+            {
+                await _meGustaPublicacionServicio.CompletarResumenes(
+                    [detalle], ObtenerUsuarioIdAutenticado() ?? 0, cancellationToken);
+            }
+
+            return Ok(detalle);
         }
 
         [HttpPost]
