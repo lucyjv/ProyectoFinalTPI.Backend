@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace ProyectoFinalTPI.Backend.Requests.Publicaciones;
+namespace ProyectoFinalTPI.Backend.Requests.Comentarios;
 
 public class ReaccionComentarioRequest
 {

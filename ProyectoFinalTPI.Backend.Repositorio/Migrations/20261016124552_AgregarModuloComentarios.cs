@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
 {
     /// <inheritdoc />
-    public partial class AgregarHilosYReaccionesComentarios : Migration
+    public partial class AgregarModuloComentarios : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -19,6 +19,19 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                 name: "ComentarioPadreId",
                 table: "Comentario",
                 type: "integer",
+                nullable: true);
+
+            migrationBuilder.AddColumn<bool>(
+                name: "EstaEliminado",
+                table: "Comentario",
+                type: "boolean",
+                nullable: false,
+                defaultValue: false);
+
+            migrationBuilder.AddColumn<DateTime>(
+                name: "FechaEliminacion",
+                table: "Comentario",
+                type: "timestamp with time zone",
                 nullable: true);
 
             migrationBuilder.CreateTable(
@@ -53,9 +66,9 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                 column: "ComentarioPadreId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Comentario_PublicacionId_ComentarioPadreId_FechaCreacion",
+                name: "IX_Comentario_PublicacionId_ComentarioPadreId_FechaCreacion_Id",
                 table: "Comentario",
-                columns: new[] { "PublicacionId", "ComentarioPadreId", "FechaCreacion" });
+                columns: new[] { "PublicacionId", "ComentarioPadreId", "FechaCreacion", "Id" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_reacciones_comentario_UsuarioId",
@@ -86,11 +99,19 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                 table: "Comentario");
 
             migrationBuilder.DropIndex(
-                name: "IX_Comentario_PublicacionId_ComentarioPadreId_FechaCreacion",
+                name: "IX_Comentario_PublicacionId_ComentarioPadreId_FechaCreacion_Id",
                 table: "Comentario");
 
             migrationBuilder.DropColumn(
                 name: "ComentarioPadreId",
+                table: "Comentario");
+
+            migrationBuilder.DropColumn(
+                name: "EstaEliminado",
+                table: "Comentario");
+
+            migrationBuilder.DropColumn(
+                name: "FechaEliminacion",
                 table: "Comentario");
 
             migrationBuilder.CreateIndex(

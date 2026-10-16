@@ -39,10 +39,16 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<bool>("EstaEliminado")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("EstaOculto")
                         .HasColumnType("boolean");
 
                     b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("FechaEliminacion")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("PublicacionId")
@@ -57,7 +63,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
 
                     b.HasIndex("UsuarioId");
 
-                    b.HasIndex("PublicacionId", "ComentarioPadreId", "FechaCreacion");
+                    b.HasIndex("PublicacionId", "ComentarioPadreId", "FechaCreacion", "Id");
 
                     b.ToTable("Comentario", (string)null);
                 });

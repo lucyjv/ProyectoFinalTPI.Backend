@@ -341,64 +341,6 @@ namespace ProyectoFinalTPI.Backend.Tests
         }
 
         [Fact]
-        public async Task QueNoSeObtenganComentariosSiLaPublicacionNoEstaDisponible()
-        {
-            //Arrange
-            _repositorio.ExisteVisible = false;
-
-            //Act
-            await Assert.ThrowsAsync<KeyNotFoundException>(() => _servicio.ObtenerComentarios(99, null, 20));
-
-            //Assert
-            Assert.Equal(99, _repositorio.IdVisibleConsultado);
-            Assert.Equal(0, _repositorio.ConsultasComentarios);
-        }
-
-        [Fact]
-        public async Task QueSePaginenLosComentariosUsandoElUltimoComentarioEntregado()
-        {
-            //Arrange
-            _repositorio.ExisteVisible = true;
-            var fecha = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
-            _repositorio.Comentarios = new List<ComentarioDto>
-            {
-                new() { Id = 10, FechaCreacion = fecha },
-                new() { Id = 11, FechaCreacion = fecha },
-                new() { Id = 12, FechaCreacion = fecha.AddMinutes(1) }
-            };
-
-            //Act
-            var result = await _servicio.ObtenerComentarios(5, null, 2);
-            await _servicio.ObtenerComentarios(5, result.SiguienteCursor, 2);
-
-            //Assert
-            Assert.Equal(new[] { 10, 11 }, result.Items.Select(c => c.Id));
-            Assert.NotNull(result.SiguienteCursor);
-            Assert.Equal(11, _repositorio.CursorComentarios!.Id);
-            Assert.Equal(fecha, _repositorio.CursorComentarios.FechaCreacion);
-            Assert.Equal(5, _repositorio.IdComentariosConsultado);
-            Assert.Equal(2, _repositorio.LimiteComentarios);
-        }
-
-        [Fact]
-        public async Task QueLaUltimaPaginaDeComentariosNoTengaSiguienteCursor()
-        {
-            //Arrange
-            _repositorio.ExisteVisible = true;
-            _repositorio.Comentarios = new List<ComentarioDto>
-            {
-                new() { Id = 10 }, new() { Id = 11 }
-            };
-
-            //Act
-            var result = await _servicio.ObtenerComentarios(5, null, 2);
-
-            //Assert
-            Assert.Equal(2, result.Items.Count);
-            Assert.Null(result.SiguienteCursor);
-        }
-
-        [Fact]
         public async Task QueSeDevuelvaUnFeedVacioSiElUsuarioNoSigueANadie()
         {
             //Arrange

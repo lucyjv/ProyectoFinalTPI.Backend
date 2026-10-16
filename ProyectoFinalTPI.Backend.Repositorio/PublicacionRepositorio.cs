@@ -47,13 +47,6 @@ namespace ProyectoFinalTPI.Backend.Repositorio
             return publicacion.Id;
         }
 
-        public async Task<int> CrearComentario(Comentario comentario, CancellationToken cancellationToken = default)
-        {
-            await _context.Set<Comentario>().AddAsync(comentario, cancellationToken);
-            await _context.SaveChangesAsync(cancellationToken);
-            return comentario.Id;
-        }
-
         public async Task<Publicacion?> ObtenerPorId(int id, CancellationToken cancellationToken = default)
         {
             return await _context.Publicaciones
@@ -170,7 +163,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio
 
                     // TODO: implementar el contador de likes y la interacción del usuario.
                     CantidadLikes = 0,
-                    CantidadComentarios = p.Comentarios.Count(c => !c.EstaOculto),
+                    CantidadComentarios = p.Comentarios.Count(c => !c.EstaOculto && !c.EstaEliminado),
                     DioLike = false
                 })
                 .SingleOrDefaultAsync(cancellationToken);
@@ -238,155 +231,11 @@ namespace ProyectoFinalTPI.Backend.Repositorio
 
                     // TODO: implementar el contador de likes y la interacción del usuario.
                     CantidadLikes = 0,
-                    CantidadComentarios = p.Comentarios.Count(c => !c.EstaOculto),
+                    CantidadComentarios = p.Comentarios.Count(c => !c.EstaOculto && !c.EstaEliminado),
                     DioLike = false
                 })
                 .Take(limite + 1)
                 .ToListAsync(cancellationToken);
-        }
-
-        public async Task<List<ComentarioDto>> ObtenerComentarios(int publicacionId, CursorCronologicoDto? cursor, int limite, CancellationToken cancellationToken = default)
-        {
-            var consulta = _context.Publicaciones
-                .AsNoTracking()
-                .Where(p =>
-                    p.Id == publicacionId &&
-                    !p.EstaOculto)
-                .SelectMany(p => p.Comentarios)
-                .Where(c => !c.EstaOculto);
-
-            if (cursor != null)
-            {
-                consulta = consulta.Where(c =>
-                    c.FechaCreacion < cursor.FechaCreacion ||
-                    (c.FechaCreacion == cursor.FechaCreacion &&
-                     c.Id < cursor.Id));
-            }
-
-            return await consulta
-                .OrderByDescending(c => c.FechaCreacion)
-                .ThenByDescending(c => c.Id)
-                .Select(c => new ComentarioDto
-                {
-                    Id = c.Id,
-                    Contenido = c.Contenido,
-                    FechaCreacion = c.FechaCreacion,
-
-                    Autor = new AutorResumenDto
-                    {
-                        Id = c.Usuario.Id,
-                        Username = c.Usuario.Username
-                    }
-                })
-                .Take(limite + 1)
-                .ToListAsync(cancellationToken);
-        }
-
-        public async Task<List<ComentarioDto>> ObtenerHilosComentarios(
-            int publicacionId, CursorCronologicoDto? cursor, int limite, int? usuarioId,
-            CancellationToken cancellationToken = default)
-        {
-            var consulta = _context.Comentarios
-                .AsNoTracking()
-                .AsSplitQuery()
-                .Where(c => c.PublicacionId == publicacionId && c.ComentarioPadreId == null && !c.EstaOculto);
-
-            if (cursor != null)
-            {
-                consulta = consulta.Where(c =>
-                    c.FechaCreacion < cursor.FechaCreacion ||
-                    (c.FechaCreacion == cursor.FechaCreacion && c.Id < cursor.Id));
-            }
-
-            var comentarios = await consulta
-                .OrderByDescending(c => c.FechaCreacion)
-                .ThenByDescending(c => c.Id)
-                .Include(c => c.Usuario)
-                .Include(c => c.Reacciones)
-                .Include(c => c.Respuestas.Where(r => !r.EstaOculto).OrderBy(r => r.FechaCreacion))
-                    .ThenInclude(r => r.Usuario)
-                .Include(c => c.Respuestas.Where(r => !r.EstaOculto).OrderBy(r => r.FechaCreacion))
-                    .ThenInclude(r => r.Reacciones)
-                .Take(limite + 1)
-                .ToListAsync(cancellationToken);
-
-            return comentarios.Select(c => MapearComentario(c, usuarioId, incluirRespuestas: true)).ToList();
-        }
-
-        public Task<Comentario?> ObtenerComentario(int publicacionId, int comentarioId, CancellationToken cancellationToken = default) =>
-            _context.Comentarios.FirstOrDefaultAsync(c =>
-                c.Id == comentarioId && c.PublicacionId == publicacionId && !c.EstaOculto, cancellationToken);
-
-        public async Task<ComentarioDto?> ObtenerComentarioDto(
-            int publicacionId, int comentarioId, int? usuarioId, CancellationToken cancellationToken = default)
-        {
-            var comentario = await _context.Comentarios
-                .AsNoTracking()
-                .Include(c => c.Usuario)
-                .Include(c => c.Reacciones)
-                .FirstOrDefaultAsync(c => c.Id == comentarioId && c.PublicacionId == publicacionId && !c.EstaOculto, cancellationToken);
-            return comentario == null ? null : MapearComentario(comentario, usuarioId, incluirRespuestas: false);
-        }
-
-        public async Task EstablecerReaccionComentario(
-            int comentarioId, int usuarioId, TipoReaccionComentario tipo, CancellationToken cancellationToken = default)
-        {
-            var reaccion = await _context.ReaccionesComentario.FindAsync(new object[] { comentarioId, usuarioId }, cancellationToken);
-            if (reaccion == null)
-            {
-                _context.ReaccionesComentario.Add(new ReaccionComentario
-                {
-                    ComentarioId = comentarioId,
-                    UsuarioId = usuarioId,
-                    Tipo = tipo,
-                    FechaCreacion = DateTime.UtcNow
-                });
-            }
-            else
-            {
-                reaccion.Tipo = tipo;
-                reaccion.FechaCreacion = DateTime.UtcNow;
-            }
-            await _context.SaveChangesAsync(cancellationToken);
-        }
-
-        public async Task QuitarReaccionComentario(int comentarioId, int usuarioId, CancellationToken cancellationToken = default)
-        {
-            var reaccion = await _context.ReaccionesComentario.FindAsync(new object[] { comentarioId, usuarioId }, cancellationToken);
-            if (reaccion != null)
-            {
-                _context.ReaccionesComentario.Remove(reaccion);
-                await _context.SaveChangesAsync(cancellationToken);
-            }
-        }
-
-        private static ComentarioDto MapearComentario(Comentario comentario, int? usuarioId, bool incluirRespuestas)
-        {
-            var dto = new ComentarioDto
-            {
-                Id = comentario.Id,
-                PublicacionId = comentario.PublicacionId,
-                ComentarioPadreId = comentario.ComentarioPadreId,
-                Contenido = comentario.Contenido,
-                FechaCreacion = comentario.FechaCreacion,
-                Autor = new AutorResumenDto { Id = comentario.UsuarioId, Username = comentario.Usuario.Username },
-                Reacciones = comentario.Reacciones
-                    .GroupBy(r => r.Tipo.ToString().ToLowerInvariant())
-                    .ToDictionary(grupo => grupo.Key, grupo => grupo.Count()),
-                ReaccionActual = usuarioId.HasValue
-                    ? comentario.Reacciones.FirstOrDefault(r => r.UsuarioId == usuarioId.Value)?.Tipo.ToString().ToLowerInvariant()
-                    : null
-            };
-            if (incluirRespuestas)
-            {
-                dto.Respuestas = comentario.Respuestas
-                    .Where(r => !r.EstaOculto)
-                    .OrderBy(r => r.FechaCreacion)
-                    .ThenBy(r => r.Id)
-                    .Select(r => MapearComentario(r, usuarioId, incluirRespuestas: false))
-                    .ToList();
-            }
-            return dto;
         }
 
         public Task<bool> ExistePublicacionVisible(int id, CancellationToken cancellationToken = default)
@@ -456,7 +305,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio
 
                     // TODO: implementar el contador de likes y la interacción del usuario.
                     CantidadLikes = 0,
-                    CantidadComentarios = p.Comentarios.Count(c => !c.EstaOculto),
+                    CantidadComentarios = p.Comentarios.Count(c => !c.EstaOculto && !c.EstaEliminado),
                     DioLike = false
                 })
                 .Take(limite + 1)
@@ -508,7 +357,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio
 
                     // TODO: implementar el contador de likes y la interacción del usuario.
                     CantidadLikes = 0,
-                    CantidadComentarios = p.Comentarios.Count(c => !c.EstaOculto),
+                    CantidadComentarios = p.Comentarios.Count(c => !c.EstaOculto && !c.EstaEliminado),
                     DioLike = false
                 })
                 .ToListAsync(cancellationToken);
