@@ -3,11 +3,6 @@ using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Dtos.Usuario;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Repositorio.Data;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace ProyectoFinalTPI.Backend.Repositorio
 {
@@ -22,34 +17,30 @@ namespace ProyectoFinalTPI.Backend.Repositorio
 
         public async Task<Usuario?> ObtenerPorIdAsync(int id)
         {
-            var usuario = await _context.Usuarios.FirstOrDefaultAsync(u => u.Id == id);
-
-            return usuario;
+            return await _context.Usuarios.FirstOrDefaultAsync(u => u.Id == id);
         }
 
         public async Task<bool> ExisteUsuario(int id, CancellationToken cancellationToken = default)
         {
             return await _context.Usuarios
-            .AnyAsync(u => u.Id == id, cancellationToken);
-
+                .AnyAsync(u => u.Id == id, cancellationToken);
         }
+
         public async Task<List<AutorResumenDto>> ObtenerUsuariosPorIdsAsync(
             IReadOnlyCollection<int> ids, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(ids);
 
             if (ids.Count == 0)
-            {
                 return new List<AutorResumenDto>();
-            }
 
             return await _context.Usuarios
                 .AsNoTracking()
-                .Where(usuario => ids.Contains(usuario.Id))
-                .Select(usuario => new AutorResumenDto
+                .Where(u => ids.Contains(u.Id))
+                .Select(u => new AutorResumenDto
                 {
-                    Id = usuario.Id,
-                    Username = usuario.Username
+                    Id       = u.Id,
+                    Username = u.Username
                 })
                 .ToListAsync(cancellationToken);
         }
@@ -60,14 +51,12 @@ namespace ProyectoFinalTPI.Backend.Repositorio
             ArgumentNullException.ThrowIfNull(ids);
 
             if (ids.Count == 0)
-            {
                 return new List<int>();
-            }
 
             return await _context.Usuarios
                 .AsNoTracking()
-                .Where(usuario => ids.Contains(usuario.Id))
-                .Select(usuario => usuario.Id)
+                .Where(u => ids.Contains(u.Id))
+                .Select(u => u.Id)
                 .ToListAsync(cancellationToken);
         }
 
@@ -95,6 +84,18 @@ namespace ProyectoFinalTPI.Backend.Repositorio
         {
             _context.Usuarios.Update(usuario);
             await _context.SaveChangesAsync(cancellationToken);
+        }
+
+        /// <inheritdoc/>
+        public async Task<Usuario?> ObtenerPorUsernameAsync(
+            string username, CancellationToken cancellationToken = default)
+        {
+            var usernameNormalizado = username.Trim().ToLower();
+            return await _context.Usuarios
+                .AsNoTracking()
+                .FirstOrDefaultAsync(
+                    u => u.Username.ToLower() == usernameNormalizado,
+                    cancellationToken);
         }
     }
 }

@@ -155,6 +155,9 @@ public class EtiquetadoPublicacionServicioTests
 
         public Task ActualizarAsync(Usuario usuario, CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
+
+        public Task<Usuario?> ObtenerPorUsernameAsync(string username, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
     }
 
     private sealed class Neo4jDriverFake

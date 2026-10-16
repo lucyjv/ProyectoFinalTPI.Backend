@@ -52,5 +52,35 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                 .Where(m => m.FechaExpiracion <= ahora)
                 .ExecuteDeleteAsync();
         }
+
+        /// <inheritdoc/>
+        public async Task<IEnumerable<MensajeChat>> ObtenerConversacionesActivasAsync(int usuarioId)
+        {
+            var ahora = DateTime.UtcNow;
+
+            // Traemos todos los mensajes no expirados donde el usuario participó.
+            // Para cada par (usuarioId, otroUsuarioId) nos quedamos solo con el
+            // mensaje de mayor FechaEnvio, que es el último de esa conversación.
+            //
+            // La clave de agrupación normaliza el par para que (A→B) y (B→A)
+            // caigan en el mismo grupo: usamos Min/Max para que el orden
+            // no importe.
+            var mensajes = await _context.MensajesChat
+                .Include(m => m.Emisor)
+                .Include(m => m.Destinatario)
+                .Where(m =>
+                    m.FechaExpiracion > ahora &&
+                    (m.EmisorId == usuarioId || m.DestinatarioId == usuarioId))
+                .ToListAsync();
+
+            // Agrupamos en memoria (los resultados ya están filtrados y son pocos
+            // para el caso de uso de conversaciones activas de un solo usuario).
+            var ultimosPorConversacion = mensajes
+                .GroupBy(m => Math.Min(m.EmisorId, m.DestinatarioId) * 1_000_000
+                            + Math.Max(m.EmisorId, m.DestinatarioId))
+                .Select(g => g.OrderByDescending(m => m.FechaEnvio).First());
+
+            return ultimosPorConversacion;
+        }
     }
 }
