@@ -21,6 +21,7 @@ public sealed class ManejoExcepcionesMiddleware(
             var (estado, titulo, detalle) = exception switch
             {
                 ArgumentException => (400, "Solicitud inválida", exception.Message),
+                UnauthorizedAccessException => (403, "Acceso denegado", exception.Message),
                 KeyNotFoundException => (404, "Recurso no encontrado", exception.Message),
                 _ => (500, "Error interno del servidor",
                     "No se pudo completar la operación. Intentá nuevamente más tarde.")

@@ -6,6 +6,8 @@
         public string Contenido { get; set; } = string.Empty;
         public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;
         public bool EstaOculto { get; set; }
+        public bool EstaEliminado { get; set; }
+        public DateTime? FechaEliminacion { get; set; }
         public int PublicacionId { get; set; }
         public Publicacion Publicacion { get; set; } = null!;
         public int UsuarioId { get; set; }

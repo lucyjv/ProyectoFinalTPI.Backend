@@ -359,86 +359,6 @@ namespace ProyectoFinalTPI.Backend.Tests
         }
 
         [Fact]
-        public async Task QueSeDevuelvaOkConLaPaginaDeComentarios()
-        {
-            //Arrange
-            _servicio.Comentarios = new ResultadoPaginadoDto<ComentarioDto>
-            {
-                Items = new List<ComentarioDto> { new() { Id = 7 } }, SiguienteCursor = "cursor"
-            };
-
-            //Act
-            var result = await _controller.ObtenerComentarios(5);
-
-            //Assert
-            var respuesta = Assert.IsType<OkObjectResult>(result.Result);
-            Assert.Same(_servicio.Comentarios, respuesta.Value);
-        }
-
-        [Fact]
-        public async Task QueSeEnvienAlServicioElIdElCursorYElLimiteDeComentarios()
-        {
-            //Arrange
-            var cursor = "cursor-de-prueba";
-
-            //Act
-            await _controller.ObtenerComentarios(5, cursor, 10);
-
-            //Assert
-            Assert.Equal(5, _servicio.IdConsultado);
-            Assert.Equal(cursor, _servicio.Cursor);
-            Assert.Equal(10, _servicio.Limite);
-        }
-
-        [Fact]
-        public async Task QueSeUtiliceElLimitePredeterminadoDeVeinteComentarios()
-        {
-            //Arrange
-            var id = 5;
-
-            //Act
-            await _controller.ObtenerComentarios(id);
-
-            //Assert
-            Assert.Equal(20, _servicio.Limite);
-            Assert.Null(_servicio.Cursor);
-        }
-
-        [Fact]
-        public async Task QueSeDevuelvaBadRequestSiLosParametrosDeComentariosSonInvalidos()
-        {
-            //Arrange
-            _servicio.Error = new ArgumentException("Datos inválidos");
-
-            //Act
-            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () => (await _controller.ObtenerComentarios(5, "inválido", 20)).Result);
-
-            //Assert
-            var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
-            var problema = Assert.IsType<ProblemDetails>(respuesta.Value);
-            Assert.Equal(400, respuesta.StatusCode);
-            Assert.Equal(400, problema.Status);
-            Assert.Equal("Datos inválidos", problema.Detail);
-        }
-
-        [Fact]
-        public async Task QueSeDevuelvaNotFoundSiLaPublicacionDeLosComentariosNoEstaDisponible()
-        {
-            //Arrange
-            _servicio.Error = new KeyNotFoundException("La publicación no está disponible.");
-
-            //Act
-            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () => (await _controller.ObtenerComentarios(99)).Result);
-
-            //Assert
-            var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
-            var problema = Assert.IsType<ProblemDetails>(respuesta.Value);
-            Assert.Equal(404, respuesta.StatusCode);
-            Assert.Equal(404, problema.Status);
-            Assert.Equal("La publicación no está disponible.", problema.Detail);
-        }
-
-        [Fact]
         public async Task QueSeDevuelvaCreatedSiSeAgreganEtiquetasNuevas()
         {
             //Arrange
@@ -558,7 +478,6 @@ namespace ProyectoFinalTPI.Backend.Tests
         [InlineData("mapa")]
         [InlineData("resumen")]
         [InlineData("detalle")]
-        [InlineData("comentarios")]
         public async Task QueSeDevuelvaErrorInternoSinExponerDetallesSiFallaUnaOperacion(string operacion)
         {
             //Arrange
@@ -572,7 +491,7 @@ namespace ProyectoFinalTPI.Backend.Tests
                 "mapa" => (await _controller.ObtenerMapa(new PublicacionFiltroDto(), default)).Result,
                 "resumen" => (await _controller.ObtenerResumen(5, default)).Result,
                 "detalle" => (await _controller.ObtenerDetalle(5, default)).Result,
-                _ => (await _controller.ObtenerComentarios(5)).Result
+                _ => throw new ArgumentOutOfRangeException(nameof(operacion))
             });
 
             //Assert
@@ -632,7 +551,6 @@ namespace ProyectoFinalTPI.Backend.Tests
         [InlineData("mapa")]
         [InlineData("resumen")]
         [InlineData("detalle")]
-        [InlineData("comentarios")]
         public async Task QueSePropagueLaCancelacionDeLaSolicitud(string operacion)
         {
             //Arrange
@@ -662,8 +580,7 @@ namespace ProyectoFinalTPI.Backend.Tests
                         await _controller.ObtenerDetalle(5, cancelacion.Token);
                         break;
                     default:
-                        await _controller.ObtenerComentarios(5, cancellationToken: cancelacion.Token);
-                        break;
+                        throw new ArgumentOutOfRangeException(nameof(operacion));
                 }
             });
 

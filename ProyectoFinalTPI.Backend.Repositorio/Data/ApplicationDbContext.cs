@@ -77,7 +77,13 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
             {
                 entity.ToTable("Comentario");
                 entity.Property(comentario => comentario.Contenido).IsRequired();
-                entity.HasIndex(comentario => new { comentario.PublicacionId, comentario.ComentarioPadreId, comentario.FechaCreacion });
+                entity.HasIndex(comentario => new
+                {
+                    comentario.PublicacionId,
+                    comentario.ComentarioPadreId,
+                    comentario.FechaCreacion,
+                    comentario.Id
+                });
                 entity.HasOne(comentario => comentario.Publicacion)
                     .WithMany(publicacion => publicacion.Comentarios)
                     .HasForeignKey(comentario => comentario.PublicacionId)

@@ -1,5 +1,5 @@
 using ProyectoFinalTPI.Backend.Dtos.Comentario;
-using ProyectoFinalTPI.Backend.Requests.Publicaciones;
+using ProyectoFinalTPI.Backend.Requests.Comentarios;
 
 namespace ProyectoFinalTPI.Backend.Mappings;
 

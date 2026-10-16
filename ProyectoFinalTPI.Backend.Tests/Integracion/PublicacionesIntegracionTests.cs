@@ -85,6 +85,7 @@ public class PublicacionesIntegracionTests : IClassFixture<PostgisFixture>
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         Assert.NotNull(result);
         Assert.Equal("Qué lindo recuerdo", result.Contenido);
+        Assert.NotNull(result.Autor);
         Assert.Equal(usuario.Id, result.Autor.Id);
         Assert.Equal(1, guardado.Publicacion.Id);
         Assert.False(guardado.EstaOculto);
@@ -597,6 +598,7 @@ public class PublicacionesIntegracionTests : IClassFixture<PostgisFixture>
         var comentario = Assert.Single(result.Items);
         Assert.Equal(1, comentario.Id);
         Assert.Equal("Comentario 1", comentario.Contenido);
+        Assert.NotNull(comentario.Autor);
         Assert.Equal(usuario.Id, comentario.Autor.Id);
     }
 
