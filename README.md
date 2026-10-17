@@ -504,3 +504,11 @@ ws://localhost:{puerto}/hubs/chat?access_token=<TOKEN_JWT>
 |---|---|---|
 | `RecibirMensaje` | `MensajeChatDto` | Cuando llega un mensaje nuevo dirigido al usuario conectado. |
 | `MensajeEnviado` | `MensajeChatDto` | Confirmación al emisor de que su mensaje fue guardado y entregado. |
+
+### Endpoints HTTP del chat
+| Método    |	Ruta    |	Descripción
+| GET   |	/api/chat/conversaciones    |	Devuelve las conversaciones activas del usuario autenticado: una entrada por cada usuario con quien haya intercambiado mensajes en los últimos 7 días, con el último mensaje de cada conversación. Requiere JWT. Devuelve lista vacía si no hay conversaciones activas.
+
+### Endpoints de usuarios
+|   Método  |	Ruta    |	Descripción
+|   GET |	/api/usuarios/por-username/{username}   |	Busca un usuario por su username exacto. Devuelve su id y username. Requiere JWT. Devuelve 404 si no existe ningún usuario con ese username.
