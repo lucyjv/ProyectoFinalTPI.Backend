@@ -558,6 +558,38 @@ namespace ProyectoFinalTPI.Backend.Tests
             Assert.Equal(new[] { 105 }, _repositorio.LotesConsultados[^1]);
         }
 
+        [Fact]
+        public async Task SinRecomendacionesDevuelveGeneralesPorFechaYConservaLaPaginacion()
+        {
+            var fecha = DateTime.UtcNow.AddDays(-1);
+            _repositorio.PublicacionesPorIds = new()
+            {
+                new() { Id = 8, FechaCreacion = fecha.AddDays(-1) },
+                new() { Id = 2, FechaCreacion = fecha },
+                new() { Id = 3, FechaCreacion = fecha }
+            };
+
+            var primera = await _servicio.ObtenerPublicacionesParaVos(10, null, 2);
+            var segunda = await _servicio.ObtenerPublicacionesParaVos(10, primera.SiguienteCursor, 2);
+
+            Assert.Equal(new[] { 3, 2 }, primera.Items.Select(p => p.Id));
+            Assert.NotNull(primera.SiguienteCursor);
+            Assert.Equal(8, Assert.Single(segunda.Items).Id);
+            Assert.Null(segunda.SiguienteCursor);
+            Assert.Equal(1, _repositorio.ConsultasGenerales);
+            Assert.Equal(1, _repositorio.ConsultasRecomendaciones);
+        }
+
+        [Fact]
+        public async Task SinRecomendacionesNiPublicacionesDevuelvePaginaVacia()
+        {
+            var resultado = await _servicio.ObtenerPublicacionesParaVos(10, null, 20);
+
+            Assert.Empty(resultado.Items);
+            Assert.Null(resultado.SiguienteCursor);
+            Assert.Equal(1, _repositorio.ConsultasGenerales);
+        }
+
         // Estos dobles reemplazan las dependencias externas del servicio.
         private class PublicacionRepositorioFake : IPublicacionRepositorio
         {
@@ -680,7 +712,15 @@ namespace ProyectoFinalTPI.Backend.Tests
 
             public List<Publicacion> ObtenerTodasPublicaciones() => throw new NotImplementedException();
             public List<Publicacion> ObtenerPublicacionPorCategoria(CategoriaEnum categoria) => throw new NotImplementedException();
-            public Task<List<PublicacionDetalleDto>> ObtenerPublicacionesParaVos(IReadOnlyCollection<CategoriaEnum> categorias, DateTime fechaCorte, CursorCronologicoDto? cursor, int limite, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+            public int ConsultasGenerales { get; private set; }
+            public Task<List<PublicacionDetalleDto>> ObtenerPublicacionesParaVos(IReadOnlyCollection<CategoriaEnum> categorias, DateTime fechaCorte, CursorCronologicoDto? cursor, int limite, CancellationToken cancellationToken = default)
+            {
+                ConsultasGenerales++;
+                Assert.Empty(categorias);
+                return Task.FromResult(PublicacionesPorIds.Where(p => p.FechaCreacion <= fechaCorte)
+                    .OrderByDescending(p => p.FechaCreacion).ThenByDescending(p => p.Id)
+                    .Take(limite + 1).ToList());
+            }
             public Task<Dictionary<CategoriaEnum, int>> ObtenerCantidadPorCategoriaDelUsuario(int usuarioId, DateTime desde, CancellationToken cancellationToken = default) => throw new NotImplementedException();
             public bool EliminarResultado { get; set; } = true;
             public int? IdEliminado { get; private set; }

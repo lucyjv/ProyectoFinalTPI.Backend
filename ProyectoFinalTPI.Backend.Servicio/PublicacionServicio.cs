@@ -377,6 +377,15 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 var recomendaciones = await ObtenerRecomendacionesPorLikes(
                     usuarioId, cantidadMaximaRecomendaciones, cancellationToken);
 
+                if (recomendaciones.Count == 0)
+                {
+                    var generales = await _publicacionRepositorio.ObtenerPublicacionesParaVos(
+                        Array.Empty<CategoriaEnum>(), DateTime.UtcNow, null,
+                        cantidadMaximaRecomendaciones, cancellationToken);
+                    recomendaciones = generales.Take(cantidadMaximaRecomendaciones)
+                        .Select(p => p.Id).ToArray();
+                }
+
                 sesion = _sesionFypRepositorio.Crear( usuarioId,recomendaciones);
 
                 posicion = 0;

@@ -12,8 +12,9 @@ using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Repositorio;
 using ProyectoFinalTPI.Backend.Repositorio.Data;
 using ProyectoFinalTPI.Backend.Servicio;
-using ProyectoFinalTPI.Backend.Services;   // ── NUEVO: PresenciaService y LimpiezaMensajesService
-using ProyectoFinalTPI.Backend.Hubs;       // ── NUEVO: ChatHub
+using ProyectoFinalTPI.Backend.Services;
+using ProyectoFinalTPI.Backend.Hubs;
+using ProyectoFinalTPI.Backend.Swagger;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -157,6 +158,10 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
     options.SwaggerDoc("v1", new() { Title = "Nostalgia API", Version = "v1" });
+
+    // Inyecta X-Nostalgiar-Request: 1 automáticamente en todos los requests desde Swagger
+    options.OperationFilter<NostalgiarRequestHeaderFilter>();
+
     options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
     {
         Name = "Authorization",
