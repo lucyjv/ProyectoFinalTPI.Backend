@@ -1,5 +1,7 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using ProyectoFinalTPI.Backend.Extensions;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Requests.Seguimientos;
 
@@ -18,26 +20,68 @@ namespace ProyectoFinalTPI.Backend.Controllers
             _logger = logger;
         }
 
-
-
         [HttpPost]
         public Task<IActionResult> SeguirUsuario(
             [FromBody] SeguirUsuarioRequest request, CancellationToken cancellationToken)
         {
+            var idUsuario = User.ObtenerUsuarioId() ?? request.IdUsuario;
             return EjecutarOperacion( ()
-                => _seguimientoServicio.SeguirUsuario( request.IdUsuario, request.IdUsuarioASeguir,cancellationToken),
+                => _seguimientoServicio.SeguirUsuario( idUsuario, request.IdUsuarioASeguir,cancellationToken),
 
-                MapearResultadoSeguir, request.IdUsuario,request.IdUsuarioASeguir,cancellationToken,"crear");
+                MapearResultadoSeguir, idUsuario,request.IdUsuarioASeguir,cancellationToken,"crear");
+        }
+
+        [HttpPost("{idUsuarioASeguir:int}")]
+        public Task<IActionResult> SeguirUsuarioPorRuta(
+            int idUsuarioASeguir, [FromQuery] int? idUsuario = null, CancellationToken cancellationToken = default)
+        {
+            if (idUsuarioASeguir <= 0)
+            {
+                return Task.FromResult<IActionResult>(BadRequest(new { error = "El ID del usuario es erroneo" }));
+            }
+
+            var seguidorId = User.ObtenerUsuarioId() ?? idUsuario ?? 0;
+            if (seguidorId <= 0)
+            {
+                return Task.FromResult<IActionResult>(Unauthorized(new { error = "Debés iniciar sesión para seguir a un usuario." }));
+            }
+
+            return EjecutarOperacion( ()
+                => _seguimientoServicio.SeguirUsuario( seguidorId, idUsuarioASeguir, cancellationToken),
+
+                MapearResultadoSeguir, seguidorId, idUsuarioASeguir, cancellationToken, "crear");
+        }
+
+        [HttpDelete("{idUsuarioASeguir:int}")]
+        public Task<IActionResult> DejarDeSeguirUsuarioPorRuta(
+            int idUsuarioASeguir, [FromQuery] int? idUsuario = null, CancellationToken cancellationToken = default)
+        {
+            if (idUsuarioASeguir <= 0)
+            {
+                return Task.FromResult<IActionResult>(BadRequest(new { error = "El ID del usuario es erroneo" }));
+            }
+
+            var seguidorId = User.ObtenerUsuarioId() ?? idUsuario ?? 0;
+            if (seguidorId <= 0)
+            {
+                return Task.FromResult<IActionResult>(Unauthorized(new { error = "Debés iniciar sesión para dejar de seguir a un usuario." }));
+            }
+
+            return EjecutarOperacion(() 
+                => _seguimientoServicio.DejarDeSeguirUsuario( seguidorId, idUsuarioASeguir, cancellationToken),
+                
+                MapearResultadoDejarDeSeguir, seguidorId, idUsuarioASeguir, cancellationToken, "eliminar");
         }
 
         [HttpDelete]
         public Task<IActionResult> DejarDeSeguirUsuario(
             [FromBody] DejarDeSeguirUsuarioRequest request, CancellationToken cancellationToken)
         {
+            var idUsuario = User.ObtenerUsuarioId() ?? request.IdUsuario;
             return EjecutarOperacion(() 
-                => _seguimientoServicio.DejarDeSeguirUsuario( request.IdUsuario, request.IdUsuarioASeguir,cancellationToken),
+                => _seguimientoServicio.DejarDeSeguirUsuario( idUsuario, request.IdUsuarioASeguir,cancellationToken),
                 
-                MapearResultadoDejarDeSeguir, request.IdUsuario, request.IdUsuarioASeguir,cancellationToken,"eliminar");
+                MapearResultadoDejarDeSeguir, idUsuario, request.IdUsuarioASeguir,cancellationToken,"eliminar");
         }
 
         [HttpGet("{idUsuario:int}/seguidos")]
