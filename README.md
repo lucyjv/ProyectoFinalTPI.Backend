@@ -1,4 +1,22 @@
 # ProyectoFinalTPI.Backend
+
+## Cobertura de tests
+
+Coverlet recolecta la cobertura y ReportGenerator genera un informe HTML. Desde la raíz:
+
+```powershell
+dotnet tool restore
+.\coverage.ps1
+```
+
+Abrir `coverage-report/index.html` para ver la cobertura por archivo y línea. Para ejecutar solo un grupo de tests:
+
+```powershell
+.\coverage.ps1 -Filter 'FullyQualifiedName~PublicacionServicioTests'
+```
+
+El informe refleja únicamente los tests ejecutados. La suite completa requiere Docker para las pruebas de integración con PostgreSQL/PostGIS. Los resultados se guardan en `TestResults/` y `coverage-report/`, excluidos de Git.
+
 Este es el repositorio del Backend para nuestro **Proyecto Final TPI**. La solución está desarrollada en **ASP.NET Core 9 (MVC)** bajo una arquitectura de **Persistencia Políglota**, combinando bases de datos relacionales, espaciales y orientadas a grafos para lograr el máximo rendimiento en nuestra red social.
 
 ---
@@ -441,7 +459,9 @@ GET /api/feed/seguidos?usuarioId=1&limite=20
 GET /api/publicaciones/25/comentarios?limite=20
 ```
 
-Para recargar “Para vos”, se realiza otra petición sin cursor. Esto genera una nueva selección. Cada sesión conserva hasta 500 recomendaciones y vence a los 30 minutos; si deja de estar disponible, el endpoint devuelve `410 Gone`.
+Si “Para vos” no encuentra recomendaciones visibles, muestra publicaciones generales visibles ordenadas por fecha de creación de más nueva a más antigua (y por ID descendente en caso de empate). No requiere que el usuario haya creado publicaciones ni dado likes.
+
+Para recargar “Para vos”, se realiza otra petición sin cursor. Esto genera una nueva selección. Cada sesión conserva hasta 500 publicaciones, también cuando usa el listado general, y vence a los 30 minutos; si deja de estar disponible, el endpoint devuelve `410 Gone`.
 
 ### Endpoints de seguimiento
 
