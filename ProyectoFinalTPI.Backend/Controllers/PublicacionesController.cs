@@ -159,8 +159,11 @@ namespace ProyectoFinalTPI.Backend.Controllers
             int id,
             CancellationToken cancellationToken)
         {
-            return Ok(await _publicacionServicio.ObtenerDetallePorId(
-                id, cancellationToken));
+            var detalle = await _publicacionServicio.ObtenerDetallePorId(id, cancellationToken);
+            await _publicacionServicio.CompletarResumenesLikes(
+                [detalle], ObtenerUsuarioIdAutenticado() ?? 0, cancellationToken);
+
+            return Ok(detalle);
         }
 
         [HttpPost]
@@ -256,6 +259,32 @@ namespace ProyectoFinalTPI.Backend.Controllers
             return cantidadEtiquetasNuevas > 0
                 ? StatusCode(StatusCodes.Status201Created, respuesta)
                 : Ok(respuesta);
+        }
+
+        [Authorize]
+        [HttpPost("{publicacionId:int}/like")]
+        [ProducesResponseType(typeof(MeGustaPublicacionDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        public async Task<ActionResult<MeGustaPublicacionDto>> DarLike(
+            int publicacionId, CancellationToken cancellationToken = default)
+        {
+            var usuarioId = ObtenerUsuarioIdAutenticado();
+            if (!usuarioId.HasValue || usuarioId.Value <= 0) return Unauthorized();
+
+            return Ok(await _publicacionServicio.DarLike( publicacionId, usuarioId.Value, cancellationToken));
+        }
+
+        [Authorize]
+        [HttpDelete("{publicacionId:int}/like")]
+        [ProducesResponseType(typeof(MeGustaPublicacionDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        public async Task<ActionResult<MeGustaPublicacionDto>> QuitarLike(
+            int publicacionId, CancellationToken cancellationToken = default)
+        {
+            var usuarioId = ObtenerUsuarioIdAutenticado();
+            if (!usuarioId.HasValue || usuarioId.Value <= 0) return Unauthorized();
+
+            return Ok(await _publicacionServicio.QuitarLike( publicacionId, usuarioId.Value, cancellationToken));
         }
 
         private async Task<IActionResult> EjecutarOperacion(

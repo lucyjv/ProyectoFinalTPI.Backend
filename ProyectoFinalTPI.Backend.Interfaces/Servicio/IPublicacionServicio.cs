@@ -15,6 +15,10 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Servicio
         Task<PublicacionResumenDto> ObtenerResumenPorId(int id, CancellationToken cancellationToken = default);
 
         Task<PublicacionDetalleDto> ObtenerDetallePorId(int id, CancellationToken cancellationToken = default);
+        Task<MeGustaPublicacionDto> DarLike(int publicacionId, int usuarioId, CancellationToken cancellationToken = default);
+        Task<MeGustaPublicacionDto> QuitarLike(int publicacionId, int usuarioId, CancellationToken cancellationToken = default);
+        Task CompletarResumenesLikes(IReadOnlyCollection<PublicacionDetalleDto> publicaciones, int usuarioId,
+            CancellationToken cancellationToken = default);
         Task<ResultadoPaginadoDto<PublicacionDetalleDto>> ObtenerFeedSeguidos(int usuarioId, string? cursor, int limite,
             CancellationToken cancellationToken = default);
         Task<ResultadoPaginadoDto<PublicacionDetalleDto>>ObtenerPublicacionesParaVos(int usuarioId, string? cursor, int limite,

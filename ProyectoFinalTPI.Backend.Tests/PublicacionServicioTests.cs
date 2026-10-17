@@ -16,7 +16,6 @@ namespace ProyectoFinalTPI.Backend.Tests
         private readonly PublicacionRepositorioFake _repositorio = new();
         private readonly UsuarioRepositorioFake _usuarios = new();
         private readonly MultimediaServicioFake _multimedia = new();
-        private readonly RecomendacionServicioFake _recomendacion = new();
         private readonly SesionFypRepositorioFake _sesiones = new();
         private readonly SeguimientoServicioFake _seguimiento = new();
         private readonly PublicacionServicio _servicio;
@@ -24,7 +23,7 @@ namespace ProyectoFinalTPI.Backend.Tests
         public PublicacionServicioTests()
         {
             _servicio = new PublicacionServicio(
-                _repositorio, _usuarios, _multimedia, _recomendacion, _sesiones, _seguimiento);
+                _repositorio, _usuarios, _multimedia, _sesiones, _seguimiento);
         }
 
         [Fact]
@@ -437,7 +436,7 @@ namespace ProyectoFinalTPI.Backend.Tests
         public async Task QueSeGenerenRecomendacionesYUnaSesionSiNoSeEnviaCursor()
         {
             //Arrange
-            _recomendacion.Ids = new[] { 7, 3 };
+            _repositorio.Recomendaciones = new[] { 7, 3 };
             _repositorio.PublicacionesPorIds = new List<PublicacionDetalleDto>
             {
                 new() { Id = 7 }, new() { Id = 3 }
@@ -449,8 +448,8 @@ namespace ProyectoFinalTPI.Backend.Tests
             //Assert
             Assert.Equal(7, Assert.Single(result.Items).Id);
             Assert.NotNull(result.SiguienteCursor);
-            Assert.Equal(10, _recomendacion.UsuarioConsultado);
-            Assert.Equal(500, _recomendacion.CantidadSolicitada);
+            Assert.Equal(10, _repositorio.UsuarioRecomendacionesConsultado);
+            Assert.Equal(500, _repositorio.LimiteRecomendaciones);
             var sesion = Assert.Single(_sesiones.Creadas);
             Assert.Equal(10, sesion.UsuarioId);
             Assert.Equal(new[] { 7, 3 }, sesion.PublicacionesIds);
@@ -460,7 +459,7 @@ namespace ProyectoFinalTPI.Backend.Tests
         public async Task QueSeContinueLaSesionSinVolverAGenerarRecomendaciones()
         {
             //Arrange
-            _recomendacion.Ids = new[] { 7, 3, 9 };
+            _repositorio.Recomendaciones = new[] { 7, 3, 9 };
             _repositorio.PublicacionesPorIds = new List<PublicacionDetalleDto>
             {
                 new() { Id = 7 }, new() { Id = 3 }, new() { Id = 9 }
@@ -472,7 +471,7 @@ namespace ProyectoFinalTPI.Backend.Tests
 
             //Assert
             Assert.Equal(3, Assert.Single(result.Items).Id);
-            Assert.Equal(1, _recomendacion.Llamadas);
+            Assert.Equal(1, _repositorio.ConsultasRecomendaciones);
             Assert.Single(_sesiones.Creadas);
             Assert.Equal(_sesiones.Creadas[0].Id, _sesiones.IdConsultado);
             Assert.Equal(10, _sesiones.UsuarioConsultado);
@@ -483,19 +482,19 @@ namespace ProyectoFinalTPI.Backend.Tests
         public async Task QueSeGenereUnaNuevaSesionAlRecargarSinCursor()
         {
             //Arrange
-            _recomendacion.Ids = new[] { 7, 3 };
+            _repositorio.Recomendaciones = new[] { 7, 3 };
             _repositorio.PublicacionesPorIds = new List<PublicacionDetalleDto>
             {
                 new() { Id = 7 }, new() { Id = 3 }
             };
             await _servicio.ObtenerPublicacionesParaVos(10, null, 1);
-            _recomendacion.Ids = new[] { 3, 7 };
+            _repositorio.Recomendaciones = new[] { 3, 7 };
 
             //Act
             var result = await _servicio.ObtenerPublicacionesParaVos(10, null, 1);
 
             //Assert
-            Assert.Equal(2, _recomendacion.Llamadas);
+            Assert.Equal(2, _repositorio.ConsultasRecomendaciones);
             Assert.Equal(2, _sesiones.Creadas.Count);
             Assert.NotEqual(_sesiones.Creadas[0].Id, _sesiones.Creadas[1].Id);
             Assert.Equal(3, Assert.Single(result.Items).Id);
@@ -516,14 +515,14 @@ namespace ProyectoFinalTPI.Backend.Tests
 
             //Assert
             Assert.Empty(_repositorio.LotesConsultados);
-            Assert.Equal(0, _recomendacion.Llamadas);
+            Assert.Equal(0, _repositorio.ConsultasRecomendaciones);
         }
 
         [Fact]
         public async Task QueLasPublicacionesRespetenElOrdenDeLaSesion()
         {
             //Arrange
-            _recomendacion.Ids = new[] { 9, 3, 7 };
+            _repositorio.Recomendaciones = new[] { 9, 3, 7 };
             _repositorio.PublicacionesPorIds = new List<PublicacionDetalleDto>
             {
                 new() { Id = 3 }, new() { Id = 7 }, new() { Id = 9 }
@@ -540,7 +539,7 @@ namespace ProyectoFinalTPI.Backend.Tests
         public async Task QueSeCompleteLaPaginaOmitiendoPublicacionesNoDisponibles()
         {
             //Arrange
-            _recomendacion.Ids = Enumerable.Range(1, 105).ToArray();
+            _repositorio.Recomendaciones = Enumerable.Range(1, 105).ToArray();
             _repositorio.PublicacionesPorIds = new List<PublicacionDetalleDto>
             {
                 new() { Id = 105 }, new() { Id = 51 }, new() { Id = 2 }
@@ -554,7 +553,7 @@ namespace ProyectoFinalTPI.Backend.Tests
             //Assert
             Assert.Equal(new[] { 2, 51 }, result.Items.Select(p => p.Id));
             Assert.NotNull(result.SiguienteCursor);
-            Assert.Equal(3, lotesPrimeraPagina);
+            Assert.Equal(2, lotesPrimeraPagina);
             Assert.Equal(105, Assert.Single(segundaPagina.Items).Id);
             Assert.Equal(new[] { 105 }, _repositorio.LotesConsultados[^1]);
         }
@@ -590,6 +589,10 @@ namespace ProyectoFinalTPI.Backend.Tests
             public CursorCronologicoDto? CursorFeed { get; private set; }
             public List<PublicacionDetalleDto> PublicacionesPorIds { get; set; } = new();
             public List<int[]> LotesConsultados { get; } = new();
+            public IReadOnlyList<int> Recomendaciones { get; set; } = Array.Empty<int>();
+            public int ConsultasRecomendaciones { get; private set; }
+            public int UsuarioRecomendacionesConsultado { get; private set; }
+            public int LimiteRecomendaciones { get; private set; }
 
             public Task<int> Crear(Publicacion publicacion)
             {
@@ -628,6 +631,20 @@ namespace ProyectoFinalTPI.Backend.Tests
                 return Task.FromResult(ExisteVisible);
             }
 
+            public Task CrearLike(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
+                => throw new NotImplementedException();
+
+            public Task QuitarLike(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
+                => throw new NotImplementedException();
+
+            public Task<MeGustaPublicacionDto> ObtenerEstadoLike(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
+                => throw new NotImplementedException();
+
+            public Task<IReadOnlyDictionary<int, (int Cantidad, bool DioLike)>> ObtenerResumenLikes(
+                IReadOnlyCollection<int> publicacionesIds, int usuarioId, CancellationToken cancellationToken = default)
+                => Task.FromResult<IReadOnlyDictionary<int, (int Cantidad, bool DioLike)>>(
+                    publicacionesIds.Distinct().ToDictionary(id => id, _ => (Cantidad: 0, DioLike: false)));
+
             public Task<List<ComentarioDto>> ObtenerComentarios(int publicacionId, CursorCronologicoDto? cursor, int limite, CancellationToken cancellationToken = default)
             {
                 ConsultasComentarios++;
@@ -650,6 +667,15 @@ namespace ProyectoFinalTPI.Backend.Tests
             {
                 LotesConsultados.Add(publicacionesIds.ToArray());
                 return Task.FromResult(PublicacionesPorIds.Where(p => publicacionesIds.Contains(p.Id)).ToList());
+            }
+
+            public Task<IReadOnlyList<int>> ObtenerPublicacionesRelacionadasPorLikes(
+                int usuarioId, int cantidadMaxima, CancellationToken cancellationToken = default)
+            {
+                ConsultasRecomendaciones++;
+                UsuarioRecomendacionesConsultado = usuarioId;
+                LimiteRecomendaciones = cantidadMaxima;
+                return Task.FromResult(Recomendaciones);
             }
 
             public List<Publicacion> ObtenerTodasPublicaciones() => throw new NotImplementedException();
@@ -706,22 +732,6 @@ namespace ProyectoFinalTPI.Backend.Tests
                 Llamadas++;
                 UrlExterna = urlExterna;
                 return Error == null ? Task.FromResult(Url) : Task.FromException<string>(Error);
-            }
-        }
-
-        private class RecomendacionServicioFake : IRecomendacionServicio
-        {
-            public IReadOnlyList<int> Ids { get; set; } = Array.Empty<int>();
-            public int Llamadas { get; private set; }
-            public int UsuarioConsultado { get; private set; }
-            public int CantidadSolicitada { get; private set; }
-
-            public Task<IReadOnlyList<int>> GenerarRecomendacionParaUsuario(int usuarioId, int cantidadMaxima, CancellationToken cancellationToken = default)
-            {
-                Llamadas++;
-                UsuarioConsultado = usuarioId;
-                CantidadSolicitada = cantidadMaxima;
-                return Task.FromResult(Ids);
             }
         }
 

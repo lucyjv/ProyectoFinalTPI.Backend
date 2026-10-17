@@ -328,6 +328,8 @@ reemplazarla por un `ProblemDetails`.
 | `DELETE` | `/api/publicaciones/compartir/{originalId}` | Deshace/elimina el repost simple que el usuario autenticado (o especificado por query `autorId`) realizó sobre la publicación original. No elimina quote tweets ni la publicación original. |
 | `DELETE` | `/api/publicaciones/{id}` | Elimina una publicación propia por su `id`. Si la solicitud incluye autenticación JWT, valida que el usuario sea el autor de la misma. |
 | `POST` | `/api/publicaciones/{id}/etiquetas` | Etiqueta uno o más usuarios en una publicación existente. Recibe `usuariosIds` en JSON; repetir una etiqueta existente no la duplica. |
+| `POST` | `/api/publicaciones/{publicacionId}/like` | Da like a la publicación indicada al usuario autenticado. No recibe body; el usuario se obtiene del JWT. |
+| `DELETE` | `/api/publicaciones/{publicacionId}/like` | Quita el like del usuario autenticado a la publicación indicada. No recibe body; el usuario se obtiene del JWT. |
 | `GET` | `/api/publicaciones/mapa` | Devuelve los pines del área visible del mapa. Permite filtrar por categoría y fecha del recuerdo. |
 | `GET` | `/api/publicaciones/{id}/resumen` | Devuelve una vista resumida para mostrar al seleccionar un pin. |
 | `GET` | `/api/publicaciones/{id}` | Devuelve el detalle de una publicación, con descripción completa, autor, multimedia y ubicación. |
@@ -336,6 +338,32 @@ reemplazarla por un `ProblemDetails`.
 
 Las consultas públicas excluyen las publicaciones ocultas. Los comentarios se consultan por separado del detalle.
 Las etiquetas se almacenan en Neo4j como relaciones entre los nodos `Usuario` y `Publicacion`, cuyos datos maestros permanecen en PostgreSQL.
+
+### Dar o quitar me gusta
+
+Ambas operaciones requieren un JWT válido en `Authorization: Bearer <token>`. El `publicacionId` se envía en la ruta; no se envía `usuarioId` ni un body, porque el usuario se identifica desde el token.
+
+```http
+POST /api/publicaciones/42/like
+DELETE /api/publicaciones/42/like
+Authorization: Bearer <token>
+```
+
+El `POST` crea en Neo4j la relación `(:Usuario)-[:LE_GUSTA {creadaEn}]->(:Publicacion)`. Utiliza `MERGE`, por lo que repetir la solicitud del mismo usuario a la misma publicación no duplica el like. El `DELETE` elimina esa relación; si ya no existe, la operación no crea ni duplica nada.
+
+Antes de escribir en Neo4j, el backend comprueba en PostgreSQL que el usuario existe y que la publicación existe y está visible. Ambas rutas responden `200 OK` con el estado actualizado:
+
+```json
+{
+  "publicacionId": 42,
+  "cantidadLikes": 1,
+  "dioLike": true
+}
+```
+
+`cantidadLikes` cuenta las relaciones de like de esa publicación y `dioLike` indica si el usuario del token le dio like. Después de quitarlo, para ese usuario `dioLike` será `false`; el contador reflejará los likes restantes. Se devuelve `401 Unauthorized` si falta un JWT válido, `400 Bad Request` ante un ID inválido, `404 Not Found` si el usuario o la publicación no existen o la publicación está oculta, y `500 Internal Server Error` ante un fallo inesperado.
+
+Los likes se guardan en Neo4j y también alimentan `GET /api/feed/para-vos`: se recomiendan publicaciones que gustaron a usuarios con likes en común o que comparten usuarios etiquetados con publicaciones que el usuario marcó. El feed excluye publicaciones que el usuario ya likeó y valida en PostgreSQL que las recomendadas sigan visibles. No se necesita una migración de PostgreSQL para los likes.
 
 ### Crear un comentario
 
@@ -387,14 +415,13 @@ consultar mediante `GET /api/publicaciones/25/comentarios`.
 Los errores usan `ProblemDetails`. Se utiliza la tabla de comentarios existente,
 por lo que este endpoint no requiere una migración nueva. El detalle y el feed
 calculan `cantidadComentarios` contando solo los comentarios visibles de cada
-publicación. El contador de likes continúa en cero y `dioLike` en false hasta
-implementar esa lógica.
+publicación. Los campos `cantidadLikes` y `dioLike` se consultan en Neo4j.
 
 ### Endpoints del feed
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| `GET` | `/api/feed/para-vos` | Devuelve recomendaciones personalizadas, combinando intereses, actualidad y exploración. Actualmente, los intereses se calculan a partir de las publicaciones del usuario durante los últimos 90 días. |
+| `GET` | `/api/feed/para-vos` | Recomienda publicaciones relacionadas con los likes del usuario, usando likes en común y usuarios etiquetados compartidos en Neo4j. Excluye publicaciones que el usuario ya likeó. |
 | `GET` | `/api/feed/seguidos` | Devuelve las publicaciones de las cuentas que sigue el usuario, ordenadas de más recientes a más antiguas. Los seguimientos se consultan en Neo4j. |
 
 Ambos reciben temporalmente `usuarioId` por query hasta integrar autenticación. Las descripciones del feed tienen un máximo de 300 caracteres.
