@@ -377,6 +377,24 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 var recomendaciones = await ObtenerRecomendacionesPorLikes(
                     usuarioId, cantidadMaximaRecomendaciones, cancellationToken);
 
+                if (recomendaciones.Count < cantidadMaximaRecomendaciones)
+                {
+                    var generales = await _publicacionRepositorio.ObtenerPublicacionesParaVos(
+                        Array.Empty<CategoriaEnum>(), DateTime.UtcNow, null,
+                        cantidadMaximaRecomendaciones, cancellationToken);
+
+                    await CompletarResumenesLikes(generales, usuarioId, cancellationToken);
+
+                    var idsIncluidos = recomendaciones.ToHashSet();
+                    var cantidadRestante = cantidadMaximaRecomendaciones - recomendaciones.Count;
+                    var recientes = generales
+                        .Where(publicacion => !publicacion.DioLike && idsIncluidos.Add(publicacion.Id))
+                        .Take(cantidadRestante)
+                        .Select(publicacion => publicacion.Id);
+
+                    recomendaciones = recomendaciones.Concat(recientes).ToArray();
+                }
+
                 sesion = _sesionFypRepositorio.Crear( usuarioId,recomendaciones);
 
                 posicion = 0;
