@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using ProyectoFinalTPI.Backend.Dtos.Auth;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
+using ProyectoFinalTPI.Backend.Extensions;
 
 namespace ProyectoFinalTPI.Backend.Controllers;
 
@@ -114,12 +115,16 @@ public class AuthController : ControllerBase
     }
 
     private bool EsSolicitudDelFrontend() =>
-        _environment.EnvironmentName == "Testing" || Request.Headers["X-Nostalgiar-Request"] == "1";
+        _environment.EnvironmentName == "Testing" || _environment.IsDevelopment() || Request.Headers["X-Nostalgiar-Request"] == "1";
 
     private string? UserAgent() => Request.Headers.UserAgent.ToString();
 
-    private bool TryObtenerUsuarioId(out int usuarioId) =>
-        int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue(JwtRegisteredClaimNames.Sub), out usuarioId);
+    private bool TryObtenerUsuarioId(out int usuarioId)
+    {
+        var id = User.ObtenerUsuarioId();
+        usuarioId = id.GetValueOrDefault();
+        return id.HasValue;
+    }
 
     private void EscribirRefreshCookie(ResultadoAutenticacionDto resultado) =>
         Response.Cookies.Append(RefreshCookieName, resultado.RefreshToken, CookieOptions(resultado.RefreshTokenExpira));

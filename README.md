@@ -339,8 +339,6 @@ reemplazarla por un `ProblemDetails`.
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| `GET` | `/api/publicaciones` | Devuelve todas las publicaciones visibles con sus datos completos (autor, año, lugar, coordenadas, multimedia, categoría) y metadatos de reposts o citas (`repost`: `id`, `originalId`, `author`, `comment`). |
-| `GET` | `/api/publicaciones/test-users` | Devuelve la lista de usuarios de prueba (`id`, `username`) disponibles en la base de datos para desarrollo y testing local. |
 | `POST` | `/api/publicaciones` | Crea una publicación con sus datos, ubicación y multimedia. Recibe `multipart/form-data`, con un archivo o una URL HTTPS. |
 | `POST` | `/api/publicaciones/compartir` | Comparte una publicación existente. Recibe `publicacionOriginalId`, `descripcion` (opcional) y `autorId`. Si `descripcion` está vacía o es null, genera un repost simple (desenrollando a la publicación raíz original); si contiene texto, genera un repost con cita (*quote tweet*) directo a dicha publicación. |
 | `DELETE` | `/api/publicaciones/compartir/{originalId}` | Deshace/elimina el repost simple que el usuario autenticado (o especificado por query `autorId`) realizó sobre la publicación original. No elimina quote tweets ni la publicación original. |
@@ -382,6 +380,21 @@ Antes de escribir en Neo4j, el backend comprueba en PostgreSQL que el usuario ex
 `cantidadLikes` cuenta las relaciones de like de esa publicación y `dioLike` indica si el usuario del token le dio like. Después de quitarlo, para ese usuario `dioLike` será `false`; el contador reflejará los likes restantes. Se devuelve `401 Unauthorized` si falta un JWT válido, `400 Bad Request` ante un ID inválido, `404 Not Found` si el usuario o la publicación no existen o la publicación está oculta, y `500 Internal Server Error` ante un fallo inesperado.
 
 Los likes se guardan en Neo4j y también alimentan `GET /api/feed/para-vos`: se recomiendan publicaciones que gustaron a usuarios con likes en común o que comparten usuarios etiquetados con publicaciones que el usuario marcó. El feed excluye publicaciones que el usuario ya likeó y valida en PostgreSQL que las recomendadas sigan visibles. No se necesita una migración de PostgreSQL para los likes.
+
+### Endpoints de seguimientos
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `POST` | `/api/seguimientos/{idUsuarioASeguir}` | Sigue al usuario indicado. El seguidor se extrae del JWT autenticado. |
+| `DELETE` | `/api/seguimientos/{idUsuarioASeguir}` | Deja de seguir al usuario indicado. No requiere body. El seguidor se extrae del JWT autenticado. |
+| `GET` | `/api/seguimientos/{idUsuario}/seguidos` | Lista los usuarios seguidos por `idUsuario`. |
+| `GET` | `/api/seguimientos/{idUsuario}/seguidores` | Lista los seguidores de `idUsuario`. |
+
+```http
+POST /api/seguimientos/20
+DELETE /api/seguimientos/20
+Authorization: Bearer <token>
+```
 
 ### Crear un comentario
 
@@ -551,3 +564,11 @@ ws://localhost:{puerto}/hubs/chat?access_token=<TOKEN_JWT>
 |---|---|---|
 | `RecibirMensaje` | `MensajeChatDto` | Cuando llega un mensaje nuevo dirigido al usuario conectado. |
 | `MensajeEnviado` | `MensajeChatDto` | Confirmación al emisor de que su mensaje fue guardado y entregado. |
+
+### Endpoints HTTP del chat
+| Método    |	Ruta    |	Descripción
+| GET   |	/api/chat/conversaciones    |	Devuelve las conversaciones activas del usuario autenticado: una entrada por cada usuario con quien haya intercambiado mensajes en los últimos 7 días, con el último mensaje de cada conversación. Requiere JWT. Devuelve lista vacía si no hay conversaciones activas.
+
+### Endpoints de usuarios
+|   Método  |	Ruta    |	Descripción
+|   GET |	/api/usuarios/por-username/{username}   |	Busca un usuario por su username exacto. Devuelve su id y username. Requiere JWT. Devuelve 404 si no existe ningún usuario con ese username.

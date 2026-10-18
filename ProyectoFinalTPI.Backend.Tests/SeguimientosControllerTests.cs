@@ -292,6 +292,68 @@ public class SeguimientosControllerTests
         Assert.DoesNotContain("detalle interno", contenido);
     }
 
+    [Theory]
+    [InlineData(ResultadoSeguimiento.Aplicado, HttpStatusCode.NoContent)]
+    [InlineData(ResultadoSeguimiento.SinCambios, HttpStatusCode.NoContent)]
+    [InlineData(ResultadoSeguimiento.AutoSeguimiento, HttpStatusCode.BadRequest)]
+    [InlineData(ResultadoSeguimiento.UsuarioNoEncontrado, HttpStatusCode.NotFound)]
+    public async Task DejarDeSeguir_por_ruta_devuelve_el_codigo_segun_el_resultado(
+        ResultadoSeguimiento resultado,
+        HttpStatusCode codigoEsperado)
+    {
+        await using var factory = new ApiFactory();
+        factory.Seguimiento.ResultadoDejarDeSeguir = resultado;
+        using var client = factory.CreateClient();
+
+        using var response = await client.DeleteAsync("/api/seguimientos/20?idUsuario=10");
+
+        Assert.Equal(codigoEsperado, response.StatusCode);
+        Assert.Equal((10, 20), factory.Seguimiento.UltimosIds);
+    }
+
+    [Fact]
+    public async Task DejarDeSeguir_por_ruta_sin_usuario_devuelve_401()
+    {
+        await using var factory = new ApiFactory();
+        using var client = factory.CreateClient();
+
+        using var response = await client.DeleteAsync("/api/seguimientos/20");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.False(factory.Seguimiento.FueInvocado);
+    }
+
+    [Theory]
+    [InlineData(ResultadoSeguimiento.Aplicado, HttpStatusCode.Created)]
+    [InlineData(ResultadoSeguimiento.SinCambios, HttpStatusCode.OK)]
+    [InlineData(ResultadoSeguimiento.AutoSeguimiento, HttpStatusCode.BadRequest)]
+    [InlineData(ResultadoSeguimiento.UsuarioNoEncontrado, HttpStatusCode.NotFound)]
+    public async Task Seguir_por_ruta_devuelve_el_codigo_segun_el_resultado(
+        ResultadoSeguimiento resultado,
+        HttpStatusCode codigoEsperado)
+    {
+        await using var factory = new ApiFactory();
+        factory.Seguimiento.ResultadoSeguir = resultado;
+        using var client = factory.CreateClient();
+
+        using var response = await client.PostAsync("/api/seguimientos/20?idUsuario=10", null);
+
+        Assert.Equal(codigoEsperado, response.StatusCode);
+        Assert.Equal((10, 20), factory.Seguimiento.UltimosIds);
+    }
+
+    [Fact]
+    public async Task Seguir_por_ruta_sin_usuario_devuelve_401()
+    {
+        await using var factory = new ApiFactory();
+        using var client = factory.CreateClient();
+
+        using var response = await client.PostAsync("/api/seguimientos/20", null);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.False(factory.Seguimiento.FueInvocado);
+    }
+
     private static HttpRequestMessage CrearRequestDelete(int idUsuario, int idUsuarioASeguir)
     {
         return new HttpRequestMessage(HttpMethod.Delete, "/api/seguimientos")

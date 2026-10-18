@@ -232,7 +232,9 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                     Id = p.Id,
                     Latitud = p.Lugar.Coordenadas.Y,
                     Longitud = p.Lugar.Coordenadas.X,
-                    Categoria = p.Categoria
+                    Categoria = p.Categoria,
+                    Titulo = p.Titulo,
+                    Año = p.Fecha.Year
                 })
                 .Take(limite + 1)
                 .ToListAsync(cancellationToken);

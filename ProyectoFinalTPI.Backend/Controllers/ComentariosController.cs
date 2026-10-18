@@ -6,6 +6,7 @@ using ProyectoFinalTPI.Backend.Dtos.Comentario;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Mappings;
 using ProyectoFinalTPI.Backend.Requests.Comentarios;
+using ProyectoFinalTPI.Backend.Extensions;
 
 namespace ProyectoFinalTPI.Backend.Controllers;
 
@@ -81,9 +82,5 @@ public class ComentariosController(IComentarioServicio comentarioServicio) : Con
             publicacionId, comentarioId, usuarioId.Value, cancellationToken));
     }
 
-    private int? ObtenerUsuarioId()
-    {
-        var valor = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
-        return int.TryParse(valor, out var usuarioId) ? usuarioId : null;
-    }
+    private int? ObtenerUsuarioId() => User.ObtenerUsuarioId();
 }
