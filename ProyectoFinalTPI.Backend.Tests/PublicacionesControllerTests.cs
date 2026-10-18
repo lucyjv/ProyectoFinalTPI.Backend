@@ -63,12 +63,12 @@ namespace ProyectoFinalTPI.Backend.Tests
             await _controller.Crear(request);
 
             //Assert
-            Assert.NotNull(_servicio.CrearDto);
-            Assert.Equal("Recuerdo", _servicio.CrearDto.Titulo);
-            Assert.Equal("Obelisco", _servicio.CrearDto.NombreLugar);
-            Assert.Equal(10, _servicio.CrearDto.AutorId);
-            Assert.Equal(request.UrlArchivo, _servicio.CrearDto.UrlArchivo);
-            Assert.Null(_servicio.CrearDto.Archivo);
+            Assert.NotNull(_servicio.PublicacionCreada);
+            Assert.Equal("Recuerdo", _servicio.PublicacionCreada.Titulo);
+            Assert.Equal("Obelisco", _servicio.PublicacionCreada.Lugar.Nombre);
+            Assert.Equal(10, _servicio.PublicacionCreada.UsuarioId);
+            Assert.Equal(request.UrlArchivo, _servicio.PublicacionCreada.UrlMultimedia);
+            Assert.Null(_servicio.ArchivoRecibido);
         }
 
         [Fact]
@@ -85,7 +85,7 @@ namespace ProyectoFinalTPI.Backend.Tests
             await _controller.Crear(request);
 
             //Assert
-            Assert.Equal("foto.jpg", _servicio.CrearDto!.NombreArchivo);
+            Assert.Equal("foto.jpg", _servicio.NombreArchivoRecibido);
             Assert.Equal(new byte[] { 1, 2, 3 }, _servicio.ArchivoRecibido);
         }
 
@@ -135,10 +135,10 @@ namespace ProyectoFinalTPI.Backend.Tests
             await _controller.Compartir(request);
 
             //Assert
-            Assert.NotNull(_servicio.CompartirDto);
-            Assert.Equal(5, _servicio.CompartirDto.PublicacionOriginalId);
-            Assert.Equal(10, _servicio.CompartirDto.AutorId);
-            Assert.Equal("Compartido", _servicio.CompartirDto.Descripcion);
+            Assert.NotNull(_servicio.PublicacionCompartida);
+            Assert.Equal(5, _servicio.PublicacionCompartida.PublicacionOriginalId);
+            Assert.Equal(10, _servicio.PublicacionCompartida.UsuarioId);
+            Assert.Equal("Compartido", _servicio.PublicacionCompartida.Descripcion);
         }
 
         [Fact]
@@ -151,7 +151,7 @@ namespace ProyectoFinalTPI.Backend.Tests
             await _controller.Compartir(request);
 
             //Assert
-            Assert.Equal(string.Empty, _servicio.CompartirDto!.Descripcion);
+            Assert.Equal(string.Empty, _servicio.PublicacionCompartida!.Descripcion);
         }
 
         [Fact]
@@ -542,7 +542,7 @@ namespace ProyectoFinalTPI.Backend.Tests
             Assert.Equal("/api/publicaciones", problema.Instance);
             Assert.Contains("application/problem+json", respuesta.ContentTypes);
             Assert.DoesNotContain("ruta interna", JsonSerializer.Serialize(problema));
-            Assert.Null(_servicio.CrearDto);
+            Assert.Null(_servicio.PublicacionCreada);
         }
 
         [Theory]
@@ -608,8 +608,9 @@ namespace ProyectoFinalTPI.Backend.Tests
 
             public Exception? Error { get; set; }
             public int IdCreado { get; set; } = 1;
-            public CrearPublicacionDto? CrearDto { get; private set; }
-            public CompartirPublicacionDto? CompartirDto { get; private set; }
+            public Publicacion? PublicacionCreada { get; private set; }
+            public Publicacion? PublicacionCompartida { get; private set; }
+            public string? NombreArchivoRecibido { get; private set; }
             public byte[]? ArchivoRecibido { get; private set; }
             public ResultadoMapaDto Mapa { get; set; } = new();
             public PublicacionFiltroDto? Filtro { get; private set; }
@@ -620,22 +621,23 @@ namespace ProyectoFinalTPI.Backend.Tests
             public string? Cursor { get; private set; }
             public int Limite { get; private set; }
 
-            public async Task<int> Crear(CrearPublicacionDto dto)
+            public async Task<int> Crear(Publicacion publicacion, Stream? archivo = null, string? nombreArchivo = null)
             {
-                CrearDto = dto;
+                PublicacionCreada = publicacion;
+                NombreArchivoRecibido = nombreArchivo;
                 if (Error != null) throw Error;
-                if (dto.Archivo != null)
+                if (archivo != null)
                 {
                     using var copia = new MemoryStream();
-                    await dto.Archivo.CopyToAsync(copia);
+                    await archivo.CopyToAsync(copia);
                     ArchivoRecibido = copia.ToArray();
                 }
                 return IdCreado;
             }
 
-            public Task<int> Compartir(CompartirPublicacionDto dto, CancellationToken cancellationToken = default)
+            public Task<int> Compartir(Publicacion publicacion, CancellationToken cancellationToken = default)
             {
-                CompartirDto = dto;
+                PublicacionCompartida = publicacion;
                 return Error == null ? Task.FromResult(IdCreado) : Task.FromException<int>(Error);
             }
 

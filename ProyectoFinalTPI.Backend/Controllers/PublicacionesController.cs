@@ -46,7 +46,7 @@ namespace ProyectoFinalTPI.Backend.Controllers
             return Ok(_context.Usuarios.Select(u => new { u.Id, u.Username }).ToList());
         }
 
-        [HttpGet]
+        /*[HttpGet]
         public async Task<IActionResult> GetAll()
         {
             var publicaciones = await _context.Publicaciones
@@ -116,7 +116,7 @@ namespace ProyectoFinalTPI.Backend.Controllers
             });
 
             return Ok(result);
-        }
+        }*/
 
         private int? ObtenerUsuarioIdAutenticado()
         {
@@ -133,8 +133,21 @@ namespace ProyectoFinalTPI.Backend.Controllers
             }
         }
 
+        /// <summary>
+        /// Obtiene los pines de publicaciones para mostrar en el mapa.
+        /// </summary>
+        /// <remarks>
+        /// Permite filtrar por un área geográfica, categoría y fechas del recuerdo.
+        /// Solo devuelve publicaciones visibles y no requiere iniciar sesión.
+        /// Devuelve hasta 200 pines; hayMas indica si el área contiene más resultados.
+        /// </remarks>
+        /// <param name="filtro">Filtros de búsqueda enviados por query string.</param>
+        /// <param name="cancellationToken">Permite cancelar la consulta.</param>
+        /// <response code="200">Devuelve los pines encontrados e indica si hay más resultados.</response>
+        /// <response code="400">El área geográfica, la categoría o el rango de fechas no son válidos.</response>
         [HttpGet("mapa")]
         [ProducesResponseType(typeof(ResultadoMapaDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<ResultadoMapaDto>> ObtenerMapa(
             [FromQuery] PublicacionFiltroDto filtro,
             CancellationToken cancellationToken)
@@ -178,7 +191,7 @@ namespace ProyectoFinalTPI.Backend.Controllers
             using var stream = request.Archivo?.OpenReadStream();
 
             var id = await _publicacionServicio.Crear(
-                request.ToCrearPublicacionDto(autorIdFinal, stream));
+                request.ToPublicacion(autorIdFinal), stream, request.Archivo?.FileName);
 
             return Created(
                 $"/api/publicaciones/{id}",

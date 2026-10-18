@@ -1,39 +1,38 @@
-using ProyectoFinalTPI.Backend.Dtos.Publicacion;
+using NetTopologySuite.Geometries;
+using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Requests.Publicaciones;
 
 namespace ProyectoFinalTPI.Backend.Mappings;
 
 public static class PublicacionMappings
 {
-    public static CompartirPublicacionDto ToCompartirPublicacionDto(
+    public static Publicacion ToPublicacion(
         this CompartirPublicacionRequest request, int autorId)
     {
-        return new CompartirPublicacionDto
+        return new Publicacion
         {
             PublicacionOriginalId = request.PublicacionOriginalId,
-            AutorId = autorId,
+            UsuarioId = autorId,
             Descripcion = request.Descripcion ?? string.Empty
         };
     }
 
-    // El controlador administra la apertura y el cierre del stream.
-    public static CrearPublicacionDto ToCrearPublicacionDto(
-        this CrearPublicacionRequest request, int autorId, Stream? archivo)
+    public static Publicacion ToPublicacion(this CrearPublicacionRequest request, int autorId)
     {
-        return new CrearPublicacionDto
+        return new Publicacion
         {
             Titulo = request.Titulo,
             Descripcion = request.Descripcion,
             Fecha = request.Fecha,
             Categoria = request.Categoria,
-            NombreLugar = request.NombreLugar,
-            Latitud = request.Latitud,
-            Longitud = request.Longitud,
+            Lugar = new Lugar
+            {
+                Nombre = request.NombreLugar,
+                Coordenadas = new Point(request.Longitud, request.Latitud) { SRID = 4326 }
+            },
             TipoMultimedia = request.TipoMultimedia,
-            Archivo = archivo,
-            NombreArchivo = request.Archivo?.FileName,
-            UrlArchivo = request.UrlArchivo,
-            AutorId = autorId
+            UrlMultimedia = request.UrlArchivo ?? string.Empty,
+            UsuarioId = autorId
         };
     }
 }

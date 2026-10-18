@@ -180,6 +180,12 @@ builder.Services.AddSwaggerGen(options =>
             Array.Empty<string>()
         }
     });
+    var xmlFile = $"{typeof(Program).Assembly.GetName().Name}.xml";
+    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
+
+    options.IncludeXmlComments(xmlPath);
+    var filtrosXml = $"{typeof(ProyectoFinalTPI.Backend.Dtos.Publicacion.PublicacionFiltroDto).Assembly.GetName().Name}.xml";
+    options.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, filtrosXml));
 });
 
 var app = builder.Build();
