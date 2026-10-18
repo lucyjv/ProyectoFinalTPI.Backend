@@ -12,6 +12,8 @@
 # Archivos de usuario y temporales
 *.tmp
 *.log
+TestResults/
+coverage-report/
 
 # Sistema operativo
 .DS_Store

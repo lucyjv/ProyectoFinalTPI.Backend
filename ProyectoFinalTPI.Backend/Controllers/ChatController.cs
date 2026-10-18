@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
+using ProyectoFinalTPI.Backend.Extensions;
 
 namespace ProyectoFinalTPI.Backend.Controllers;
 
@@ -33,10 +34,5 @@ public class ChatController : ControllerBase
         return Ok(conversaciones);
     }
 
-    private int ObtenerUsuarioIdAutenticado()
-    {
-        var valor = User.FindFirstValue(ClaimTypes.NameIdentifier)
-                 ?? User.FindFirstValue(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub);
-        return int.Parse(valor!);
-    }
+    private int ObtenerUsuarioIdAutenticado() => User.ObtenerUsuarioIdRequerido();
 }
