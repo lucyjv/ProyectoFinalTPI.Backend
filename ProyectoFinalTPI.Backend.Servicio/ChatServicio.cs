@@ -66,6 +66,18 @@ namespace ProyectoFinalTPI.Backend.Servicio
         }
 
         /// <inheritdoc/>
+        public async Task EliminarConversacionAsync(int usuarioId, int otroUsuarioId)
+        {
+            if (otroUsuarioId == usuarioId)
+                throw new ArgumentException("No podés eliminar una conversación con vos mismo.");
+
+            var eliminados = await _repositorio.EliminarConversacionAsync(usuarioId, otroUsuarioId);
+
+            if (eliminados == 0)
+                throw new KeyNotFoundException("No existe ninguna conversación entre los usuarios indicados.");
+        }
+
+        /// <inheritdoc/>
         public async Task<IEnumerable<ConversacionResumenDto>> ObtenerConversacionesActivasAsync(
             int usuarioId)
         {

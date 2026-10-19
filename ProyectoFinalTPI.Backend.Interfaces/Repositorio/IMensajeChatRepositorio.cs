@@ -32,5 +32,12 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Repositorio
         /// Si el usuario no tiene conversaciones activas devuelve una colección vacía.
         /// </summary>
         Task<IEnumerable<MensajeChat>> ObtenerConversacionesActivasAsync(int usuarioId);
+
+        /// <summary>
+        /// Elimina todos los mensajes entre dos usuarios (en ambas direcciones),
+        /// tanto expirados como no expirados.
+        /// Devuelve la cantidad de mensajes eliminados.
+        /// </summary>
+        Task<int> EliminarConversacionAsync(int usuarioId, int otroUsuarioId);
     }
 }

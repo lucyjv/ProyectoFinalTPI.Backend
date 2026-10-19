@@ -34,5 +34,12 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Servicio
         /// Devuelve lista vacía si no hay conversaciones activas.
         /// </summary>
         Task<IEnumerable<ConversacionResumenDto>> ObtenerConversacionesActivasAsync(int usuarioId);
+
+        /// <summary>
+        /// Elimina todos los mensajes entre el usuario autenticado y otro usuario específico.
+        /// Lanza <see cref="ArgumentException"/> si <paramref name="otroUsuarioId"/> es igual a <paramref name="usuarioId"/>.
+        /// Lanza <see cref="KeyNotFoundException"/> si no existe ninguna conversación entre los dos usuarios.
+        /// </summary>
+        Task EliminarConversacionAsync(int usuarioId, int otroUsuarioId);
     }
 }
