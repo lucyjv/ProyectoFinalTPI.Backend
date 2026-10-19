@@ -35,5 +35,24 @@ public class ChatController : ControllerBase
         return Ok(conversaciones);
     }
 
+    [HttpDelete("conversaciones/{otroUsuarioId:int}")]
+    [SwaggerOperation(
+        Summary = "Elimina la conversación con un usuario específico.",
+        Description = "Requiere autenticación. Elimina todos los mensajes entre el usuario autenticado y el usuario indicado, independientemente de su fecha de expiración."
+    )]
+    [SwaggerResponse(StatusCodes.Status204NoContent, "Conversación eliminada correctamente.")]
+    [SwaggerResponse(StatusCodes.Status400BadRequest, "El id del otro usuario no puede ser el mismo que el del usuario autenticado.", typeof(ProblemDetails))]
+    [SwaggerResponse(StatusCodes.Status401Unauthorized, "Se requiere una autenticación válida.")]
+    [SwaggerResponse(StatusCodes.Status403Forbidden, "El token no permite identificar un usuario válido.", typeof(ProblemDetails))]
+    [SwaggerResponse(StatusCodes.Status404NotFound, "No existe ninguna conversación entre los dos usuarios.", typeof(ProblemDetails))]
+    public async Task<IActionResult> EliminarConversacion(int otroUsuarioId, CancellationToken cancellationToken)
+    {
+        // ArgumentException → 400 y KeyNotFoundException → 404
+        // los maneja ManejoExcepcionesMiddleware automáticamente.
+        var usuarioId = ObtenerUsuarioIdAutenticado();
+        await _chatServicio.EliminarConversacionAsync(usuarioId, otroUsuarioId);
+        return NoContent();
+    }
+
     private int ObtenerUsuarioIdAutenticado() => User.ObtenerUsuarioIdRequerido();
 }

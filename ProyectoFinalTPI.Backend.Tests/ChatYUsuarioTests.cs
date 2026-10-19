@@ -138,6 +138,87 @@ public class ChatServicioObtenerConversacionesTests
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+//  ChatServicio — EliminarConversacionAsync
+// ═══════════════════════════════════════════════════════════════════════════
+
+public class ChatServicioEliminarConversacionTests
+{
+    private readonly Mock<IMensajeChatRepositorio> _repositorioMock;
+    private readonly IChatServicio _servicio;
+
+    public ChatServicioEliminarConversacionTests()
+    {
+        _repositorioMock = new Mock<IMensajeChatRepositorio>();
+        _servicio = new ChatServicio(_repositorioMock.Object);
+    }
+
+    [Fact]
+    public async Task EliminarConversacionAsync_MismoUsuario_LanzaArgumentException()
+    {
+        // Act & Assert
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => _servicio.EliminarConversacionAsync(5, 5));
+    }
+
+    [Fact]
+    public async Task EliminarConversacionAsync_MismoUsuario_NoConsultaElRepositorio()
+    {
+        // Act
+        await Record.ExceptionAsync(() => _servicio.EliminarConversacionAsync(5, 5));
+
+        // Assert
+        _repositorioMock.Verify(
+            r => r.EliminarConversacionAsync(It.IsAny<int>(), It.IsAny<int>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task EliminarConversacionAsync_SinMensajes_LanzaKeyNotFoundException()
+    {
+        // Arrange: el repositorio informa que no había nada que borrar.
+        _repositorioMock
+            .Setup(r => r.EliminarConversacionAsync(1, 2))
+            .ReturnsAsync(0);
+
+        // Act & Assert
+        await Assert.ThrowsAsync<KeyNotFoundException>(
+            () => _servicio.EliminarConversacionAsync(1, 2));
+    }
+
+    [Fact]
+    public async Task EliminarConversacionAsync_ConMensajes_CompletaSinExcepcion()
+    {
+        // Arrange
+        _repositorioMock
+            .Setup(r => r.EliminarConversacionAsync(1, 2))
+            .ReturnsAsync(3);
+
+        // Act & Assert: no debe lanzar
+        var ex = await Record.ExceptionAsync(
+            () => _servicio.EliminarConversacionAsync(1, 2));
+
+        Assert.Null(ex);
+    }
+
+    [Fact]
+    public async Task EliminarConversacionAsync_LlamaAlRepositorioUnaVez()
+    {
+        // Arrange
+        _repositorioMock
+            .Setup(r => r.EliminarConversacionAsync(1, 2))
+            .ReturnsAsync(1);
+
+        // Act
+        await _servicio.EliminarConversacionAsync(1, 2);
+
+        // Assert
+        _repositorioMock.Verify(
+            r => r.EliminarConversacionAsync(1, 2),
+            Times.Once);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  UsuarioServicio — ObtenerPorUsernameAsync
 // ═══════════════════════════════════════════════════════════════════════════
 

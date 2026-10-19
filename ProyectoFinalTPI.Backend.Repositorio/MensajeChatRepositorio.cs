@@ -54,6 +54,16 @@ namespace ProyectoFinalTPI.Backend.Repositorio
         }
 
         /// <inheritdoc/>
+        public async Task<int> EliminarConversacionAsync(int usuarioId, int otroUsuarioId)
+        {
+            return await _context.MensajesChat
+                .Where(m =>
+                    (m.EmisorId == usuarioId      && m.DestinatarioId == otroUsuarioId) ||
+                    (m.EmisorId == otroUsuarioId  && m.DestinatarioId == usuarioId))
+                .ExecuteDeleteAsync();
+        }
+
+        /// <inheritdoc/>
         public async Task<IEnumerable<MensajeChat>> ObtenerConversacionesActivasAsync(int usuarioId)
         {
             var ahora = DateTime.UtcNow;
