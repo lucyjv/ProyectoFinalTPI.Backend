@@ -157,6 +157,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
+    options.EnableAnnotations();
     options.SwaggerDoc("v1", new() { Title = "Nostalgia API", Version = "v1" });
 
     // Inyecta X-Nostalgiar-Request: 1 automáticamente en todos los requests desde Swagger
@@ -185,6 +186,12 @@ builder.Services.AddSwaggerGen(options =>
             Array.Empty<string>()
         }
     });
+    var xmlFile = $"{typeof(Program).Assembly.GetName().Name}.xml";
+    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
+
+    options.IncludeXmlComments(xmlPath);
+    var filtrosXml = $"{typeof(ProyectoFinalTPI.Backend.Dtos.Publicacion.PublicacionFiltroDto).Assembly.GetName().Name}.xml";
+    options.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, filtrosXml));
 });
 
 var app = builder.Build();

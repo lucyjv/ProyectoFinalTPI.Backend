@@ -1,3 +1,4 @@
+using Swashbuckle.AspNetCore.Annotations;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
@@ -11,6 +12,7 @@ namespace ProyectoFinalTPI.Backend.Controllers;
 
 [ApiController]
 [Route("api/auth")]
+[SwaggerResponse(StatusCodes.Status500InternalServerError, "Ocurrió un error inesperado al procesar la operación.", typeof(ProblemDetails))]
 public class AuthController : ControllerBase
 {
     public const string RefreshCookieName = "__Host-Nostalgiar.Refresh";
@@ -25,6 +27,15 @@ public class AuthController : ControllerBase
 
     [HttpPost("registro")]
     [EnableRateLimiting("auth-intentos")]
+    [SwaggerOperation(
+        Summary = "Registra una cuenta.",
+        Description = "Recibe los datos del usuario, devuelve el token de acceso y establece la cookie HttpOnly de renovación. Fuera de Development y Testing requiere X-Nostalgiar-Request: 1."
+    )]
+    [SwaggerResponse(StatusCodes.Status201Created, "Cuenta creada y sesión iniciada.", typeof(AuthRespuestaDto))]
+    [SwaggerResponse(StatusCodes.Status400BadRequest, "Los datos o parámetros enviados no son válidos.")]
+    [SwaggerResponse(StatusCodes.Status409Conflict, "Ya existe una cuenta con el email indicado.")]
+    [SwaggerResponse(StatusCodes.Status415UnsupportedMediaType, "Formato de contenido no compatible; utilice application/json.", typeof(ProblemDetails))]
+    [SwaggerResponse(StatusCodes.Status429TooManyRequests, "Se superó el límite de intentos. Espere antes de reintentar.")]
     public async Task<IActionResult> Registro([FromBody] RegistroDto dto, CancellationToken cancellationToken)
     {
         if (!EsSolicitudDelFrontend()) return BadRequest(new { mensaje = "Solicitud de autenticación inválida." });
@@ -43,6 +54,15 @@ public class AuthController : ControllerBase
 
     [HttpPost("login")]
     [EnableRateLimiting("auth-intentos")]
+    [SwaggerOperation(
+        Summary = "Inicia sesión.",
+        Description = "Valida email y contraseña, devuelve el token de acceso y establece la cookie HttpOnly de renovación. Fuera de Development y Testing requiere X-Nostalgiar-Request: 1."
+    )]
+    [SwaggerResponse(StatusCodes.Status200OK, "Sesión iniciada.", typeof(AuthRespuestaDto))]
+    [SwaggerResponse(StatusCodes.Status400BadRequest, "Los datos o parámetros enviados no son válidos.")]
+    [SwaggerResponse(StatusCodes.Status401Unauthorized, "Email o contraseña incorrectos.")]
+    [SwaggerResponse(StatusCodes.Status415UnsupportedMediaType, "Formato de contenido no compatible; utilice application/json.", typeof(ProblemDetails))]
+    [SwaggerResponse(StatusCodes.Status429TooManyRequests, "Se superó el límite de intentos. Espere antes de reintentar.")]
     public async Task<IActionResult> Login([FromBody] LoginDto dto, CancellationToken cancellationToken)
     {
         if (!EsSolicitudDelFrontend()) return BadRequest(new { mensaje = "Solicitud de autenticación inválida." });
@@ -60,6 +80,13 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("refresh")]
+    [SwaggerOperation(
+        Summary = "Renueva la sesión.",
+        Description = "Utiliza la cookie de renovación y la reemplaza por una nueva. Devuelve un nuevo token de acceso. Fuera de Development y Testing requiere X-Nostalgiar-Request: 1."
+    )]
+    [SwaggerResponse(StatusCodes.Status200OK, "Sesión renovada.", typeof(AuthRespuestaDto))]
+    [SwaggerResponse(StatusCodes.Status400BadRequest, "Los datos o parámetros enviados no son válidos.")]
+    [SwaggerResponse(StatusCodes.Status401Unauthorized, "La cookie no existe o la sesión es inválida, expiró o ya fue renovada.")]
     public async Task<IActionResult> Refresh(CancellationToken cancellationToken)
     {
         if (!EsSolicitudDelFrontend()) return BadRequest(new { mensaje = "Solicitud de autenticación inválida." });
@@ -80,6 +107,12 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("logout")]
+    [SwaggerOperation(
+        Summary = "Cierra la sesión actual.",
+        Description = "Revoca la sesión asociada a la cookie de renovación y elimina esa cookie. Fuera de Development y Testing requiere X-Nostalgiar-Request: 1."
+    )]
+    [SwaggerResponse(StatusCodes.Status204NoContent, "Sesión cerrada; no devuelve contenido.")]
+    [SwaggerResponse(StatusCodes.Status400BadRequest, "Los datos o parámetros enviados no son válidos.")]
     public async Task<IActionResult> Logout(CancellationToken cancellationToken)
     {
         if (!EsSolicitudDelFrontend()) return BadRequest(new { mensaje = "Solicitud de autenticación inválida." });
@@ -91,6 +124,13 @@ public class AuthController : ControllerBase
 
     [Authorize]
     [HttpPost("logout-todos")]
+    [SwaggerOperation(
+        Summary = "Cierra todas las sesiones del usuario.",
+        Description = "Requiere autenticación. Revoca todas las sesiones del usuario y elimina la cookie de renovación. Fuera de Development y Testing requiere X-Nostalgiar-Request: 1."
+    )]
+    [SwaggerResponse(StatusCodes.Status204NoContent, "Sesiones cerradas; no devuelve contenido.")]
+    [SwaggerResponse(StatusCodes.Status400BadRequest, "Los datos o parámetros enviados no son válidos.")]
+    [SwaggerResponse(StatusCodes.Status401Unauthorized, "Se requiere una autenticación válida.")]
     public async Task<IActionResult> LogoutTodos(CancellationToken cancellationToken)
     {
         if (!EsSolicitudDelFrontend()) return BadRequest(new { mensaje = "Solicitud de autenticación inválida." });
@@ -102,6 +142,12 @@ public class AuthController : ControllerBase
 
     [Authorize]
     [HttpGet("me")]
+    [SwaggerOperation(
+        Summary = "Obtiene el usuario autenticado.",
+        Description = "Devuelve identificador, username, email y condición de administrador a partir de los claims del token."
+    )]
+    [SwaggerResponse(StatusCodes.Status200OK, "Datos del usuario autenticado.", typeof(UsuarioAutenticadoDto))]
+    [SwaggerResponse(StatusCodes.Status401Unauthorized, "Se requiere una autenticación válida.")]
     public IActionResult Me()
     {
         if (!TryObtenerUsuarioId(out var usuarioId)) return Unauthorized();

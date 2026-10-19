@@ -32,31 +32,29 @@ namespace ProyectoFinalTPI.Backend.Tests
             //Arrange
             _usuarios.Existe = true;
             _repositorio.IdCreado = 25;
-            var dto = new CrearPublicacionDto
+            var publicacion = new Publicacion
             {
-                AutorId = 10,
+                UsuarioId = 10,
                 Titulo = "Recuerdo del Obelisco",
                 Descripcion = "Una visita a Buenos Aires",
-                NombreLugar = "Obelisco",
-                Latitud = -34.6037,
-                Longitud = -58.3816,
+                Lugar = new Lugar { Nombre = "Obelisco", Coordenadas = new NetTopologySuite.Geometries.Point(-58.3816, -34.6037) { SRID = 4326 } },
                 Fecha = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc),
                 Categoria = CategoriaEnum.Lugares,
                 TipoMultimedia = MultimediaEnum.Foto,
-                UrlArchivo = "https://example.com/original.jpg"
+                UrlMultimedia = "https://example.com/original.jpg"
             };
 
             //Act
-            var result = await _servicio.Crear(dto);
+            var result = await _servicio.Crear(publicacion);
 
             //Assert
             Assert.Equal(25, result);
             Assert.NotNull(_repositorio.Creada);
-            Assert.Equal(dto.Titulo, _repositorio.Creada.Titulo);
+            Assert.Equal(publicacion.Titulo, _repositorio.Creada.Titulo);
             Assert.Equal("Obelisco", _repositorio.Creada.Lugar.Nombre);
             Assert.Equal(10, _repositorio.Creada.UsuarioId);
             Assert.Equal(_multimedia.Url, _repositorio.Creada.UrlMultimedia);
-            Assert.Equal(dto.UrlArchivo, _multimedia.UrlExterna);
+            Assert.Equal("https://example.com/original.jpg", _multimedia.UrlExterna);
             Assert.Equal(10, _usuarios.IdConsultado);
         }
 
@@ -65,10 +63,10 @@ namespace ProyectoFinalTPI.Backend.Tests
         {
             //Arrange
             _usuarios.Existe = false;
-            var dto = new CrearPublicacionDto { AutorId = 99 };
+            var publicacion = new Publicacion { UsuarioId = 99 };
 
             //Act
-            var result = await Assert.ThrowsAsync<KeyNotFoundException>(() => _servicio.Crear(dto));
+            var result = await Assert.ThrowsAsync<KeyNotFoundException>(() => _servicio.Crear(publicacion));
 
             //Assert
             Assert.Contains("usuario", result.Message);
@@ -83,10 +81,10 @@ namespace ProyectoFinalTPI.Backend.Tests
             _usuarios.Existe = true;
             var error = new InvalidOperationException("Error al subir la imagen");
             _multimedia.Error = error;
-            var dto = new CrearPublicacionDto { AutorId = 10 };
+            var publicacion = new Publicacion { UsuarioId = 10 };
 
             //Act
-            var result = await Assert.ThrowsAsync<InvalidOperationException>(() => _servicio.Crear(dto));
+            var result = await Assert.ThrowsAsync<InvalidOperationException>(() => _servicio.Crear(publicacion));
 
             //Assert
             Assert.Same(error, result);
@@ -95,17 +93,17 @@ namespace ProyectoFinalTPI.Backend.Tests
         }
 
         [Fact]
-        public async Task QueSeCreeElLugarConLasCoordenadasCorrectas()
+        public async Task QueSeConserveElLugarDeLaEntidad()
         {
             //Arrange
             _usuarios.Existe = true;
-            var dto = new CrearPublicacionDto
+            var publicacion = new Publicacion
             {
-                AutorId = 10, NombreLugar = "Obelisco", Latitud = -34.6037, Longitud = -58.3816
+                UsuarioId = 10, Lugar = new Lugar { Nombre = "Obelisco", Coordenadas = new NetTopologySuite.Geometries.Point(-58.3816, -34.6037) { SRID = 4326 } }
             };
 
             //Act
-            await _servicio.Crear(dto);
+            await _servicio.Crear(publicacion);
 
             //Assert
             Assert.NotNull(_repositorio.Creada);
@@ -125,22 +123,23 @@ namespace ProyectoFinalTPI.Backend.Tests
                 Id = 5, Titulo = "Recuerdo original", LugarId = 7,
                 UsuarioId = 20, UrlMultimedia = "https://example.com/foto.jpg"
             };
-            var dto = new CompartirPublicacionDto
+            var publicacion = new Publicacion
             {
-                AutorId = 10, PublicacionOriginalId = 5, Descripcion = "Mi recuerdo compartido"
+                UsuarioId = 10, PublicacionOriginalId = 5, Descripcion = "Mi recuerdo compartido"
             };
 
             //Act
-            var result = await _servicio.Compartir(dto);
+            var result = await _servicio.Compartir(publicacion);
 
             //Assert
             Assert.Equal(30, result);
             Assert.NotNull(_repositorio.Creada);
+            Assert.Same(publicacion, _repositorio.Creada);
             Assert.Equal(5, _repositorio.Creada.PublicacionOriginalId);
             Assert.Equal("Recuerdo original", _repositorio.Creada.Titulo);
             Assert.Equal(7, _repositorio.Creada.LugarId);
             Assert.Equal(10, _repositorio.Creada.UsuarioId);
-            Assert.Equal(dto.Descripcion, _repositorio.Creada.Descripcion);
+            Assert.Equal(publicacion.Descripcion, _repositorio.Creada.Descripcion);
             Assert.Equal(5, _repositorio.IdOriginalConsultado);
             Assert.Equal(0, _multimedia.Llamadas);
         }
@@ -150,10 +149,10 @@ namespace ProyectoFinalTPI.Backend.Tests
         {
             //Arrange
             _usuarios.Existe = false;
-            var dto = new CompartirPublicacionDto { AutorId = 99, PublicacionOriginalId = 5 };
+            var publicacion = new Publicacion { UsuarioId = 99, PublicacionOriginalId = 5 };
 
             //Act
-            await Assert.ThrowsAsync<KeyNotFoundException>(() => _servicio.Compartir(dto));
+            await Assert.ThrowsAsync<KeyNotFoundException>(() => _servicio.Compartir(publicacion));
 
             //Assert
             Assert.Null(_repositorio.IdOriginalConsultado);
@@ -166,10 +165,10 @@ namespace ProyectoFinalTPI.Backend.Tests
             //Arrange
             _usuarios.Existe = true;
             _repositorio.Original = null;
-            var dto = new CompartirPublicacionDto { AutorId = 10, PublicacionOriginalId = 99 };
+            var publicacion = new Publicacion { UsuarioId = 10, PublicacionOriginalId = 99 };
 
             //Act
-            await Assert.ThrowsAsync<KeyNotFoundException>(() => _servicio.Compartir(dto));
+            await Assert.ThrowsAsync<KeyNotFoundException>(() => _servicio.Compartir(publicacion));
 
             //Assert
             Assert.Equal(99, _repositorio.IdOriginalConsultado);

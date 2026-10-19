@@ -1,3 +1,4 @@
+using Swashbuckle.AspNetCore.Annotations;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -9,6 +10,7 @@ namespace ProyectoFinalTPI.Backend.Controllers
 {
     [ApiController]
     [Route("api/seguimientos")]
+    [SwaggerResponse(StatusCodes.Status500InternalServerError, "Ocurrió un error inesperado al procesar la operación.")]
     public class SeguimientosController : ControllerBase
     {
         private readonly ISeguimientoServicio _seguimientoServicio;
@@ -21,6 +23,15 @@ namespace ProyectoFinalTPI.Backend.Controllers
         }
 
         [HttpPost]
+        [SwaggerOperation(
+            Summary = "Sigue a un usuario.",
+            Description = "Recibe los identificadores en el cuerpo JSON y prioriza el usuario autenticado sobre IdUsuario. Repetir la operación no duplica relaciones ni genera cambios adicionales."
+        )]
+        [SwaggerResponse(StatusCodes.Status201Created, "Se creó el seguimiento.")]
+        [SwaggerResponse(StatusCodes.Status200OK, "El usuario ya estaba seguido.")]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "Los identificadores no son válidos o se intenta operar sobre el propio usuario.")]
+        [SwaggerResponse(StatusCodes.Status404NotFound, "Uno o ambos usuarios no existen.")]
+        [SwaggerResponse(StatusCodes.Status415UnsupportedMediaType, "Formato de contenido no compatible; utilice application/json.", typeof(ProblemDetails))]
         public Task<IActionResult> SeguirUsuario(
             [FromBody] SeguirUsuarioRequest request, CancellationToken cancellationToken)
         {
@@ -32,6 +43,15 @@ namespace ProyectoFinalTPI.Backend.Controllers
         }
 
         [HttpPost("{idUsuarioASeguir:int}")]
+        [SwaggerOperation(
+            Summary = "Sigue a un usuario.",
+            Description = "Recibe el destinatario por ruta y el usuario por token o, como alternativa, idUsuario en la consulta. Repetir la operación no duplica relaciones ni genera cambios adicionales."
+        )]
+        [SwaggerResponse(StatusCodes.Status201Created, "Se creó el seguimiento.")]
+        [SwaggerResponse(StatusCodes.Status200OK, "El usuario ya estaba seguido.")]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "Los identificadores no son válidos o se intenta operar sobre el propio usuario.")]
+        [SwaggerResponse(StatusCodes.Status404NotFound, "Uno o ambos usuarios no existen.")]
+        [SwaggerResponse(StatusCodes.Status401Unauthorized, "No se pudo identificar al usuario que realiza la operación.")]
         public Task<IActionResult> SeguirUsuarioPorRuta(
             int idUsuarioASeguir, [FromQuery] int? idUsuario = null, CancellationToken cancellationToken = default)
         {
@@ -53,6 +73,14 @@ namespace ProyectoFinalTPI.Backend.Controllers
         }
 
         [HttpDelete("{idUsuarioASeguir:int}")]
+        [SwaggerOperation(
+            Summary = "Deja de seguir a un usuario.",
+            Description = "Recibe el destinatario por ruta y el usuario por token o, como alternativa, idUsuario en la consulta. Repetir la operación no duplica relaciones ni genera cambios adicionales."
+        )]
+        [SwaggerResponse(StatusCodes.Status204NoContent, "Se eliminó el seguimiento o ya no existía; no devuelve contenido.")]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "Los identificadores no son válidos o se intenta operar sobre el propio usuario.")]
+        [SwaggerResponse(StatusCodes.Status404NotFound, "Uno o ambos usuarios no existen.")]
+        [SwaggerResponse(StatusCodes.Status401Unauthorized, "No se pudo identificar al usuario que realiza la operación.")]
         public Task<IActionResult> DejarDeSeguirUsuarioPorRuta(
             int idUsuarioASeguir, [FromQuery] int? idUsuario = null, CancellationToken cancellationToken = default)
         {
@@ -74,6 +102,14 @@ namespace ProyectoFinalTPI.Backend.Controllers
         }
 
         [HttpDelete]
+        [SwaggerOperation(
+            Summary = "Deja de seguir a un usuario.",
+            Description = "Recibe los identificadores en el cuerpo JSON y prioriza el usuario autenticado sobre IdUsuario. Repetir la operación no duplica relaciones ni genera cambios adicionales."
+        )]
+        [SwaggerResponse(StatusCodes.Status204NoContent, "Se eliminó el seguimiento o ya no existía; no devuelve contenido.")]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "Los identificadores no son válidos o se intenta operar sobre el propio usuario.")]
+        [SwaggerResponse(StatusCodes.Status404NotFound, "Uno o ambos usuarios no existen.")]
+        [SwaggerResponse(StatusCodes.Status415UnsupportedMediaType, "Formato de contenido no compatible; utilice application/json.", typeof(ProblemDetails))]
         public Task<IActionResult> DejarDeSeguirUsuario(
             [FromBody] DejarDeSeguirUsuarioRequest request, CancellationToken cancellationToken)
         {
@@ -85,6 +121,13 @@ namespace ProyectoFinalTPI.Backend.Controllers
         }
 
         [HttpGet("{idUsuario:int}/seguidos")]
+        [SwaggerOperation(
+            Summary = "Lista los usuarios seguidos.",
+            Description = "Devuelve los usuarios seguidos asociados al identificador indicado. La lista puede estar vacía."
+        )]
+        [SwaggerResponse(StatusCodes.Status200OK, "Lista de usuarios seguidos.", typeof(IReadOnlyList<ProyectoFinalTPI.Backend.Dtos.Usuario.AutorResumenDto>))]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "Los datos o parámetros enviados no son válidos.")]
+        [SwaggerResponse(StatusCodes.Status404NotFound, "El usuario indicado no existe.")]
         public async Task<IActionResult> ListarSeguidos( int idUsuario, CancellationToken cancellationToken)
         {
             if (idUsuario <= 0)
@@ -118,6 +161,13 @@ namespace ProyectoFinalTPI.Backend.Controllers
         }
 
         [HttpGet("{idUsuario:int}/seguidores")]
+        [SwaggerOperation(
+            Summary = "Lista los usuarios seguidores.",
+            Description = "Devuelve los usuarios seguidores asociados al identificador indicado. La lista puede estar vacía."
+        )]
+        [SwaggerResponse(StatusCodes.Status200OK, "Lista de usuarios seguidores.", typeof(IReadOnlyList<ProyectoFinalTPI.Backend.Dtos.Usuario.AutorResumenDto>))]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "Los datos o parámetros enviados no son válidos.")]
+        [SwaggerResponse(StatusCodes.Status404NotFound, "El usuario indicado no existe.")]
         public async Task<IActionResult> ListarSeguidores(
             int idUsuario, CancellationToken cancellationToken)
         {

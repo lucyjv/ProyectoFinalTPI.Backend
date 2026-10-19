@@ -69,38 +69,35 @@ public class ComentarioServicio(
     }
 
     public async Task<ComentarioDto> Crear(
-        int publicacionId, CrearComentarioDto dto, CancellationToken cancellationToken = default)
+        Comentario comentario, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(dto);
-        await ValidarPublicacion(publicacionId, cancellationToken);
-        ValidarId(dto.UsuarioId, "usuario");
-        var contenido = dto.Contenido?.Trim() ?? string.Empty;
+        ArgumentNullException.ThrowIfNull(comentario);
+        await ValidarPublicacion(comentario.PublicacionId, cancellationToken);
+        ValidarId(comentario.UsuarioId, "usuario");
+        var contenido = comentario.Contenido?.Trim() ?? string.Empty;
         if (contenido.Length == 0) throw new ArgumentException("Debe indicar el contenido del comentario.");
         if (contenido.Length > 1000) throw new ArgumentException("El comentario no puede superar los 1000 caracteres.");
-        var usuario = await usuarioRepositorio.ObtenerPorIdAsync(dto.UsuarioId)
+        var usuario = await usuarioRepositorio.ObtenerPorIdAsync(comentario.UsuarioId)
             ?? throw new KeyNotFoundException("El usuario indicado no existe.");
 
         Comentario? padre = null;
-        if (dto.ComentarioPadreId.HasValue)
+        if (comentario.ComentarioPadreId.HasValue)
         {
             padre = await comentarioRepositorio.Obtener(
-                publicacionId, dto.ComentarioPadreId.Value, cancellationToken)
+                comentario.PublicacionId, comentario.ComentarioPadreId.Value, cancellationToken)
                 ?? throw new KeyNotFoundException("El comentario al que querés responder no existe.");
             if (padre.EstaEliminado)
                 throw new ArgumentException("No se puede responder a un comentario eliminado.");
         }
 
-        var comentario = new Comentario
-        {
-            Contenido = contenido,
-            FechaCreacion = DateTime.UtcNow,
-            PublicacionId = publicacionId,
-            UsuarioId = usuario.Id,
-            Usuario = usuario,
-            ComentarioPadreId = padre?.Id
-        };
+        comentario.Contenido = contenido;
+        comentario.FechaCreacion = DateTime.UtcNow;
+        comentario.UsuarioId = usuario.Id;
+        comentario.Usuario = usuario;
+        comentario.ComentarioPadreId = padre?.Id;
+
         await comentarioRepositorio.Crear(comentario, cancellationToken);
-        return comentario.ToDto(dto.UsuarioId);
+        return comentario.ToDto(comentario.UsuarioId);
     }
 
     public async Task Eliminar(

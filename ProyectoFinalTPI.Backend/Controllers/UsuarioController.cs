@@ -1,3 +1,4 @@
+using Swashbuckle.AspNetCore.Annotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
@@ -7,6 +8,7 @@ namespace ProyectoFinalTPI.Backend.Controllers;
 [ApiController]
 [Route("api/usuario")]
 [Authorize]
+[SwaggerResponse(StatusCodes.Status500InternalServerError, "Ocurrió un error inesperado al procesar la operación.", typeof(ProblemDetails))]
 public class UsuarioController : ControllerBase
 {
     private readonly IUsuarioServicio _usuarioServicio;
@@ -16,17 +18,14 @@ public class UsuarioController : ControllerBase
         _usuarioServicio = usuarioServicio;
     }
 
-    /// <summary>
-    /// Devuelve el id y el username del usuario que coincide exactamente con el username buscado.
-    /// </summary>
-    /// <param name="username">Username exacto a buscar.</param>
-    /// <response code="200">Usuario encontrado.</response>
-    /// <response code="401">El usuario no está autenticado.</response>
-    /// <response code="404">No existe ningún usuario con ese username.</response>
     [HttpGet("por-username/{username}")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [SwaggerOperation(
+        Summary = "Busca un usuario por su username.",
+        Description = "Requiere autenticación. Busca una coincidencia exacta y devuelve el identificador y el username."
+    )]
+    [SwaggerResponse(StatusCodes.Status200OK, "Usuario encontrado.", typeof(ProyectoFinalTPI.Backend.Dtos.Usuario.UsuarioResumenDto))]
+    [SwaggerResponse(StatusCodes.Status401Unauthorized, "Se requiere una autenticación válida.")]
+    [SwaggerResponse(StatusCodes.Status404NotFound, "El recurso solicitado no existe o no está disponible.", typeof(ProblemDetails))]
     public async Task<IActionResult> ObtenerPorUsername(
         string username, CancellationToken cancellationToken)
     {

@@ -1,3 +1,4 @@
+using Swashbuckle.AspNetCore.Annotations;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -9,6 +10,7 @@ namespace ProyectoFinalTPI.Backend.Controllers;
 [ApiController]
 [Route("api/chat")]
 [Authorize]
+[SwaggerResponse(StatusCodes.Status500InternalServerError, "Ocurrió un error inesperado al procesar la operación.", typeof(ProblemDetails))]
 public class ChatController : ControllerBase
 {
     private readonly IChatServicio _chatServicio;
@@ -18,15 +20,14 @@ public class ChatController : ControllerBase
         _chatServicio = chatServicio;
     }
 
-    /// <summary>
-    /// Devuelve las conversaciones activas (con mensajes no expirados) del usuario autenticado.
-    /// Una entrada por cada usuario con quien haya intercambiado mensajes en los últimos 7 días.
-    /// </summary>
-    /// <response code="200">Lista de conversaciones activas (puede ser vacía).</response>
-    /// <response code="401">El usuario no está autenticado.</response>
     [HttpGet("conversaciones")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [SwaggerOperation(
+        Summary = "Obtiene las conversaciones activas.",
+        Description = "Requiere autenticación. Devuelve una entrada por cada usuario con quien se intercambiaron mensajes que aún no expiraron, junto con el último mensaje. Los mensajes vencen a los siete días."
+    )]
+    [SwaggerResponse(StatusCodes.Status200OK, "Conversaciones activas; la lista puede estar vacía.", typeof(IEnumerable<ProyectoFinalTPI.Backend.Dtos.Chat.ConversacionResumenDto>))]
+    [SwaggerResponse(StatusCodes.Status401Unauthorized, "Se requiere una autenticación válida.")]
+    [SwaggerResponse(StatusCodes.Status403Forbidden, "El token no permite identificar un usuario válido.", typeof(ProblemDetails))]
     public async Task<IActionResult> ObtenerConversaciones(CancellationToken cancellationToken)
     {
         var usuarioId = ObtenerUsuarioIdAutenticado();

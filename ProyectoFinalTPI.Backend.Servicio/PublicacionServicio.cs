@@ -1,4 +1,3 @@
-using NetTopologySuite.Geometries;
 using ProyectoFinalTPI.Backend.Dtos;
 using ProyectoFinalTPI.Backend.Dtos.Comentario;
 using ProyectoFinalTPI.Backend.Dtos.Usuario;
@@ -89,62 +88,32 @@ namespace ProyectoFinalTPI.Backend.Servicio
             return _publicacionRepositorio.ObtenerPublicacionPorCategoria(categoria);
         }
 
-        public async Task<int> Crear(CrearPublicacionDto dto)
+        public async Task<int> Crear(Publicacion publicacion, Stream? archivo = null, string? nombreArchivo = null)
         {
-            var existeAutor = await _usuarioRepositorio.ExisteUsuario(dto.AutorId);
+            var existeAutor = await _usuarioRepositorio.ExisteUsuario(publicacion.UsuarioId);
+            if (!existeAutor)
+                throw new KeyNotFoundException("El usuario indicado no existe.");
 
-            if(!existeAutor)
-                throw new KeyNotFoundException(
-                    "El usuario indicado no existe.");
+            publicacion.UrlMultimedia = await _multimediaServicio.SubirAsync(
+                archivo,
+                nombreArchivo,
+                string.IsNullOrEmpty(publicacion.UrlMultimedia) ? null : publicacion.UrlMultimedia,
+                publicacion.TipoMultimedia);
 
-            var urlMultimedia = await _multimediaServicio.SubirAsync(
-                dto.Archivo,
-                dto.NombreArchivo,
-                dto.UrlArchivo,
-                dto.TipoMultimedia);
-
-            var lugar = new Lugar
-            {
-                Nombre = dto.NombreLugar,
-
-                Coordenadas = new Point(
-                    dto.Longitud,
-                    dto.Latitud)
-                {
-                    SRID = 4326
-                }
-            };
-
-            var publicacion = new Publicacion
-            {
-                Titulo = dto.Titulo,
-                Descripcion = dto.Descripcion,
-                Fecha = dto.Fecha,
-
-                Categoria = dto.Categoria,
-
-                UrlMultimedia = urlMultimedia,
-                TipoMultimedia = dto.TipoMultimedia,
-
-                Lugar = lugar,
-
-                UsuarioId = dto.AutorId,
-
-                FechaCreación = DateTime.UtcNow,
-                EstaOculto = false,
-                MotivoOculto = null
-            };
+            publicacion.FechaCreación = DateTime.UtcNow;
+            publicacion.EstaOculto = false;
+            publicacion.MotivoOculto = null;
 
             return await _publicacionRepositorio.Crear(publicacion);
         }
 
-        public async Task<int> Compartir(CompartirPublicacionDto dto, CancellationToken cancellationToken = default)
+        public async Task<int> Compartir(Publicacion publicacion, CancellationToken cancellationToken = default)
         {
-            var existeAutor = await _usuarioRepositorio.ExisteUsuario(dto.AutorId);
+            var existeAutor = await _usuarioRepositorio.ExisteUsuario(publicacion.UsuarioId);
             if (!existeAutor)
                 throw new KeyNotFoundException("El usuario indicado no existe.");
 
-            var original = await _publicacionRepositorio.ObtenerPorId(dto.PublicacionOriginalId, cancellationToken);
+            var original = await _publicacionRepositorio.ObtenerPorId(publicacion.PublicacionOriginalId.GetValueOrDefault(), cancellationToken);
             if (original == null)
                 throw new KeyNotFoundException("La publicacion original no existe o no esta disponible.");
 
@@ -160,20 +129,16 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 targetOriginal = padre;
             }
 
-            var publicacion = new Publicacion
-            {
-                Titulo = targetOriginal.Titulo, 
-                Descripcion = dto.Descripcion,
-                Fecha = targetOriginal.Fecha,
-                Categoria = targetOriginal.Categoria,
-                UrlMultimedia = targetOriginal.UrlMultimedia,
-                TipoMultimedia = targetOriginal.TipoMultimedia,
-                LugarId = targetOriginal.LugarId,
-                UsuarioId = dto.AutorId,
-                PublicacionOriginalId = targetOriginal.Id,
-                FechaCreación = DateTime.UtcNow,
-                EstaOculto = false
-            };
+            publicacion.Titulo = targetOriginal.Titulo;
+            publicacion.Fecha = targetOriginal.Fecha;
+            publicacion.Categoria = targetOriginal.Categoria;
+            publicacion.UrlMultimedia = targetOriginal.UrlMultimedia;
+            publicacion.TipoMultimedia = targetOriginal.TipoMultimedia;
+            publicacion.LugarId = targetOriginal.LugarId;
+            publicacion.PublicacionOriginalId = targetOriginal.Id;
+            publicacion.FechaCreación = DateTime.UtcNow;
+            publicacion.EstaOculto = false;
+            publicacion.MotivoOculto = null;
 
             return await _publicacionRepositorio.Crear(publicacion);
         }

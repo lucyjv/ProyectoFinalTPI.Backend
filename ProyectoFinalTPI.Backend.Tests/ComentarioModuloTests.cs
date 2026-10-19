@@ -18,12 +18,9 @@ public class ComentarioModuloTests
         var (publicacion, autor, lector) = await CrearEscenario(context);
         var servicio = CrearServicio(context);
 
-        var raiz = await servicio.Crear(publicacion.Id,
-            new CrearComentarioDto { Contenido = "Raíz", UsuarioId = autor.Id });
-        var respuesta = await servicio.Crear(publicacion.Id,
-            new CrearComentarioDto { Contenido = "Respuesta", UsuarioId = lector.Id, ComentarioPadreId = raiz.Id });
-        var nieta = await servicio.Crear(publicacion.Id,
-            new CrearComentarioDto { Contenido = "Tercer nivel", UsuarioId = autor.Id, ComentarioPadreId = respuesta.Id });
+        var raiz = await servicio.Crear(new Comentario { PublicacionId = publicacion.Id, Contenido = "Raíz", UsuarioId = autor.Id });
+        var respuesta = await servicio.Crear(new Comentario { PublicacionId = publicacion.Id, Contenido = "Respuesta", UsuarioId = lector.Id, ComentarioPadreId = raiz.Id });
+        var nieta = await servicio.Crear(new Comentario { PublicacionId = publicacion.Id, Contenido = "Tercer nivel", UsuarioId = autor.Id, ComentarioPadreId = respuesta.Id });
 
         Assert.Equal(respuesta.Id, nieta.ComentarioPadreId);
         Assert.Equal(3, await context.Comentarios.CountAsync());
@@ -65,10 +62,8 @@ public class ComentarioModuloTests
         await using var context = CrearContexto();
         var (publicacion, autor, lector) = await CrearEscenario(context);
         var servicio = CrearServicio(context);
-        var raiz = await servicio.Crear(publicacion.Id,
-            new CrearComentarioDto { Contenido = "Se elimina", UsuarioId = autor.Id });
-        await servicio.Crear(publicacion.Id,
-            new CrearComentarioDto { Contenido = "Se conserva", UsuarioId = lector.Id, ComentarioPadreId = raiz.Id });
+        var raiz = await servicio.Crear(new Comentario { PublicacionId = publicacion.Id, Contenido = "Se elimina", UsuarioId = autor.Id });
+        await servicio.Crear(new Comentario { PublicacionId = publicacion.Id, Contenido = "Se conserva", UsuarioId = lector.Id, ComentarioPadreId = raiz.Id });
 
         await servicio.Eliminar(publicacion.Id, raiz.Id, autor.Id);
         var eliminado = Assert.Single((await servicio.ObtenerRaices(publicacion.Id, null, 20, autor.Id)).Items);
@@ -85,8 +80,7 @@ public class ComentarioModuloTests
         await using var context = CrearContexto();
         var (publicacion, autor, lector) = await CrearEscenario(context);
         var servicio = CrearServicio(context);
-        var comentario = await servicio.Crear(publicacion.Id,
-            new CrearComentarioDto { Contenido = "Propio", UsuarioId = autor.Id });
+        var comentario = await servicio.Crear(new Comentario { PublicacionId = publicacion.Id, Contenido = "Propio", UsuarioId = autor.Id });
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             servicio.Eliminar(publicacion.Id, comentario.Id, lector.Id));
@@ -98,8 +92,7 @@ public class ComentarioModuloTests
         await using var context = CrearContexto();
         var (publicacion, autor, lector) = await CrearEscenario(context);
         var servicio = CrearServicio(context);
-        var comentario = await servicio.Crear(publicacion.Id,
-            new CrearComentarioDto { Contenido = "Comentario", UsuarioId = autor.Id });
+        var comentario = await servicio.Crear(new Comentario { PublicacionId = publicacion.Id, Contenido = "Comentario", UsuarioId = autor.Id });
 
         await servicio.EstablecerReaccion(publicacion.Id, comentario.Id, lector.Id, "like");
         var actualizado = await servicio.EstablecerReaccion(publicacion.Id, comentario.Id, lector.Id, "surprise");
