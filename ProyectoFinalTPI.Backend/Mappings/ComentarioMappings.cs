@@ -1,16 +1,17 @@
-using ProyectoFinalTPI.Backend.Dtos.Comentario;
+using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Requests.Comentarios;
 
 namespace ProyectoFinalTPI.Backend.Mappings;
 
 public static class ComentarioMappings
 {
-    public static CrearComentarioDto ToCrearComentarioDto(
+    public static Comentario ToComentario(
         this CrearComentarioRequest request,
-        int usuarioId)
+        int publicacionId, int usuarioId)
     {
-        return new CrearComentarioDto
+        return new Comentario
         {
+            PublicacionId = publicacionId,
             Contenido = request.Contenido,
             UsuarioId = usuarioId,
             ComentarioPadreId = request.ComentarioPadreId

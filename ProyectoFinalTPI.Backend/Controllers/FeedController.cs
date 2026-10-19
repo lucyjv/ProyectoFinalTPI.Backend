@@ -1,3 +1,4 @@
+using Swashbuckle.AspNetCore.Annotations;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -11,6 +12,7 @@ namespace ProyectoFinalTPI.Backend.Controllers
 {
     [ApiController]
     [Route("api/feed")]
+    [SwaggerResponse(StatusCodes.Status500InternalServerError, "Ocurrió un error inesperado al procesar la operación.", typeof(ProblemDetails))]
     public class FeedController : ControllerBase
     {
         private readonly IPublicacionServicio _publicacionServicio;
@@ -21,6 +23,14 @@ namespace ProyectoFinalTPI.Backend.Controllers
         }
 
         [HttpGet("para-vos")]
+        [SwaggerOperation(
+            Summary = "Obtiene el feed personalizado.",
+            Description = "Devuelve publicaciones recomendadas con paginación por cursor y un límite de 1 a 50. Prioriza el usuario del token; admite usuarioId como alternativa. Si la sesión del cursor ya no está disponible, debe reiniciarse la consulta sin cursor."
+        )]
+        [SwaggerResponse(StatusCodes.Status200OK, "Página de publicaciones recomendadas.", typeof(ResultadoPaginadoDto<PublicacionDetalleDto>))]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "Los datos o parámetros enviados no son válidos.")]
+        [SwaggerResponse(StatusCodes.Status401Unauthorized, "No se pudo identificar al usuario.")]
+        [SwaggerResponse(StatusCodes.Status410Gone, "La sesión del feed no está disponible; reinicie la consulta sin cursor.")]
         public Task<ActionResult<ResultadoPaginadoDto<PublicacionDetalleDto>>> ObtenerParaVos(
                 [FromQuery] int? usuarioId = null,
                 [FromQuery] string? cursor = null,
@@ -43,6 +53,14 @@ namespace ProyectoFinalTPI.Backend.Controllers
         }
 
         [HttpGet("seguidos")]
+        [SwaggerOperation(
+            Summary = "Obtiene el feed de usuarios seguidos.",
+            Description = "Devuelve publicaciones de usuarios seguidos, ordenadas cronológicamente y paginadas por cursor. El límite debe estar entre 1 y 50. Prioriza el usuario del token; admite usuarioId como alternativa."
+        )]
+        [SwaggerResponse(StatusCodes.Status200OK, "Página de publicaciones de usuarios seguidos.", typeof(ResultadoPaginadoDto<PublicacionDetalleDto>))]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "Los datos o parámetros enviados no son válidos.")]
+        [SwaggerResponse(StatusCodes.Status401Unauthorized, "No se pudo identificar al usuario.")]
+        [SwaggerResponse(StatusCodes.Status404NotFound, "El usuario indicado no existe.")]
         public Task<ActionResult<ResultadoPaginadoDto<PublicacionDetalleDto>>> ObtenerSeguidos(
                 [FromQuery] int? usuarioId = null,
                 [FromQuery] string? cursor = null,

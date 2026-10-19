@@ -603,7 +603,7 @@ namespace ProyectoFinalTPI.Backend.Tests
 
         private class PublicacionServicioFake : IPublicacionServicio
         {
-            public Task<ComentarioDto> CrearComentario(int publicacionId, CrearComentarioDto dto, CancellationToken cancellationToken = default)
+            public Task<ComentarioDto> CrearComentario(Comentario comentario, CancellationToken cancellationToken = default)
                 => throw new NotImplementedException();
 
             public Exception? Error { get; set; }

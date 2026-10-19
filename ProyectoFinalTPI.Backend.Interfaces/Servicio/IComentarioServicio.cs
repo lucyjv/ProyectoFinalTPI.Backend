@@ -1,3 +1,4 @@
+using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Dtos;
 using ProyectoFinalTPI.Backend.Dtos.Comentario;
 
@@ -9,7 +10,7 @@ public interface IComentarioServicio
         int? usuarioId, CancellationToken cancellationToken = default);
     Task<ResultadoPaginadoDto<ComentarioDto>> ObtenerRespuestas(int publicacionId, int comentarioId, string? cursor,
         int limite, int? usuarioId, CancellationToken cancellationToken = default);
-    Task<ComentarioDto> Crear(int publicacionId, CrearComentarioDto dto,
+    Task<ComentarioDto> Crear(Comentario comentario,
         CancellationToken cancellationToken = default);
     Task Eliminar(int publicacionId, int comentarioId, int usuarioId,
         CancellationToken cancellationToken = default);

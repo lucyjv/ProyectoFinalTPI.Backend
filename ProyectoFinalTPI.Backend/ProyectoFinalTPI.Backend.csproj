@@ -30,6 +30,7 @@
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL.NetTopologySuite" Version="9.0.4" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore.Annotations" Version="6.9.0" />
 	<ProjectReference Include="..\ProyectoFinalTPI.Backend.Entidades\ProyectoFinalTPI.Backend.Entidades.csproj" />
 	<ProjectReference Include="..\ProyectoFinalTPI.Backend.Repositorio\ProyectoFinalTPI.Backend.Repositorio.csproj" />
 	<ProjectReference Include="..\ProyectoFinalTPI.Backend.Servicio\ProyectoFinalTPI.Backend.Servicio.csproj" />
