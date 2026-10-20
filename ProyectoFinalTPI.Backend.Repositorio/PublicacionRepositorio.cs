@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Neo4j.Driver;
 using ProyectoFinalTPI.Backend.Dtos;
 using ProyectoFinalTPI.Backend.Dtos.Comentario;
+using ProyectoFinalTPI.Backend.Dtos.Grupo;
 using ProyectoFinalTPI.Backend.Dtos.Lugar;
 using ProyectoFinalTPI.Backend.Dtos.Publicacion;
 using ProyectoFinalTPI.Backend.Dtos.Usuario;
@@ -306,7 +307,21 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                     },
                     CantidadLikes = 0,
                     CantidadComentarios = p.Comentarios.Count(c => !c.EstaOculto && !c.EstaEliminado),
-                    DioLike = false
+                    DioLike = false,
+                    Grupo = p.GrupoId.HasValue ? new GrupoResumenDto
+                    {
+                        Id = p.Grupo!.Id,
+                        Nombre = p.Grupo.Nombre,
+                        Descripcion = p.Grupo.Descripcion,
+                        Decada = p.Grupo.Decada,
+                        FechaCreacion = p.Grupo.FechaCreacion,
+                        Creador = new AutorResumenDto
+                        {
+                            Id = p.Grupo.CreadorId,
+                            Username = p.Grupo.Creador.Username
+                        },
+                        CantidadIntegrantes = p.Grupo.Integrantes.Count
+                    } : null
                 })
                 .SingleOrDefaultAsync(cancellationToken);
         }
@@ -372,7 +387,21 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                     },
                     CantidadLikes = 0,
                     CantidadComentarios = p.Comentarios.Count(c => !c.EstaOculto && !c.EstaEliminado),
-                    DioLike = false
+                    DioLike = false,
+                    Grupo = p.GrupoId.HasValue ? new GrupoResumenDto
+                    {
+                        Id = p.Grupo!.Id,
+                        Nombre = p.Grupo.Nombre,
+                        Descripcion = p.Grupo.Descripcion,
+                        Decada = p.Grupo.Decada,
+                        FechaCreacion = p.Grupo.FechaCreacion,
+                        Creador = new AutorResumenDto
+                        {
+                            Id = p.Grupo.CreadorId,
+                            Username = p.Grupo.Creador.Username
+                        },
+                        CantidadIntegrantes = p.Grupo.Integrantes.Count
+                    } : null
                 })
                 .Take(limite + 1)
                 .ToListAsync(cancellationToken);
@@ -444,7 +473,21 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                     },
                     CantidadLikes = 0,
                     CantidadComentarios = p.Comentarios.Count(c => !c.EstaOculto && !c.EstaEliminado),
-                    DioLike = false
+                    DioLike = false,
+                    Grupo = p.GrupoId.HasValue ? new GrupoResumenDto
+                    {
+                        Id = p.Grupo!.Id,
+                        Nombre = p.Grupo.Nombre,
+                        Descripcion = p.Grupo.Descripcion,
+                        Decada = p.Grupo.Decada,
+                        FechaCreacion = p.Grupo.FechaCreacion,
+                        Creador = new AutorResumenDto
+                        {
+                            Id = p.Grupo.CreadorId,
+                            Username = p.Grupo.Creador.Username
+                        },
+                        CantidadIntegrantes = p.Grupo.Integrantes.Count
+                    } : null
                 })
                 .Take(limite + 1)
                 .ToListAsync(cancellationToken);
@@ -494,7 +537,21 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                     },
                     CantidadLikes = 0,
                     CantidadComentarios = p.Comentarios.Count(c => !c.EstaOculto && !c.EstaEliminado),
-                    DioLike = false
+                    DioLike = false,
+                    Grupo = p.GrupoId.HasValue ? new GrupoResumenDto
+                    {
+                        Id = p.Grupo!.Id,
+                        Nombre = p.Grupo.Nombre,
+                        Descripcion = p.Grupo.Descripcion,
+                        Decada = p.Grupo.Decada,
+                        FechaCreacion = p.Grupo.FechaCreacion,
+                        Creador = new AutorResumenDto
+                        {
+                            Id = p.Grupo.CreadorId,
+                            Username = p.Grupo.Creador.Username
+                        },
+                        CantidadIntegrantes = p.Grupo.Integrantes.Count
+                    } : null
                 })
                 .ToListAsync(cancellationToken);
         }

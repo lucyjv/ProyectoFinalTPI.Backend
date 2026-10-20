@@ -23,6 +23,8 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
         public DbSet<SesionUsuario> SesionesUsuario { get; set; }
         public DbSet<Comentario> Comentarios { get; set; }
         public DbSet<ReaccionComentario> ReaccionesComentario { get; set; }
+        public DbSet<Grupo> Grupos { get; set; }
+        public DbSet<GrupoIntegrante> GruposIntegrantes { get; set; }
 
         // ── Chat ──────────────────────────────────────────────────────────────
         public DbSet<MensajeChat> MensajesChat { get; set; }
@@ -111,6 +113,40 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
                     .HasForeignKey(reaccion => reaccion.UsuarioId)
                     .OnDelete(DeleteBehavior.Cascade);
             });
+
+            modelBuilder.Entity<Grupo>(entity =>
+            {
+                entity.ToTable("grupos");
+                entity.Property(grupo => grupo.Nombre).IsRequired().HasMaxLength(100);
+                entity.Property(grupo => grupo.Descripcion).IsRequired().HasMaxLength(500);
+                entity.Property(grupo => grupo.Decada).IsRequired();
+                entity.HasIndex(grupo => grupo.CreadorId);
+                entity.HasOne(grupo => grupo.Creador)
+                    .WithMany()
+                    .HasForeignKey(grupo => grupo.CreadorId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<GrupoIntegrante>(entity =>
+            {
+                entity.ToTable("grupos_integrantes");
+                entity.HasKey(integrante => new { integrante.GrupoId, integrante.UsuarioId });
+                entity.HasIndex(integrante => integrante.UsuarioId);
+                entity.HasOne(integrante => integrante.Grupo)
+                    .WithMany(grupo => grupo.Integrantes)
+                    .HasForeignKey(integrante => integrante.GrupoId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(integrante => integrante.Usuario)
+                    .WithMany()
+                    .HasForeignKey(integrante => integrante.UsuarioId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<Publicacion>()
+                .HasOne(publicacion => publicacion.Grupo)
+                .WithMany(grupo => grupo.Recuerdos)
+                .HasForeignKey(publicacion => publicacion.GrupoId)
+                .OnDelete(DeleteBehavior.SetNull);
 
             // ── Configuración de MensajeChat ──────────────────────────────────
             modelBuilder.Entity<MensajeChat>(entity =>

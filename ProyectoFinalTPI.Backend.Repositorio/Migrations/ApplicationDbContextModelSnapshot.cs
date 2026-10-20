@@ -68,6 +68,58 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.ToTable("Comentario", (string)null);
                 });
 
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Grupo", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CreadorId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Decada")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Descripcion")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Nombre")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreadorId");
+
+                    b.ToTable("grupos", (string)null);
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.GrupoIntegrante", b =>
+                {
+                    b.Property<int>("GrupoId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UsuarioId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("FechaUnion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("GrupoId", "UsuarioId");
+
+                    b.HasIndex("UsuarioId");
+
+                    b.ToTable("grupos_integrantes", (string)null);
+                });
+
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Lugar", b =>
                 {
                     b.Property<int>("Id")
@@ -184,6 +236,9 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Property<DateTime>("FechaCreación")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("GrupoId")
+                        .HasColumnType("integer");
+
                     b.Property<int>("LugarId")
                         .HasColumnType("integer");
 
@@ -208,6 +263,8 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("GrupoId");
 
                     b.HasIndex("LugarId");
 
@@ -419,6 +476,36 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Navigation("Usuario");
                 });
 
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Grupo", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario", "Creador")
+                        .WithMany()
+                        .HasForeignKey("CreadorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Creador");
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.GrupoIntegrante", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Grupo", "Grupo")
+                        .WithMany("Integrantes")
+                        .HasForeignKey("GrupoId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario", "Usuario")
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Grupo");
+
+                    b.Navigation("Usuario");
+                });
+
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.MensajeChat", b =>
                 {
                     b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario", "Destinatario")
@@ -440,6 +527,11 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Publicacion", b =>
                 {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Grupo", "Grupo")
+                        .WithMany("Recuerdos")
+                        .HasForeignKey("GrupoId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("ProyectoFinalTPI.Backend.Entidades.Lugar", "Lugar")
                         .WithMany()
                         .HasForeignKey("LugarId")
@@ -456,6 +548,8 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                         .HasForeignKey("UsuarioId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("Grupo");
 
                     b.Navigation("Lugar");
 
@@ -499,6 +593,13 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Navigation("Reacciones");
 
                     b.Navigation("Respuestas");
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Grupo", b =>
+                {
+                    b.Navigation("Integrantes");
+
+                    b.Navigation("Recuerdos");
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Publicacion", b =>
