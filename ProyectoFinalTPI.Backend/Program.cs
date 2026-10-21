@@ -1,4 +1,5 @@
 using System.Text;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -11,16 +12,37 @@ using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Repositorio;
 using ProyectoFinalTPI.Backend.Repositorio.Data;
 using ProyectoFinalTPI.Backend.Servicio;
+using ProyectoFinalTPI.Backend.Services;
+using ProyectoFinalTPI.Backend.Hubs;
+using ProyectoFinalTPI.Backend.Swagger;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("auth-intentos", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "desconocida",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+});
 
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins("http://localhost:3001")
+        var origenes = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+            ?? ["http://localhost:3001", "https://localhost:3001"];
+        policy.WithOrigins(origenes)
               .AllowAnyHeader()
-              .AllowAnyMethod();
+              .AllowAnyMethod()
+              .AllowCredentials();
     });
 });
 
@@ -50,14 +72,20 @@ builder.Services.AddSingleton<IDriver>(provider =>
 
 builder.Services.AddScoped<IPublicacionRepositorio, PublicacionRepositorio>();
 builder.Services.AddScoped<IPublicacionServicio, PublicacionServicio>();
+builder.Services.AddScoped<IComentarioRepositorio, ComentarioRepositorio>();
+builder.Services.AddScoped<IComentarioServicio, ComentarioServicio>();
+builder.Services.AddScoped<IGrupoRepositorio, GrupoRepositorio>();
+builder.Services.AddScoped<IGrupoServicio, GrupoServicio>();
 builder.Services.AddScoped<IEtiquetadoPublicacionServicio, EtiquetadoPublicacionServicio>();
 builder.Services.AddScoped<IUsuarioRepositorio, UsuarioRepositorio>();
+builder.Services.AddScoped<ISesionUsuarioRepositorio, SesionUsuarioRepositorio>();
 builder.Services.AddScoped<ISeguimientoServicio, SeguimientoServicio>();
 builder.Services.AddScoped<IMultimediaServicio, MultimediaServicio>();
 builder.Services.AddScoped<IInteresServicio, InteresServicio>();
 builder.Services.AddScoped<IRecomendacionServicio, RecomendacionServicio>();
 builder.Services.AddScoped<ILogrosUsuariosRepositorio, LogrosUsuariosRepositorio>();
 
+builder.Services.AddScoped<IUsuarioServicio, UsuarioServicio>();
 
 builder.Services.AddMemoryCache();
 
@@ -68,6 +96,20 @@ builder.Services.AddSingleton<
 // Auth
 builder.Services.AddScoped<IAuthServicio, AuthServicio>();
 
+// ── Chat ───────────────────────────────────────────────────────────────
+builder.Services.AddSignalR();
+
+// Singleton: el diccionario de presencia debe vivir toda la app.
+builder.Services.AddSingleton<PresenciaService>();
+
+// Scoped: ChatServicio usa IHubContext y el repositorio, ambos compatibles con Scoped.
+builder.Services.AddScoped<IChatServicio, ChatServicio>();
+builder.Services.AddScoped<IMensajeChatRepositorio, MensajeChatRepositorio>();
+
+// Hosted service: corre en background y limpia mensajes expirados cada hora.
+builder.Services.AddHostedService<LimpiezaMensajesService>();
+// ─────────────────────────────────────────────────────────────────────────────
+
 var claveJwt = builder.Configuration["Jwt:Clave"]
     ?? (builder.Environment.EnvironmentName == "Testing"
         ? "clave-de-testing-no-usar-en-produccion-32ch"
@@ -76,6 +118,7 @@ var claveJwt = builder.Configuration["Jwt:Clave"]
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
+        options.MapInboundClaims = false;
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
@@ -84,7 +127,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateIssuerSigningKey = true,
             ValidIssuer = builder.Configuration["Jwt:Emisor"] ?? "nostalgia-backend",
             ValidAudience = builder.Configuration["Jwt:Audiencia"] ?? "nostalgia-frontend",
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(claveJwt))
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(claveJwt)),
+            ClockSkew = TimeSpan.FromSeconds(30)
         };
 
         // Necesario para que SignalR (chat) pueda recibir el token por query string
@@ -97,6 +141,19 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
                     context.Token = accessToken;
                 return Task.CompletedTask;
+            },
+            OnTokenValidated = async context =>
+            {
+                var sid = context.Principal?.FindFirst("sid")?.Value;
+                if (!Guid.TryParseExact(sid, "N", out var sesionId))
+                {
+                    context.Fail("El token no contiene una sesión válida.");
+                    return;
+                }
+
+                var sesiones = context.HttpContext.RequestServices.GetRequiredService<ISesionUsuarioRepositorio>();
+                if (!await sesiones.EstaActivaAsync(sesionId, context.HttpContext.RequestAborted))
+                    context.Fail("La sesión fue revocada o expiró.");
             }
         };
     });
@@ -105,7 +162,12 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
+    options.EnableAnnotations();
     options.SwaggerDoc("v1", new() { Title = "Nostalgia API", Version = "v1" });
+
+    // Inyecta X-Nostalgiar-Request: 1 automáticamente en todos los requests desde Swagger
+    options.OperationFilter<NostalgiarRequestHeaderFilter>();
+
     options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -129,6 +191,12 @@ builder.Services.AddSwaggerGen(options =>
             Array.Empty<string>()
         }
     });
+    var xmlFile = $"{typeof(Program).Assembly.GetName().Name}.xml";
+    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
+
+    options.IncludeXmlComments(xmlPath);
+    var filtrosXml = $"{typeof(ProyectoFinalTPI.Backend.Dtos.Publicacion.PublicacionFiltroDto).Assembly.GetName().Name}.xml";
+    options.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, filtrosXml));
 });
 
 var app = builder.Build();
@@ -147,35 +215,36 @@ app.UseSwaggerUI(options =>
     options.RoutePrefix = "swagger";
 });
 
-app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 if (app.Environment.IsDevelopment())
 {
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-
-    if (!db.Usuarios.Any())
-    {
-        db.Usuarios.Add(new ProyectoFinalTPI.Backend.Entidades.Usuario
-        {
-            Id = 1,
-            Username = "DemoUser",
-            Email = "demo@example.com",
-            Contraseña = "password123",
-            EsAdmin = false
-        });
-
-        db.SaveChanges();
-    }
+    ProyectoFinalTPI.Backend.DataSeeder.Seed(app.Services, app.Environment);
 }
+if (args.Contains("--seed-only"))
+{
+    if (!app.Environment.IsDevelopment())
+        throw new InvalidOperationException("--seed-only requiere el entorno Development.");
+    return;
+}
+app.UseMiddleware<ProyectoFinalTPI.Backend.Middlewares.ManejoExcepcionesMiddleware>();
+
 app.UseRouting();
 
 app.UseCors("AllowFrontend");
+app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapStaticAssets();
 app.MapControllers();
+
+// ── Ruta del Hub de chat ───────────────────────────────────────────────
+app.MapHub<ChatHub>("/hubs/chat");
+// ─────────────────────────────────────────────────────────────────────────────
 
 app.MapControllerRoute(
     name: "default",

@@ -1,100 +1,218 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using BC = BCrypt.Net.BCrypt;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using ProyectoFinalTPI.Backend.Dtos.Auth;
 using ProyectoFinalTPI.Backend.Entidades;
+using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
-using ProyectoFinalTPI.Backend.Repositorio.Data;
 
-namespace ProyectoFinalTPI.Backend.Servicio
+namespace ProyectoFinalTPI.Backend.Servicio;
+
+public class AuthServicio : IAuthServicio
 {
-    public class AuthServicio : IAuthServicio
+    private readonly IUsuarioRepositorio _usuarioRepositorio;
+    private readonly ISesionUsuarioRepositorio _sesionRepositorio;
+    private readonly IConfiguration _configuration;
+
+    public AuthServicio(
+        IUsuarioRepositorio usuarioRepositorio,
+        ISesionUsuarioRepositorio sesionRepositorio,
+        IConfiguration configuration)
     {
-        private readonly ApplicationDbContext _context;
-        private readonly IConfiguration _configuration;
+        _usuarioRepositorio = usuarioRepositorio;
+        _sesionRepositorio = sesionRepositorio;
+        _configuration = configuration;
+    }
 
-        public AuthServicio(ApplicationDbContext context, IConfiguration configuration)
+    public async Task<ResultadoAutenticacionDto> RegistrarAsync(
+        RegistroDto dto,
+        string? userAgent = null,
+        CancellationToken cancellationToken = default)
+    {
+        var email = NormalizarEmail(dto.Email);
+        if (await _usuarioRepositorio.ExistePorEmailAsync(email, cancellationToken))
+            throw new InvalidOperationException("Ya existe una cuenta registrada con ese email.");
+
+        var usuario = new Usuario_Personal
         {
-            _context = context;
-            _configuration = configuration;
+            Username = dto.Username.Trim(),
+            Email = email,
+            Contraseña = BC.HashPassword(dto.Contraseña),
+            EsAdmin = false,
+            FechaCreacion = DateTime.UtcNow
+        };
+
+        await _usuarioRepositorio.AgregarAsync(usuario, cancellationToken);
+        return await CrearSesionAsync(usuario, userAgent, cancellationToken);
+    }
+
+    public async Task<ResultadoAutenticacionDto> LoginAsync(
+        LoginDto dto,
+        string? userAgent = null,
+        CancellationToken cancellationToken = default)
+    {
+        var usuario = await _usuarioRepositorio.ObtenerPorEmailAsync(NormalizarEmail(dto.Email), cancellationToken);
+        if (usuario is null)
+            throw new UnauthorizedAccessException("Email o contraseña incorrectos.");
+
+        var passwordValida = false;
+        try
+        {
+            passwordValida = BC.Verify(dto.Contraseña, usuario.Contraseña);
         }
-
-        public async Task<AuthRespuestaDto> RegistrarAsync(RegistroDto dto)
+        catch
         {
-            var emailEnUso = await _context.Usuarios
-                .AnyAsync(u => u.Email == dto.Email);
-
-            if (emailEnUso)
-                throw new InvalidOperationException("Ya existe una cuenta registrada con ese email.");
-
-            var usuario = new Usuario_Personal
+            if (dto.Contraseña == usuario.Contraseña)
             {
-                Username = dto.Username,
-                Email = dto.Email,
-                Contraseña = BC.HashPassword(dto.Contraseña),
-                EsAdmin = false,
-                FechaCreacion = DateTime.UtcNow
-            };
-
-            _context.Usuarios.Add(usuario); //repositorio
-            await _context.SaveChangesAsync();
-
-            return GenerarRespuesta(usuario);
+                passwordValida = true;
+                usuario.Contraseña = BC.HashPassword(dto.Contraseña);
+                await _usuarioRepositorio.ActualizarAsync(usuario, cancellationToken);
+            }
         }
 
-        public async Task<AuthRespuestaDto> LoginAsync(LoginDto dto)
+        if (!passwordValida)
+            throw new UnauthorizedAccessException("Email o contraseña incorrectos.");
+
+        return await CrearSesionAsync(usuario, userAgent, cancellationToken);
+    }
+
+    public async Task<ResultadoAutenticacionDto> RenovarAsync(
+        string refreshToken,
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryObtenerSesionId(refreshToken, out var sesionId))
+            throw new UnauthorizedAccessException("La sesión no es válida.");
+
+        var sesion = await _sesionRepositorio.ObtenerPorIdAsync(sesionId, cancellationToken);
+        if (sesion is null || !sesion.EstaActiva || !HashCoincide(refreshToken, sesion.RefreshTokenHash))
+            throw new UnauthorizedAccessException("La sesión no es válida o expiró.");
+
+        var ahora = DateTime.UtcNow;
+        var nuevoRefreshToken = GenerarRefreshToken(sesion.Id);
+        var nuevaExpiracion = ahora.AddDays(ObtenerRefreshTokenDias());
+        var rotada = await _sesionRepositorio.RotarAsync(
+            sesion,
+            HashearToken(nuevoRefreshToken),
+            nuevaExpiracion,
+            ahora,
+            cancellationToken);
+
+        if (!rotada)
+            throw new UnauthorizedAccessException("La sesión ya fue renovada por otra solicitud.");
+
+        return CrearResultado(sesion.Usuario, sesion.Id, nuevoRefreshToken, nuevaExpiracion);
+    }
+
+    public async Task CerrarSesionAsync(string? refreshToken, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(refreshToken) || !TryObtenerSesionId(refreshToken, out var sesionId))
+            return;
+
+        var sesion = await _sesionRepositorio.ObtenerPorIdAsync(sesionId, cancellationToken);
+        if (sesion is null || !HashCoincide(refreshToken, sesion.RefreshTokenHash))
+            return;
+
+        await _sesionRepositorio.RevocarAsync(sesion, DateTime.UtcNow, cancellationToken);
+    }
+
+    public Task CerrarTodasLasSesionesAsync(int usuarioId, CancellationToken cancellationToken = default) =>
+        _sesionRepositorio.RevocarTodasAsync(usuarioId, DateTime.UtcNow, cancellationToken);
+
+    private async Task<ResultadoAutenticacionDto> CrearSesionAsync(
+        Usuario usuario,
+        string? userAgent,
+        CancellationToken cancellationToken)
+    {
+        var expiracion = DateTime.UtcNow.AddDays(ObtenerRefreshTokenDias());
+        var sesion = new SesionUsuario
         {
-            var usuario = await _context.Usuarios
-                .FirstOrDefaultAsync(u => u.Email == dto.Email);
+            UsuarioId = usuario.Id,
+            Usuario = usuario,
+            FechaExpiracion = expiracion,
+            UserAgent = string.IsNullOrWhiteSpace(userAgent) ? null : userAgent[..Math.Min(userAgent.Length, 512)]
+        };
+        var refreshToken = GenerarRefreshToken(sesion.Id);
+        sesion.RefreshTokenHash = HashearToken(refreshToken);
+        await _sesionRepositorio.AgregarAsync(sesion, cancellationToken);
+        return CrearResultado(usuario, sesion.Id, refreshToken, expiracion);
+    }
 
-            if (usuario is null || !BC.Verify(dto.Contraseña, usuario.Contraseña))
-                throw new UnauthorizedAccessException("Email o contraseña incorrectos.");
-
-            return GenerarRespuesta(usuario);
-        }
-
-        private AuthRespuestaDto GenerarRespuesta(Usuario usuario)
+    private ResultadoAutenticacionDto CrearResultado(Usuario usuario, Guid sesionId, string refreshToken, DateTime expiracion) =>
+        new()
         {
-            return new AuthRespuestaDto
+            Respuesta = new AuthRespuestaDto
             {
-                Token = GenerarJwt(usuario),
+                Token = GenerarJwt(usuario, sesionId),
                 UsuarioId = usuario.Id,
                 Username = usuario.Username,
                 Email = usuario.Email,
                 EsAdmin = usuario.EsAdmin
-            };
-        }
+            },
+            RefreshToken = refreshToken,
+            RefreshTokenExpira = expiracion
+        };
 
-        private string GenerarJwt(Usuario usuario)
+    private string GenerarJwt(Usuario usuario, Guid sesionId)
+    {
+        var claveSecreta = _configuration["Jwt:Clave"]
+            ?? "clave-de-testing-no-usar-en-produccion-32ch";
+        var clave = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(claveSecreta));
+        var credenciales = new SigningCredentials(clave, SecurityAlgorithms.HmacSha256);
+        var claims = new[]
         {
-            var claveSecreta = _configuration["Jwt:Clave"]
-                ?? "clave-de-testing-no-usar-en-produccion-32ch";
+            new Claim(JwtRegisteredClaimNames.Sub, usuario.Id.ToString()),
+            new Claim(JwtRegisteredClaimNames.Email, usuario.Email),
+            new Claim("username", usuario.Username),
+            new Claim("esAdmin", usuario.EsAdmin.ToString().ToLowerInvariant()),
+            new Claim("sid", sesionId.ToString("N")),
+            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString("N"))
+        };
 
-            var clave = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(claveSecreta));
-            var credenciales = new SigningCredentials(clave, SecurityAlgorithms.HmacSha256);
+        var token = new JwtSecurityToken(
+            issuer: _configuration["Jwt:Emisor"] ?? "nostalgia-backend",
+            audience: _configuration["Jwt:Audiencia"] ?? "nostalgia-frontend",
+            claims: claims,
+            expires: DateTime.UtcNow.AddMinutes(ObtenerAccessTokenMinutos()),
+            signingCredentials: credenciales);
+        return new JwtSecurityTokenHandler().WriteToken(token);
+    }
 
-            var claims = new[]
-            {
-                new Claim(JwtRegisteredClaimNames.Sub, usuario.Id.ToString()),
-                new Claim(JwtRegisteredClaimNames.Email, usuario.Email),
-                new Claim("username", usuario.Username),
-                new Claim("esAdmin", usuario.EsAdmin.ToString().ToLower()),
-                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
-            };
+    private int ObtenerAccessTokenMinutos() =>
+        int.TryParse(_configuration["Jwt:AccessTokenMinutes"], out var minutos) && minutos is >= 5 and <= 60 ? minutos : 15;
 
-            var token = new JwtSecurityToken(
-                issuer: _configuration["Jwt:Emisor"],
-                audience: _configuration["Jwt:Audiencia"],
-                claims: claims,
-                expires: DateTime.UtcNow.AddDays(7),
-                signingCredentials: credenciales
-            );
+    private int ObtenerRefreshTokenDias() =>
+        int.TryParse(_configuration["Jwt:RefreshTokenDays"], out var dias) && dias is >= 1 and <= 90 ? dias : 30;
 
-            return new JwtSecurityTokenHandler().WriteToken(token);
+    private static string NormalizarEmail(string email) => email.Trim().ToLowerInvariant();
+
+    private static string GenerarRefreshToken(Guid sesionId) =>
+        $"{sesionId:N}.{Base64UrlEncoder.Encode(RandomNumberGenerator.GetBytes(64))}";
+
+    private static string HashearToken(string token) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
+
+    private static bool HashCoincide(string token, string hashEsperado)
+    {
+        try
+        {
+            return CryptographicOperations.FixedTimeEquals(
+                Convert.FromHexString(HashearToken(token)),
+                Convert.FromHexString(hashEsperado));
         }
+        catch (FormatException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TryObtenerSesionId(string token, out Guid sesionId)
+    {
+        sesionId = Guid.Empty;
+        var separador = token.IndexOf('.');
+        return separador == 32 && Guid.TryParseExact(token[..separador], "N", out sesionId);
     }
 }

@@ -1,10 +1,5 @@
-﻿using ProyectoFinalTPI.Backend.Entidades;
+using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Dtos.Usuario;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace ProyectoFinalTPI.Backend.Interfaces.Repositorio
 {
@@ -21,5 +16,24 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Repositorio
         Task<List<int>> ObtenerIdsExistentesAsync(
             IReadOnlyCollection<int> ids,
             CancellationToken cancellationToken = default);
+
+        Task<Usuario?> ObtenerPorEmailAsync(string email, CancellationToken cancellationToken = default);
+
+        Task<bool> ExistePorEmailAsync(string email, CancellationToken cancellationToken = default);
+
+        Task AgregarAsync(Usuario usuario, CancellationToken cancellationToken = default);
+
+        Task ActualizarAsync(Usuario usuario, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Busca un usuario por su username (coincidencia exacta, sin distinción de mayúsculas).
+        /// Devuelve null si no existe.
+        /// </summary>
+        Task<Usuario?> ObtenerPorUsernameAsync(string username, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Cuenta la cantidad de publicaciones visibles de un usuario.
+        /// </summary>
+        Task<int> ContarPublicacionesVisiblesAsync(int usuarioId, CancellationToken cancellationToken = default);
     }
 }

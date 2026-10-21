@@ -32,14 +32,23 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("ComentarioPadreId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Contenido")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<bool>("EstaEliminado")
+                        .HasColumnType("boolean");
 
                     b.Property<bool>("EstaOculto")
                         .HasColumnType("boolean");
 
                     b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("FechaEliminacion")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("PublicacionId")
@@ -50,11 +59,65 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("PublicacionId");
+                    b.HasIndex("ComentarioPadreId");
 
                     b.HasIndex("UsuarioId");
 
-                    b.ToTable("Comentario");
+                    b.HasIndex("PublicacionId", "ComentarioPadreId", "FechaCreacion", "Id");
+
+                    b.ToTable("Comentario", (string)null);
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Grupo", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CreadorId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Decada")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Descripcion")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Nombre")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreadorId");
+
+                    b.ToTable("grupos", (string)null);
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.GrupoIntegrante", b =>
+                {
+                    b.Property<int>("GrupoId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UsuarioId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("FechaUnion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("GrupoId", "UsuarioId");
+
+                    b.HasIndex("UsuarioId");
+
+                    b.ToTable("grupos_integrantes", (string)null);
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Logro", b =>
@@ -128,6 +191,44 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.ToTable("lugares", (string)null);
                 });
 
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.MensajeChat", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Contenido")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int>("DestinatarioId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("EmisorId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("FechaEnvio")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("FechaExpiracion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DestinatarioId");
+
+                    b.HasIndex("FechaExpiracion")
+                        .HasDatabaseName("IX_mensajes_chat_expiracion");
+
+                    b.HasIndex("EmisorId", "DestinatarioId")
+                        .HasDatabaseName("IX_mensajes_chat_participantes");
+
+                    b.ToTable("mensajes_chat", (string)null);
+                });
+
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Moderación", b =>
                 {
                     b.Property<int>("Id")
@@ -181,6 +282,9 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Property<DateTime>("FechaCreación")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("GrupoId")
+                        .HasColumnType("integer");
+
                     b.Property<int>("LugarId")
                         .HasColumnType("integer");
 
@@ -206,6 +310,8 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("GrupoId");
+
                     b.HasIndex("LugarId");
 
                     b.HasIndex("PublicacionOriginalId");
@@ -213,6 +319,72 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.HasIndex("UsuarioId");
 
                     b.ToTable("Publicaciones");
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.ReaccionComentario", b =>
+                {
+                    b.Property<int>("ComentarioId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UsuarioId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Tipo")
+                        .HasColumnType("integer");
+
+                    b.HasKey("ComentarioId", "UsuarioId");
+
+                    b.HasIndex("UsuarioId");
+
+                    b.ToTable("reacciones_comentario", (string)null);
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.SesionUsuario", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("FechaExpiracion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("FechaRevocacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RefreshTokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("UltimoUso")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UserAgent")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<int>("UsuarioId")
+                        .HasColumnType("integer");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FechaExpiracion");
+
+                    b.HasIndex("UsuarioId");
+
+                    b.ToTable("sesiones_usuario", (string)null);
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Usuario", b =>
@@ -247,6 +419,9 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                         .HasColumnType("character varying(21)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("Email")
+                        .IsUnique();
 
                     b.ToTable("Usuario", (string)null);
 
@@ -323,6 +498,11 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Comentario", b =>
                 {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Comentario", "ComentarioPadre")
+                        .WithMany("Respuestas")
+                        .HasForeignKey("ComentarioPadreId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
                     b.HasOne("ProyectoFinalTPI.Backend.Entidades.Publicacion", "Publicacion")
                         .WithMany("Comentarios")
                         .HasForeignKey("PublicacionId")
@@ -335,9 +515,60 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.Navigation("ComentarioPadre");
+
                     b.Navigation("Publicacion");
 
                     b.Navigation("Usuario");
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Grupo", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario", "Creador")
+                        .WithMany()
+                        .HasForeignKey("CreadorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Creador");
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.GrupoIntegrante", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Grupo", "Grupo")
+                        .WithMany("Integrantes")
+                        .HasForeignKey("GrupoId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario", "Usuario")
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Grupo");
+
+                    b.Navigation("Usuario");
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.MensajeChat", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario", "Destinatario")
+                        .WithMany()
+                        .HasForeignKey("DestinatarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario", "Emisor")
+                        .WithMany()
+                        .HasForeignKey("EmisorId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Destinatario");
+
+                    b.Navigation("Emisor");
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Logros_Usuarios", b =>
@@ -361,6 +592,11 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Publicacion", b =>
                 {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Grupo", "Grupo")
+                        .WithMany("Recuerdos")
+                        .HasForeignKey("GrupoId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("ProyectoFinalTPI.Backend.Entidades.Lugar", "Lugar")
                         .WithMany()
                         .HasForeignKey("LugarId")
@@ -378,11 +614,57 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.Navigation("Grupo");
+
                     b.Navigation("Lugar");
 
                     b.Navigation("PublicacionOriginal");
 
                     b.Navigation("Usuario");
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.ReaccionComentario", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Comentario", "Comentario")
+                        .WithMany("Reacciones")
+                        .HasForeignKey("ComentarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario", "Usuario")
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Comentario");
+
+                    b.Navigation("Usuario");
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.SesionUsuario", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario", "Usuario")
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Usuario");
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Comentario", b =>
+                {
+                    b.Navigation("Reacciones");
+
+                    b.Navigation("Respuestas");
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Grupo", b =>
+                {
+                    b.Navigation("Integrantes");
+
+                    b.Navigation("Recuerdos");
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Logro", b =>

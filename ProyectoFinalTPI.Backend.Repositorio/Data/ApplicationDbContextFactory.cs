@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
+using Microsoft.Extensions.Configuration;
 
 namespace ProyectoFinalTPI.Backend.Repositorio.Data
 {
@@ -7,10 +8,24 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
     {
         public ApplicationDbContext CreateDbContext(string[] args)
         {
+            var configuration = new ConfigurationBuilder()
+                .AddUserSecrets(typeof(ApplicationDbContextFactory).Assembly, optional: true)
+                .AddEnvironmentVariables()
+                .Build();
+
+            var connectionString = configuration.GetConnectionString("PostgresConnection");
+            if (string.IsNullOrWhiteSpace(connectionString))
+            {
+                throw new InvalidOperationException(
+                    "No se configuró ConnectionStrings:PostgresConnection. " +
+                    "Configurala en User Secrets o en la variable de entorno " +
+                    "ConnectionStrings__PostgresConnection antes de ejecutar EF Core.");
+            }
+
             var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContext>();
 
             optionsBuilder.UseNpgsql(
-                "Host=127.0.0.1;Database=Nostalgiar;Username=postgres;Password=123",
+                connectionString,
                 x => x.UseNetTopologySuite()
             );
 

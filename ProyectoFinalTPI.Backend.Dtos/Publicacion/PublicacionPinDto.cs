@@ -1,4 +1,4 @@
-﻿using ProyectoFinalTPI.Backend.Entidades;
+using ProyectoFinalTPI.Backend.Entidades;
 
 namespace ProyectoFinalTPI.Backend.Dtos.Publicacion
 {
@@ -8,6 +8,7 @@ namespace ProyectoFinalTPI.Backend.Dtos.Publicacion
         public double Latitud {  get; set; }
         public double Longitud { get; set; }
         public CategoriaEnum Categoria { get; set; }
-
+        public string Titulo { get; set; } = string.Empty;
+        public int Año { get; set; }
     }
 }

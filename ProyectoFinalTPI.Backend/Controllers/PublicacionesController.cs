@@ -1,195 +1,332 @@
+using Swashbuckle.AspNetCore.Annotations;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using ProyectoFinalTPI.Backend.Dtos;
-using ProyectoFinalTPI.Backend.Dtos.Comentario;
 using ProyectoFinalTPI.Backend.Dtos.Mapa;
 using ProyectoFinalTPI.Backend.Dtos.Publicacion;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Requests.Publicaciones;
+using ProyectoFinalTPI.Backend.Mappings;
+using ProyectoFinalTPI.Backend.Extensions;
+using ProyectoFinalTPI.Backend.Entidades;
 
 namespace ProyectoFinalTPI.Backend.Controllers
 {
     [ApiController]
     [Route("api/publicaciones")]
+    [SwaggerResponse(StatusCodes.Status500InternalServerError, "Ocurrió un error inesperado al procesar la operación.", typeof(ProblemDetails))]
     public class PublicacionesController : ControllerBase
     {
         private readonly IPublicacionServicio _publicacionServicio;
         private readonly IEtiquetadoPublicacionServicio _etiquetadoPublicacionServicio;
-        private readonly ILogger<PublicacionesController> _logger;
 
         public PublicacionesController(
             IPublicacionServicio publicacionServicio,
-            IEtiquetadoPublicacionServicio etiquetadoPublicacionServicio,
-            ILogger<PublicacionesController> logger)
+            IEtiquetadoPublicacionServicio etiquetadoPublicacionServicio)
         {
             _publicacionServicio = publicacionServicio;
             _etiquetadoPublicacionServicio = etiquetadoPublicacionServicio;
-            _logger = logger;
         }
 
         [HttpGet("mapa")]
-        public Task<ActionResult<ResultadoMapaDto>> ObtenerMapa(
+        [SwaggerOperation(
+            Summary = "Obtiene los pines de publicaciones para mostrar en el mapa.",
+            Description = "Permite filtrar por un área geográfica, categoría y fechas del recuerdo. Solo devuelve publicaciones visibles y no requiere iniciar sesión. Devuelve hasta 200 pines; hayMas indica si el área contiene más resultados."
+        )]
+        [SwaggerResponse(StatusCodes.Status200OK, "Pines encontrados e indicador de resultados adicionales.", typeof(ResultadoMapaDto))]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "El área geográfica, la categoría o las fechas no son válidas.", typeof(ProblemDetails))]
+        public async Task<ActionResult<ResultadoMapaDto>> ObtenerMapa(
             [FromQuery] PublicacionFiltroDto filtro,
             CancellationToken cancellationToken)
         {
-            return EjecutarConsulta(() => _publicacionServicio.ObtenerPines(
+            return Ok(await _publicacionServicio.ObtenerPines(
                 filtro, cancellationToken));
         }
 
         [HttpGet("{id:int}/resumen")]
-        public Task<ActionResult<PublicacionResumenDto>> ObtenerResumen(
+        [SwaggerOperation(
+            Summary = "Obtiene el resumen de una publicación.",
+            Description = "Devuelve los datos resumidos de una publicación visible a partir de su identificador."
+        )]
+        [SwaggerResponse(StatusCodes.Status200OK, "Resumen de la publicación.", typeof(PublicacionResumenDto))]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "El identificador de la publicación no es válido.", typeof(ProblemDetails))]
+        [SwaggerResponse(StatusCodes.Status404NotFound, "La publicación no existe o no está disponible.", typeof(ProblemDetails))]
+        public async Task<ActionResult<PublicacionResumenDto>> ObtenerResumen(
             int id,
             CancellationToken cancellationToken)
         {
-            return EjecutarConsulta(() => _publicacionServicio.ObtenerResumenPorId(
+            return Ok(await _publicacionServicio.ObtenerResumenPorId(
                 id, cancellationToken));
         }
 
         [HttpGet("{id:int}")]
-        public Task<ActionResult<PublicacionDetalleDto>> ObtenerDetalle(
+        [SwaggerOperation(
+            Summary = "Obtiene el detalle de una publicación.",
+            Description = "Devuelve una publicación visible con su información multimedia y el estado de sus likes para el usuario identificado."
+        )]
+        [SwaggerResponse(StatusCodes.Status200OK, "Detalle de la publicación.", typeof(PublicacionDetalleDto))]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "El identificador de la publicación no es válido.", typeof(ProblemDetails))]
+        [SwaggerResponse(StatusCodes.Status404NotFound, "La publicación no existe o no está disponible.", typeof(ProblemDetails))]
+        public async Task<ActionResult<PublicacionDetalleDto>> ObtenerDetalle(
             int id,
             CancellationToken cancellationToken)
         {
-            return EjecutarConsulta(() => _publicacionServicio.ObtenerDetallePorId(
-                id, cancellationToken));
+            var detalle = await _publicacionServicio.ObtenerDetallePorId(id, cancellationToken);
+            var usuarioIdActual = User.ObtenerUsuarioId();
+            await _publicacionServicio.CompletarResumenesLikes(
+                [detalle], usuarioIdActual ?? 0, cancellationToken);
+            await _publicacionServicio.CompletarResumenesPuntuaciones(
+                [detalle], usuarioIdActual, cancellationToken);
+
+            return Ok(detalle);
         }
 
-        [HttpGet("{id:int}/comentarios")]
-        public Task<ActionResult<ResultadoPaginadoDto<ComentarioDto>>> ObtenerComentarios(
-            int id,
-            [FromQuery] string? cursor = null,
-            [FromQuery] int limite = 20,
-            CancellationToken cancellationToken = default)
+        [HttpGet("usuario/{usuarioId:int}")]
+        [SwaggerOperation(
+            Summary = "Obtiene las publicaciones visibles de un usuario.",
+            Description = "Devuelve el listado de publicaciones creadas por el usuario indicado, con información de likes y puntuaciones."
+        )]
+        [SwaggerResponse(StatusCodes.Status200OK, "Listado de publicaciones del usuario.", typeof(List<PublicacionDetalleDto>))]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "El identificador del usuario no es válido.", typeof(ProblemDetails))]
+        public async Task<ActionResult<List<PublicacionDetalleDto>>> ObtenerPorUsuario(
+            int usuarioId,
+            CancellationToken cancellationToken)
         {
-            return EjecutarConsulta(() => _publicacionServicio.ObtenerComentarios(
-                id, cursor, limite, cancellationToken));
-        }
-
-        private async Task<ActionResult<T>> EjecutarConsulta<T>(Func<Task<T>> consulta)
-        {
-            try
-            {
-                return Ok(await consulta());
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { mensaje = ex.Message });
-            }
-            catch (KeyNotFoundException ex)
-            {
-                return NotFound(new { mensaje = ex.Message });
-            }
+            var publicaciones = await _publicacionServicio.ObtenerPorUsuarioId(
+                usuarioId, User.ObtenerUsuarioId(), cancellationToken);
+            return Ok(publicaciones);
         }
 
         [HttpPost]
+        [SwaggerOperation(
+            Summary = "Crea una publicación.",
+            Description = "Recibe los datos del recuerdo y su ubicación como multipart/form-data. Debe enviarse un archivo o una URL HTTPS, no ambos. El archivo puede ocupar hasta 50 MB. Se utiliza el autor autenticado cuando está disponible; en caso contrario, AutorId."
+        )]
+        [SwaggerResponse(StatusCodes.Status201Created, "Publicación creada. Devuelve su id y la cabecera Location.")]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "Los datos del recuerdo, la ubicación o el contenido multimedia no son válidos.", typeof(ProblemDetails))]
+        [SwaggerResponse(StatusCodes.Status404NotFound, "El autor indicado no existe.", typeof(ProblemDetails))]
+        [SwaggerResponse(StatusCodes.Status415UnsupportedMediaType, "El formato del cuerpo no es compatible; utilice multipart/form-data.", typeof(ProblemDetails))]
         public async Task<IActionResult> Crear([FromForm] CrearPublicacionRequest request)
         {
+            var autorIdAutenticado = User.ObtenerUsuarioId();
+            var autorIdFinal = (autorIdAutenticado.HasValue && autorIdAutenticado.Value > 0)
+                ? autorIdAutenticado.Value
+                : request.AutorId;
+
             using var stream = request.Archivo?.OpenReadStream();
 
-            var dto = new CrearPublicacionDto
-            {
-                Titulo = request.Titulo,
-                Descripcion = request.Descripcion,
-                Fecha = request.Fecha,
+            var id = await _publicacionServicio.Crear(
+                request.ToPublicacion(autorIdFinal), stream, request.Archivo?.FileName);
 
-                Categoria = request.Categoria,
-
-                NombreLugar = request.NombreLugar,
-
-                Latitud = request.Latitud,
-                Longitud = request.Longitud,
-
-                TipoMultimedia = request.TipoMultimedia,
-
-                Archivo = stream,
-                NombreArchivo = request.Archivo?.FileName,
-                UrlArchivo = request.UrlArchivo,
-
-                AutorId = request.AutorId
-            };
-
-            try
-            {
-                var id = await _publicacionServicio.Crear(dto);
-
-                return Created(
-                    $"/api/publicaciones/{id}",
-                    new { id });
-            }
-            catch (KeyNotFoundException ex)
-            {
-                return NotFound(new { mensaje = ex.Message });
-            }
+            return Created(
+                $"/api/publicaciones/{id}",
+                new { id });
         }
 
         [HttpPost("compartir")]
-        public async Task<IActionResult> Compartir([FromBody] CompartirPublicacionRequest request)
+        [SwaggerOperation(
+            Summary = "Comparte una publicación.",
+            Description = "Crea una publicación vinculada a la original, con un comentario opcional. Conserva sus datos multimedia y ubicación. Se utiliza el autor autenticado cuando está disponible; en caso contrario, AutorId."
+        )]
+        [SwaggerResponse(StatusCodes.Status201Created, "Publicación compartida. Devuelve su id y la cabecera Location.")]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "Los datos para compartir no son válidos.", typeof(ProblemDetails))]
+        [SwaggerResponse(StatusCodes.Status404NotFound, "El autor o la publicación original no existen o no están disponibles.", typeof(ProblemDetails))]
+        [SwaggerResponse(StatusCodes.Status415UnsupportedMediaType, "El formato del cuerpo no es compatible; utilice application/json.", typeof(ProblemDetails))]
+        public async Task<IActionResult> Compartir(
+            [FromBody] CompartirPublicacionRequest request,
+            CancellationToken cancellationToken = default)
         {
-            var dto = new CompartirPublicacionDto
-            {
-                PublicacionOriginalId = request.PublicacionOriginalId,
-                AutorId = request.AutorId,
-                Descripcion = request.Descripcion ?? string.Empty
-            };
+            var autorIdAutenticado = User.ObtenerUsuarioId();
+            var autorIdFinal = (autorIdAutenticado.HasValue && autorIdAutenticado.Value > 0)
+                ? autorIdAutenticado.Value
+                : request.AutorId;
 
-            try
-            {
-                var id = await _publicacionServicio.Compartir(dto);
+            var id = await _publicacionServicio.Compartir(
+                request.ToPublicacion(autorIdFinal), cancellationToken);
 
-                return Created(
-                    $"/api/publicaciones/{id}",
-                    new { id });
-            }
-            catch (KeyNotFoundException ex)
-            {
-                return NotFound(new { mensaje = ex.Message });
-            }
+            return Created(
+                $"/api/publicaciones/{id}",
+                new { id });
+        }
+
+        [HttpDelete("compartir/{originalId:int}")]
+        [SwaggerOperation(
+            Summary = "Elimina un repost.",
+            Description = "Elimina la publicación compartida asociada al identificador original y al autor indicado. Se utiliza el autor autenticado cuando está disponible; en caso contrario, autorId."
+        )]
+        [SwaggerResponse(StatusCodes.Status200OK, "Repost eliminado.")]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "El identificador de la publicación original no es válido.", typeof(ProblemDetails))]
+        [SwaggerResponse(StatusCodes.Status404NotFound, "El repost no existe o no se pudo eliminar para el autor indicado.", typeof(ProblemDetails))]
+        public async Task<IActionResult> EliminarRepost(
+            int originalId,
+            [FromQuery] int? autorId = null,
+            CancellationToken cancellationToken = default)
+        {
+            var autorIdAutenticado = User.ObtenerUsuarioId();
+            var autorIdFinal = (autorIdAutenticado.HasValue && autorIdAutenticado.Value > 0)
+                ? autorIdAutenticado.Value
+                : autorId;
+
+            await _publicacionServicio.EliminarRepost(originalId, autorIdFinal, cancellationToken);
+            return Ok(new { mensaje = "Repost eliminado con éxito.", id = originalId });
+        }
+
+        [HttpDelete("{id:int}")]
+        [SwaggerOperation(
+            Summary = "Elimina una publicación.",
+            Description = "Elimina una publicación por su identificador. Se utiliza el autor autenticado cuando está disponible; en caso contrario, autorId."
+        )]
+        [SwaggerResponse(StatusCodes.Status200OK, "Publicación eliminada.")]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "El identificador de la publicación no es válido.", typeof(ProblemDetails))]
+        [SwaggerResponse(StatusCodes.Status404NotFound, "La publicación no existe o no se pudo eliminar para el autor indicado.", typeof(ProblemDetails))]
+        public async Task<IActionResult> Eliminar(
+            int id,
+            [FromQuery] int? autorId = null,
+            CancellationToken cancellationToken = default)
+        {
+            var autorIdAutenticado = User.ObtenerUsuarioId();
+            var autorIdFinal = (autorIdAutenticado.HasValue && autorIdAutenticado.Value > 0)
+                ? autorIdAutenticado.Value
+                : autorId;
+
+            await _publicacionServicio.Eliminar(id, autorIdFinal, cancellationToken);
+            return Ok(new { mensaje = "Publicación eliminada con éxito.", id });
         }
 
         [HttpPost("{publicacionId:int}/etiquetas")]
+        [SwaggerOperation(
+            Summary = "Etiqueta usuarios en una publicación.",
+            Description = "Recibe una lista de identificadores de usuarios. Crea las etiquetas faltantes sin duplicar las existentes."
+        )]
+        [SwaggerResponse(StatusCodes.Status201Created, "Se crearon nuevas etiquetas.")]
+        [SwaggerResponse(StatusCodes.Status200OK, "Todos los usuarios indicados ya estaban etiquetados.")]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "El identificador de la publicación o la lista de usuarios no son válidos.", typeof(ProblemDetails))]
+        [SwaggerResponse(StatusCodes.Status404NotFound, "La publicación o alguno de los usuarios no existen.", typeof(ProblemDetails))]
+        [SwaggerResponse(StatusCodes.Status415UnsupportedMediaType, "El formato del cuerpo no es compatible; utilice application/json.", typeof(ProblemDetails))]
         public async Task<IActionResult> EtiquetarUsuarios(
             int publicacionId, [FromBody] EtiquetarUsuariosRequest request, CancellationToken cancellationToken)
         {
+            var cantidadEtiquetasNuevas = await _etiquetadoPublicacionServicio.EtiquetarUsuarios(
+                publicacionId, request.UsuariosIds, cancellationToken);
+
+            var respuesta = new
+            {
+                mensaje = cantidadEtiquetasNuevas > 0
+                    ? "Se etiquetaron los usuarios en la publicacion."
+                    : "usuarios ya etiquetados en la publicacion",
+                publicacionId,
+                cantidadEtiquetasNuevas
+            };
+
+            return cantidadEtiquetasNuevas > 0
+                ? StatusCode(StatusCodes.Status201Created, respuesta)
+                : Ok(respuesta);
+        }
+
+        [Authorize]
+        [HttpPost("{publicacionId:int}/like")]
+        [SwaggerOperation(
+            Summary = "Agrega un like a una publicación.",
+            Description = "Requiere autenticación. Registra el like del usuario y devuelve la cantidad de likes y su estado actualizado."
+        )]
+        [SwaggerResponse(StatusCodes.Status200OK, "Estado actualizado de los likes.", typeof(MeGustaPublicacionDto))]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "El identificador de la publicación no es válido.", typeof(ProblemDetails))]
+        [SwaggerResponse(StatusCodes.Status401Unauthorized, "No hay una autenticación válida o el token no identifica a un usuario válido.")]
+        [SwaggerResponse(StatusCodes.Status404NotFound, "El usuario o la publicación visible no existen.", typeof(ProblemDetails))]
+        public async Task<ActionResult<MeGustaPublicacionDto>> DarLike(
+            int publicacionId, CancellationToken cancellationToken = default)
+        {
+            var usuarioId = User.ObtenerUsuarioId();
+            if (!usuarioId.HasValue || usuarioId.Value <= 0) return Unauthorized();
+
+            return Ok(await _publicacionServicio.DarLike( publicacionId, usuarioId.Value, cancellationToken));
+        }
+
+        [Authorize]
+        [HttpDelete("{publicacionId:int}/like")]
+        [SwaggerOperation(
+            Summary = "Quita un like de una publicación.",
+            Description = "Requiere autenticación. Quita el like del usuario y devuelve la cantidad de likes y su estado actualizado."
+        )]
+        [SwaggerResponse(StatusCodes.Status200OK, "Estado actualizado de los likes.", typeof(MeGustaPublicacionDto))]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "El identificador de la publicación no es válido.", typeof(ProblemDetails))]
+        [SwaggerResponse(StatusCodes.Status401Unauthorized, "No hay una autenticación válida o el token no identifica a un usuario válido.")]
+        [SwaggerResponse(StatusCodes.Status404NotFound, "El usuario o la publicación visible no existen.", typeof(ProblemDetails))]
+        public async Task<ActionResult<MeGustaPublicacionDto>> QuitarLike(
+            int publicacionId, CancellationToken cancellationToken = default)
+        {
+            var usuarioId = User.ObtenerUsuarioId();
+            if (!usuarioId.HasValue || usuarioId.Value <= 0) return Unauthorized();
+
+            return Ok(await _publicacionServicio.QuitarLike( publicacionId, usuarioId.Value, cancellationToken));
+        }
+
+        [Authorize]
+        [HttpPut("{publicacionId:int}/puntuacion")]
+        [SwaggerOperation(
+            Summary = "Puntúa una publicación (1 a 5).",
+            Description = "Requiere autenticación y categoría Nostálgico. Si se envía la misma puntuación previa, se desmarca/elimina (toggle)."
+        )]
+        [SwaggerResponse(StatusCodes.Status200OK, "Puntuación registrada o actualizada.", typeof(PuntuacionPublicacionDto))]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "Puntuación o publicación no válida.", typeof(ProblemDetails))]
+        [SwaggerResponse(StatusCodes.Status401Unauthorized, "No autenticado.")]
+        [SwaggerResponse(StatusCodes.Status403Forbidden, "Nivel insuficiente para puntuar (debe ser Nostálgico o superior).", typeof(ProblemDetails))]
+        [SwaggerResponse(StatusCodes.Status404NotFound, "Publicación no encontrada.", typeof(ProblemDetails))]
+        public async Task<ActionResult<PuntuacionPublicacionDto>> Puntuar(
+            int publicacionId,
+            [FromBody] PuntuarPublicacionDto dto,
+            CancellationToken cancellationToken = default)
+        {
+            var usuarioId = User.ObtenerUsuarioId();
+            if (!usuarioId.HasValue || usuarioId.Value <= 0) return Unauthorized();
+
             try
-            {//valida los IDs y ejecuta la consulta Cypher.
-                var cantidadEtiquetasNuevas = await _etiquetadoPublicacionServicio.EtiquetarUsuarios( publicacionId, request.UsuariosIds, cancellationToken);
-
-                var respuesta = new
+            {
+                var resultado = await _publicacionServicio.Puntuar(
+                    publicacionId, usuarioId.Value, dto.Puntaje, cancellationToken);
+                return Ok(resultado);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
                 {
-                    mensaje = cantidadEtiquetasNuevas > 0
-                        ? "Se etiquetaron los usuarios en la publicacion."
-                        : "usuarios ya etiquetados en la publicacion",
-                    publicacionId,
-                    cantidadEtiquetasNuevas
-                };
-
-                return cantidadEtiquetasNuevas > 0
-                    ? StatusCode(StatusCodes.Status201Created, respuesta)
-                    : Ok(respuesta);
+                    Title = "Nivel insuficiente para puntuar",
+                    Detail = ex.Message,
+                    Status = StatusCodes.Status403Forbidden
+                });
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            catch (InvalidOperationException ex)
             {
-                throw;
-            }
-            catch (ArgumentException exception)
-            {
-                return BadRequest(new { error = exception.Message });
-            }
-            catch (KeyNotFoundException exception)
-            {
-                return NotFound(new { error = exception.Message });
-            }
-            catch (Exception exception)
-            {
-                _logger.LogError(
-                    exception,
-                    "Error al etiquetar usuarios en la publicacion {PublicacionId}.",
-                    publicacionId);
-
-                return StatusCode(
-                    StatusCodes.Status500InternalServerError,
-                    new { error = "Ocurrio un error al etiquetar usuarios en la publicacion" });
+                return BadRequest(new ProblemDetails
+                {
+                    Title = "Operación no permitida",
+                    Detail = ex.Message,
+                    Status = StatusCodes.Status400BadRequest
+                });
             }
         }
+
+        [Authorize]
+        [HttpDelete("{publicacionId:int}/puntuacion")]
+        [SwaggerOperation(
+            Summary = "Quita la puntuación de una publicación.",
+            Description = "Requiere autenticación. Elimina la puntuación del usuario en la publicación y devuelve el estado actualizado."
+        )]
+        [SwaggerResponse(StatusCodes.Status200OK, "Puntuación eliminada.", typeof(PuntuacionPublicacionDto))]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "El identificador de la publicación no es válido.", typeof(ProblemDetails))]
+        [SwaggerResponse(StatusCodes.Status401Unauthorized, "No autenticado.")]
+        [SwaggerResponse(StatusCodes.Status404NotFound, "Publicación no encontrada.", typeof(ProblemDetails))]
+        public async Task<ActionResult<PuntuacionPublicacionDto>> QuitarPuntuacion(
+            int publicacionId, CancellationToken cancellationToken = default)
+        {
+            var usuarioId = User.ObtenerUsuarioId();
+            if (!usuarioId.HasValue || usuarioId.Value <= 0) return Unauthorized();
+
+            var resultado = await _publicacionServicio.QuitarPuntuacion(
+                publicacionId, usuarioId.Value, cancellationToken);
+            return Ok(resultado);
+        }
+
+
+
     }
 }
-

@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using ProyectoFinalTPI.Backend.Controllers;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
@@ -23,10 +24,10 @@ public class EtiquetadoPublicacionControllerTests
         var servicio = new EtiquetadoFake { CantidadCreada = 2 };
         var controller = CrearController(servicio);
 
-        var resultado = await controller.EtiquetarUsuarios(
+        var resultado = await MiddlewareTestHelper.Ejecutar(controller.HttpContext, async () => await controller.EtiquetarUsuarios(
             25,
             new EtiquetarUsuariosRequest { UsuariosIds = new List<int> { 10, 20 } },
-            CancellationToken.None);
+            CancellationToken.None));
         var respuesta = Assert.IsType<ObjectResult>(resultado);
 
         Assert.Equal((int)HttpStatusCode.Created, respuesta.StatusCode);
@@ -42,10 +43,10 @@ public class EtiquetadoPublicacionControllerTests
     {
         var controller = CrearController(new EtiquetadoFake { CantidadCreada = 0 });
 
-        var resultado = await controller.EtiquetarUsuarios(
+        var resultado = await MiddlewareTestHelper.Ejecutar(controller.HttpContext, async () => await controller.EtiquetarUsuarios(
             25,
             new EtiquetarUsuariosRequest { UsuariosIds = new List<int> { 10 } },
-            CancellationToken.None);
+            CancellationToken.None));
         var respuesta = Assert.IsType<OkObjectResult>(resultado);
         var contenido = JsonSerializer.Serialize(respuesta.Value, OpcionesJson);
 
@@ -69,11 +70,12 @@ public class EtiquetadoPublicacionControllerTests
         };
         var controller = CrearController(servicio);
 
-        var resultado = await controller.EtiquetarUsuarios(
+        var resultado = await MiddlewareTestHelper.Ejecutar(controller.HttpContext, async () => await controller.EtiquetarUsuarios(
             publicacionId,
             new EtiquetarUsuariosRequest { UsuariosIds = usuariosIds.ToList() },
-            CancellationToken.None);
-        var respuesta = Assert.IsType<BadRequestObjectResult>(resultado);
+            CancellationToken.None));
+        var respuesta = Assert.IsType<ObjectResult>(resultado);
+        Assert.IsType<ProblemDetails>(respuesta.Value);
 
         Assert.Equal((int)HttpStatusCode.BadRequest, respuesta.StatusCode);
         Assert.Contains(mensaje, JsonSerializer.Serialize(respuesta.Value, OpcionesJson));
@@ -90,11 +92,12 @@ public class EtiquetadoPublicacionControllerTests
             Error = new KeyNotFoundException(mensaje)
         });
 
-        var resultado = await controller.EtiquetarUsuarios(
+        var resultado = await MiddlewareTestHelper.Ejecutar(controller.HttpContext, async () => await controller.EtiquetarUsuarios(
             25,
             new EtiquetarUsuariosRequest { UsuariosIds = new List<int> { 10 } },
-            CancellationToken.None);
-        var respuesta = Assert.IsType<NotFoundObjectResult>(resultado);
+            CancellationToken.None));
+        var respuesta = Assert.IsType<ObjectResult>(resultado);
+        Assert.IsType<ProblemDetails>(respuesta.Value);
 
         Assert.Equal((int)HttpStatusCode.NotFound, respuesta.StatusCode);
         Assert.Contains(mensaje, JsonSerializer.Serialize(respuesta.Value, OpcionesJson));
@@ -108,15 +111,15 @@ public class EtiquetadoPublicacionControllerTests
             Error = new InvalidOperationException("detalle interno")
         });
 
-        var resultado = await controller.EtiquetarUsuarios(
+        var resultado = await MiddlewareTestHelper.Ejecutar(controller.HttpContext, async () => await controller.EtiquetarUsuarios(
             25,
             new EtiquetarUsuariosRequest { UsuariosIds = new List<int> { 10 } },
-            CancellationToken.None);
+            CancellationToken.None));
         var respuesta = Assert.IsType<ObjectResult>(resultado);
         var contenido = JsonSerializer.Serialize(respuesta.Value, OpcionesJson);
 
         Assert.Equal((int)HttpStatusCode.InternalServerError, respuesta.StatusCode);
-        Assert.Contains("Ocurrio un error al etiquetar usuarios en la publicacion", contenido);
+        Assert.Contains("No se pudo completar la operación", contenido);
         Assert.DoesNotContain("detalle interno", contenido);
     }
 
@@ -124,8 +127,10 @@ public class EtiquetadoPublicacionControllerTests
     {
         return new PublicacionesController(
             null!,
-            servicio,
-            NullLogger<PublicacionesController>.Instance);
+            servicio)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
+        };
     }
 
     private sealed class EtiquetadoFake : IEtiquetadoPublicacionServicio

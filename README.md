@@ -1,4 +1,22 @@
 # ProyectoFinalTPI.Backend
+
+## Cobertura de tests
+
+Coverlet recolecta la cobertura y ReportGenerator genera un informe HTML. Desde la raíz:
+
+```powershell
+dotnet tool restore
+.\coverage.ps1
+```
+
+Abrir `coverage-report/index.html` para ver la cobertura por archivo y línea. Para ejecutar solo un grupo de tests:
+
+```powershell
+.\coverage.ps1 -Filter 'FullyQualifiedName~PublicacionServicioTests'
+```
+
+El informe refleja únicamente los tests ejecutados. La suite completa requiere Docker para las pruebas de integración con PostgreSQL/PostGIS. Los resultados se guardan en `TestResults/` y `coverage-report/`, excluidos de Git.
+
 Este es el repositorio del Backend para nuestro **Proyecto Final TPI**. La solución está desarrollada en **ASP.NET Core 9 (MVC)** bajo una arquitectura de **Persistencia Políglota**, combinando bases de datos relacionales, espaciales y orientadas a grafos para lograr el máximo rendimiento en nuestra red social.
 
 ---
@@ -127,6 +145,56 @@ cd ProyectoFinalTPI.Backend
 dotnet ef database update --context ApplicationDbContext
 ```
 
+### 3. Carga Automática de Datos de Prueba (Data Seeder)
+
+El proyecto incluye un mecanismo de **seed automático** ([`DataSeeder.cs`](ProyectoFinalTPI.Backend/DataSeeder.cs)) para poblar la base de datos con usuarios y publicaciones geolocalizadas de prueba la primera vez que se inicia el backend.
+
+#### ¿Cómo funciona?
+
+1. **Detección automática al iniciar:** Al levantar la API en entorno de desarrollo (`Development`), el seeder comprueba si la tabla `Usuarios` contiene registros (`!db.Usuarios.Any()`).
+2. **Lectura de datos (`seed.json`):** Si la base está vacía, busca y lee el archivo `seed.json` en la raíz de la solución. Este archivo contiene los 37 autores y todas las memorias históricas de las décadas de los 70s, 80s, 90s y 2000s con coordenadas geográficas reales.
+3. **Poblado de entidades:**
+   - **Usuarios:** Crea un `Usuario_Personal` para cada autor del seed con correo generado y reputación inicial.
+   - **Lugares:** Inserta las coordenadas espaciales con geometría `Point(lng, lat)` y SRID 4326 en PostgreSQL/PostGIS.
+   - **Publicaciones:** Crea las publicaciones vinculándolas a su lugar, categoría, multimedia y autor.
+4. **Idempotencia:** Si la base ya tiene usuarios, el seeder no se vuelve a ejecutar para proteger los datos existentes.
+
+#### Credenciales de prueba para iniciar sesión
+
+Todos los usuarios creados por el seeder tienen el mismo formato de correo y contraseña:
+
+| Campo | Formato / Valor | Ejemplos |
+|---|---|---|
+| **Email** | `<nombre_sin_tildes>@example.com` | `miguel@example.com`, `susana@example.com`, `diego@example.com` |
+| **Contraseña** | `password123` | `password123` |
+
+> [!NOTE]
+> En el primer inicio de sesión a través de `/api/auth/login`, `AuthServicio` valida la contraseña inicial en texto plano y la migra automáticamente a un hash **BCrypt**.
+
+#### ¿Cómo reiniciar o forzar una nueva carga del Seeder?
+
+Si durante el desarrollo deseas limpiar la base de datos y volver a cargar el set de datos inicial:
+
+```powershell
+# 1. Posicionarse en ProyectoFinalTPI.Backend
+cd ProyectoFinalTPI.Backend
+
+# 2. Eliminar y volver a aplicar las migraciones
+dotnet ef database drop --context ApplicationDbContext
+dotnet ef database update --context ApplicationDbContext
+
+# 3. Al iniciar la aplicación, detectará la base vacía y resembrará automáticamente
+dotnet run
+```
+
+#### ¿Cómo regenerar `seed.json` desde el Frontend?
+
+Si se agregan nuevas memorias o autores en el frontend (`src/eras/registry.ts`), se puede actualizar `seed.json` ejecutando el script en la raíz de la solución:
+
+```powershell
+npx tsx export-seed.ts
+```
+
 ---
 
 ## 🔄 Flujo de Trabajo para Modificaciones (Importante)
@@ -150,25 +218,241 @@ Si necesitas agregar una nueva entidad o añadir un atributo (ejemplo: agregar l
 *Nota: Las relaciones y propiedades añadidas en **Neo4j** no requieren migraciones de Entity Framework. Se implementan mediante consultas Cypher en el servicio correspondiente.*
 
 
+### Tests de integración de publicaciones con Docker
+
+Estos tests prueban los GET de mapa, resumen, detalle y comentarios mediante
+peticiones HTTP que recorren el controlador, servicio y repositorio reales,
+con PostgreSQL 16 y PostGIS.
+
+**Requisitos y ejecución**
+
+1. Tener instalado el SDK de .NET compatible con el proyecto y Docker Desktop.
+2. Abrir Docker Desktop con el motor de contenedores Linux y esperar a que indique que está funcionando.
+3. Desde la raíz del repositorio, ejecutar:
+
+```powershell
+dotnet test ProyectoFinalTPI.Backend.Tests/ProyectoFinalTPI.Backend.Tests.csproj --filter FullyQualifiedName~PublicacionesIntegracionTests
+```
+
+No hace falta iniciar la API manualmente ni crear una base de datos.
+La primera ejecución necesita acceso a Internet para restaurar las dependencias
+y descargar las imágenes de Docker; por eso puede tardar más.
+
+**Qué sucede al ejecutar los tests**
+
+- Testcontainers levanta un contenedor temporal con la imagen `postgis/postgis:16-3.4`.
+- Cada caso crea una base independiente y aplica las migraciones del proyecto.
+- La API de prueba utiliza esa base para ejecutar las consultas, incluidas las geográficas.
+- Al terminar cada caso se elimina su base; al finalizar la clase se elimina el contenedor.
+
+La base de desarrollo no se utiliza ni se modifica. La conexión y las credenciales
+temporales las administra Testcontainers. Cloudinary está simulado y estos GET
+no consultan Neo4j.
+
+Si aparece `DockerUnavailableException`, comprobar que Docker Desktop esté abierto
+y que el motor esté funcionando antes de repetir el comando. Las pruebas requieren
+PostgreSQL/PostGIS real y no cambian automáticamente a una base en memoria.
+
+Los tests originales de `CrearPublicacionTests.cs` y
+`CompartirPublicacionTests.cs` mantienen su configuración anterior.
+Más detalles en [Integracion/README.md](ProyectoFinalTPI.Backend.Tests/Integracion/README.md).
+
+### Datos de demostración
+
+El archivo `ProyectoFinalTPI.Backend/seed.json` incluye 42 publicaciones únicas
+y 37 autores con perfiles personales y apellidos ficticios. Se carga automáticamente
+al iniciar la API en `Development`, usando la conexión `PostgresConnection`.
+La base debe tener aplicadas las migraciones.
+
+Para cargar los datos sin dejar el servidor ejecutándose, desde la raíz:
+
+```powershell
+dotnet run --project ProyectoFinalTPI.Backend --no-launch-profile -- --environment Development --seed-only
+```
+
+La carga también funciona cuando ya hay usuarios. Reutiliza perfiles personales
+por username/email, sin cambiar sus datos ni contraseñas; si hay una coincidencia
+ambigua, informa el problema. Omite recuerdos existentes con el mismo autor,
+título y fecha, y guarda los cambios dentro de una transacción.
+
+Los usuarios nuevos de demostración tienen la contraseña `password123`, guardada
+como hash BCrypt; sus emails están en `seed.json` (por ejemplo,
+`miguel@example.com`). No son administradores. Las cuentas preexistentes conservan
+sus credenciales. Estos datos son exclusivamente para desarrollo.
+
+Se conservaron los textos, categorías, ubicaciones y enlaces originales.
+Hay 19 publicaciones sin multimedia, cuya URL queda vacía.
+Los metadatos `groupId` y `hashtags` permanecen en el JSON, pero este seeder solo
+carga usuarios, lugares y publicaciones: no crea grupos ni relaciones en Neo4j.
+Los bloques editoriales `facts` y `music` no se importan como publicaciones.
+
+### Manejo centralizado de errores
+
+`ManejoExcepcionesMiddleware`, ubicado en `ProyectoFinalTPI.Backend/Middlewares`,
+centraliza las excepciones no manejadas de las solicitudes HTTP. Se registra una
+sola vez en `Program.cs`, antes de `UseRouting`:
+
+```csharp
+app.UseMiddleware<ProyectoFinalTPI.Backend.Middlewares.ManejoExcepcionesMiddleware>();
+```
+
+Aplica automáticamente a todos los controladores, incluidos los que se agreguen
+en el futuro. No hace falta invocarlo desde cada acción. El middleware ejecuta
+`await next(context)` dentro de un `try`: continúa hacia el controlador y, si
+el controlador o un servicio lanza una excepción, la captura y genera la respuesta.
+
+| Excepción | Código HTTP | Título |
+|---|---|---|
+| `ArgumentException` | `400` | Solicitud inválida |
+| `KeyNotFoundException` | `404` | Recurso no encontrado |
+| Cualquier otra excepción no manejada | `500` | Error interno del servidor |
+
+Las respuestas usan `ProblemDetails` con `Content-Type: application/problem+json`
+y los campos `status`, `title`, `detail`, `instance` (ruta de la solicitud) y
+`traceId`. Para 400 y 404, `detail` contiene el mensaje de la excepción, por lo
+que debe ser apto para mostrar al cliente. Para 500, devuelve el mensaje genérico
+«No se pudo completar la operación. Intentá nuevamente más tarde.» y registra
+la excepción completa, el método, la ruta y el `traceId` en los logs.
+
+Por ejemplo, una acción de Publicaciones llama directamente al servicio:
+
+```csharp
+return Ok(await _publicacionServicio.ObtenerDetallePorId(id, cancellationToken));
+```
+
+Si el servicio lanza `KeyNotFoundException`, el middleware genera el 404.
+Los métodos `EjecutarOperacion` y `CrearProblema` ya no son necesarios en
+`PublicacionesController`.
+
+Si otro controlador captura una excepción con su propio `try/catch` y devuelve
+una respuesta, esa excepción no llega al middleware. Si la vuelve a lanzar con
+`throw;`, sí llega. Las respuestas explícitas como `BadRequest(...)` y
+`NotFound(...)`, y las respuestas automáticas de validación de modelos, no se
+modifican: no son excepciones.
+
+Las cancelaciones (`OperationCanceledException` cuando `RequestAborted` está
+cancelado) se propagan sin convertirse en 500. Si la respuesta ya comenzó a
+enviarse, el middleware también propaga la excepción porque ya no puede
+reemplazarla por un `ProblemDetails`.
+
 ### Endpoints de publicaciones
 
 | Método | Ruta | Descripción |
 |---|---|---|
 | `POST` | `/api/publicaciones` | Crea una publicación con sus datos, ubicación y multimedia. Recibe `multipart/form-data`, con un archivo o una URL HTTPS. |
+| `POST` | `/api/publicaciones/compartir` | Comparte una publicación existente. Recibe `publicacionOriginalId`, `descripcion` (opcional) y `autorId`. Si `descripcion` está vacía o es null, genera un repost simple (desenrollando a la publicación raíz original); si contiene texto, genera un repost con cita (*quote tweet*) directo a dicha publicación. |
+| `DELETE` | `/api/publicaciones/compartir/{originalId}` | Deshace/elimina el repost simple que el usuario autenticado (o especificado por query `autorId`) realizó sobre la publicación original. No elimina quote tweets ni la publicación original. |
+| `DELETE` | `/api/publicaciones/{id}` | Elimina una publicación propia por su `id`. Si la solicitud incluye autenticación JWT, valida que el usuario sea el autor de la misma. |
 | `POST` | `/api/publicaciones/{id}/etiquetas` | Etiqueta uno o más usuarios en una publicación existente. Recibe `usuariosIds` en JSON; repetir una etiqueta existente no la duplica. |
+| `POST` | `/api/publicaciones/{publicacionId}/like` | Da like a la publicación indicada al usuario autenticado. No recibe body; el usuario se obtiene del JWT. |
+| `DELETE` | `/api/publicaciones/{publicacionId}/like` | Quita el like del usuario autenticado a la publicación indicada. No recibe body; el usuario se obtiene del JWT. |
 | `GET` | `/api/publicaciones/mapa` | Devuelve los pines del área visible del mapa. Permite filtrar por categoría y fecha del recuerdo. |
 | `GET` | `/api/publicaciones/{id}/resumen` | Devuelve una vista resumida para mostrar al seleccionar un pin. |
 | `GET` | `/api/publicaciones/{id}` | Devuelve el detalle de una publicación, con descripción completa, autor, multimedia y ubicación. |
 | `GET` | `/api/publicaciones/{id}/comentarios` | Devuelve los comentarios visibles de una publicación, paginados y ordenados del más reciente al más antiguo. |
+| `POST` | `/api/publicaciones/{publicacionId}/comentarios` | Crea un comentario asociado a la publicación indicada en la URL. Recibe contenido y usuarioId en JSON. |
 
 Las consultas públicas excluyen las publicaciones ocultas. Los comentarios se consultan por separado del detalle.
 Las etiquetas se almacenan en Neo4j como relaciones entre los nodos `Usuario` y `Publicacion`, cuyos datos maestros permanecen en PostgreSQL.
+
+### Dar o quitar me gusta
+
+Ambas operaciones requieren un JWT válido en `Authorization: Bearer <token>`. El `publicacionId` se envía en la ruta; no se envía `usuarioId` ni un body, porque el usuario se identifica desde el token.
+
+```http
+POST /api/publicaciones/42/like
+DELETE /api/publicaciones/42/like
+Authorization: Bearer <token>
+```
+
+El `POST` crea en Neo4j la relación `(:Usuario)-[:LE_GUSTA {creadaEn}]->(:Publicacion)`. Utiliza `MERGE`, por lo que repetir la solicitud del mismo usuario a la misma publicación no duplica el like. El `DELETE` elimina esa relación; si ya no existe, la operación no crea ni duplica nada.
+
+Antes de escribir en Neo4j, el backend comprueba en PostgreSQL que el usuario existe y que la publicación existe y está visible. Ambas rutas responden `200 OK` con el estado actualizado:
+
+```json
+{
+  "publicacionId": 42,
+  "cantidadLikes": 1,
+  "dioLike": true
+}
+```
+
+`cantidadLikes` cuenta las relaciones de like de esa publicación y `dioLike` indica si el usuario del token le dio like. Después de quitarlo, para ese usuario `dioLike` será `false`; el contador reflejará los likes restantes. Se devuelve `401 Unauthorized` si falta un JWT válido, `400 Bad Request` ante un ID inválido, `404 Not Found` si el usuario o la publicación no existen o la publicación está oculta, y `500 Internal Server Error` ante un fallo inesperado.
+
+Los likes se guardan en Neo4j y también alimentan `GET /api/feed/para-vos`: se recomiendan publicaciones que gustaron a usuarios con likes en común o que comparten usuarios etiquetados con publicaciones que el usuario marcó. El feed excluye publicaciones que el usuario ya likeó y valida en PostgreSQL que las recomendadas sigan visibles. No se necesita una migración de PostgreSQL para los likes.
+
+### Endpoints de seguimientos
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `POST` | `/api/seguimientos/{idUsuarioASeguir}` | Sigue al usuario indicado. El seguidor se extrae del JWT autenticado. |
+| `DELETE` | `/api/seguimientos/{idUsuarioASeguir}` | Deja de seguir al usuario indicado. No requiere body. El seguidor se extrae del JWT autenticado. |
+| `GET` | `/api/seguimientos/{idUsuario}/seguidos` | Lista los usuarios seguidos por `idUsuario`. |
+| `GET` | `/api/seguimientos/{idUsuario}/seguidores` | Lista los seguidores de `idUsuario`. |
+
+```http
+POST /api/seguimientos/20
+DELETE /api/seguimientos/20
+Authorization: Bearer <token>
+```
+
+### Crear un comentario
+
+En Postman, seleccionar **POST**, **Body → raw → JSON**:
+
+```http
+POST /api/publicaciones/25/comentarios
+Content-Type: application/json
+```
+
+```json
+{
+  "contenido": "¡Qué lindo recuerdo!",
+  "usuarioId": 1
+}
+```
+
+El ID de la publicación se toma de la URL (25 en este ejemplo).
+`usuarioId` debe corresponder a un usuario existente; se recibe temporalmente
+en el body, igual que `AutorId` al crear publicaciones, hasta integrar el usuario
+autenticado del token en estas acciones.
+
+El contenido es obligatorio y no puede estar vacío ni contener solo espacios.
+Se eliminan los espacios al principio y al final. El servidor asigna la fecha
+UTC y guarda el comentario como visible.
+
+Devuelve **201 Created** con el comentario:
+
+```json
+{
+  "id": 8,
+  "contenido": "¡Qué lindo recuerdo!",
+  "fechaCreacion": "2026-10-13T15:00:00Z",
+  "autor": {
+    "id": 1,
+    "username": "usuarioTest"
+  }
+}
+```
+
+Los IDs y la fecha de esta respuesta son ilustrativos. El comentario se puede
+consultar mediante `GET /api/publicaciones/25/comentarios`.
+
+- **400:** contenido o identificadores inválidos. Las validaciones del request
+  incluyen `errors` por campo.
+- **404:** el usuario no existe o la publicación no existe o está oculta.
+- **500:** falla inesperada, con mensaje público y detalle técnico en los logs.
+
+Los errores usan `ProblemDetails`. Se utiliza la tabla de comentarios existente,
+por lo que este endpoint no requiere una migración nueva. El detalle y el feed
+calculan `cantidadComentarios` contando solo los comentarios visibles de cada
+publicación. Los campos `cantidadLikes` y `dioLike` se consultan en Neo4j.
 
 ### Endpoints del feed
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| `GET` | `/api/feed/para-vos` | Devuelve recomendaciones personalizadas, combinando intereses, actualidad y exploración. Actualmente, los intereses se calculan a partir de las publicaciones del usuario durante los últimos 90 días. |
+| `GET` | `/api/feed/para-vos` | Recomienda publicaciones relacionadas con los likes del usuario, usando likes en común y usuarios etiquetados compartidos en Neo4j. Excluye publicaciones que el usuario ya likeó. |
 | `GET` | `/api/feed/seguidos` | Devuelve las publicaciones de las cuentas que sigue el usuario, ordenadas de más recientes a más antiguas. Los seguimientos se consultan en Neo4j. |
 
 Ambos reciben temporalmente `usuarioId` por query hasta integrar autenticación. Las descripciones del feed tienen un máximo de 300 caracteres.
@@ -188,7 +472,9 @@ GET /api/feed/seguidos?usuarioId=1&limite=20
 GET /api/publicaciones/25/comentarios?limite=20
 ```
 
-Para recargar “Para vos”, se realiza otra petición sin cursor. Esto genera una nueva selección. Cada sesión conserva hasta 500 recomendaciones y vence a los 30 minutos; si deja de estar disponible, el endpoint devuelve `410 Gone`.
+Si “Para vos” no encuentra recomendaciones visibles, muestra publicaciones generales visibles ordenadas por fecha de creación de más nueva a más antigua (y por ID descendente en caso de empate). No requiere que el usuario haya creado publicaciones ni dado likes.
+
+Para recargar “Para vos”, se realiza otra petición sin cursor. Esto genera una nueva selección. Cada sesión conserva hasta 500 publicaciones, también cuando usa el listado general, y vence a los 30 minutos; si deja de estar disponible, el endpoint devuelve `410 Gone`.
 
 ### Endpoints de seguimiento
 
@@ -209,29 +495,80 @@ Ambos reciben un cuerpo JSON:
 ```
 
 ### Autenticación JWT y Swagger
-Nuevos secrets requeridos
+
+#### Nuevos secrets requeridos
 
 Agregar estos tres comandos a la configuración inicial de User Secrets (junto a los existentes):
 
+```powershell
 dotnet user-secrets set "Jwt:Clave" "nostalgia-clave-secreta-super-segura-2026" --project "./ProyectoFinalTPI.Backend/ProyectoFinalTPI.Backend.csproj"
 dotnet user-secrets set "Jwt:Emisor" "nostalgia-backend" --project "./ProyectoFinalTPI.Backend/ProyectoFinalTPI.Backend.csproj"
 dotnet user-secrets set "Jwt:Audiencia" "nostalgia-frontend" --project "./ProyectoFinalTPI.Backend/ProyectoFinalTPI.Backend.csproj"
+```
 
 La tabla de variables de entorno para producción se amplía con:
 
-Clave de User Secrets	Variable de entorno para producción
-Jwt:Clave	Jwt__Clave
-Jwt:Emisor	Jwt__Emisor
-Jwt:Audiencia	Jwt__Audiencia
-Swagger
+| Clave de User Secrets | Variable de entorno para producción |
+|---|---|
+| `Jwt:Clave` | `Jwt__Clave` |
+| `Jwt:Emisor` | `Jwt__Emisor` |
+| `Jwt:Audiencia` | `Jwt__Audiencia` |
 
-Con la aplicación corriendo, la documentación interactiva está disponible en: http://localhost:5000/swagger
+#### Swagger
 
-Para probar endpoints protegidos: obtener un token desde POST /api/auth/login y pegarlo en el botón Authorize.
+Con la aplicación corriendo, la documentación interactiva está disponible en: `http://localhost:5199/swagger` (o `http://localhost:5000/swagger` según el launch profile).
+
+Para probar endpoints protegidos: obtener un token desde `POST /api/auth/login` y pegarlo en el botón **Authorize** (`Bearer <token>`).
 
 ### Endpoints de autenticación
-Método	Ruta	Descripción
-| `POST` |	`/api/auth/registro` |	Registra un nuevo usuario. Recibe username, email y contraseña en JSON. Devuelve 201 con token JWT.
-| `POST` |	`/api/auth/login` |	Autentica un usuario existente. Recibe email y contraseña en JSON. Devuelve 200 con token JWT.
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `POST` | `/api/auth/registro` | Registra un nuevo usuario. Recibe `username`, `email` y `contrasena` en JSON. Devuelve `201 Created` con token JWT. |
+| `POST` | `/api/auth/login` | Autentica un usuario existente. Recibe `email` y `contrasena` en JSON. Devuelve `200 OK` con token JWT. |
 
 Las contraseñas se almacenan hasheadas con BCrypt. El token JWT tiene validez de 7 días e incluye el id, email, username y rol del usuario.
+
+## Chat en tiempo real (SignalR)
+
+El chat privado entre usuarios utiliza **SignalR** sobre WebSockets. A diferencia de los endpoints HTTP del resto de la API, la comunicación ocurre a través de un **Hub** persistente: el cliente establece una conexión que permanece abierta y el servidor puede enviar mensajes en cualquier momento sin que el cliente los solicite.
+
+### Funcionamiento interno
+
+- **`PresenciaService`** mantiene en memoria un diccionario `UsuarioId → ConnectionId`. Al conectarse, el usuario queda registrado como "en línea"; al desconectarse, se elimina del registro.
+- **`ChatServicio`** persiste los mensajes en PostgreSQL con una fecha de expiración de **7 días**. Los mensajes solo se pueden enviar si el destinatario está en línea en ese momento.
+- **`LimpiezaMensajesService`** es un servicio en background que elimina automáticamente los mensajes expirados cada hora.
+
+### Ruta del Hub
+
+```
+/hubs/chat
+```
+
+El token JWT se envía por query string (mecanismo estándar de SignalR, ya que el handshake WebSocket no admite headers personalizados):
+
+```
+ws://localhost:{puerto}/hubs/chat?access_token=<TOKEN_JWT>
+```
+
+### Métodos invocables desde el cliente
+
+| Método | Parámetros | Descripción |
+|---|---|---|
+| `EnviarMensaje` | `destinatarioId: int, contenido: string` | Envía un mensaje privado. Falla si el destinatario está offline, el contenido está vacío o supera los 2000 caracteres. |
+| `ObtenerHistorial` | `otroUsuarioId: int` | Devuelve los mensajes no expirados entre el usuario autenticado y el otro, ordenados cronológicamente. |
+
+### Eventos que el cliente debe escuchar
+
+| Evento | Payload | Cuándo se dispara |
+|---|---|---|
+| `RecibirMensaje` | `MensajeChatDto` | Cuando llega un mensaje nuevo dirigido al usuario conectado. |
+| `MensajeEnviado` | `MensajeChatDto` | Confirmación al emisor de que su mensaje fue guardado y entregado. |
+
+### Endpoints HTTP del chat
+| Método    |	Ruta    |	Descripción
+| GET   |	/api/chat/conversaciones    |	Devuelve las conversaciones activas del usuario autenticado: una entrada por cada usuario con quien haya intercambiado mensajes en los últimos 7 días, con el último mensaje de cada conversación. Requiere JWT. Devuelve lista vacía si no hay conversaciones activas.
+
+### Endpoints de usuarios
+|   Método  |	Ruta    |	Descripción
+|   GET |	/api/usuarios/por-username/{username}   |	Busca un usuario por su username exacto. Devuelve su id y username. Requiere JWT. Devuelve 404 si no existe ningún usuario con ese username.

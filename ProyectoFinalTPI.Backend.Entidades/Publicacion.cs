@@ -27,6 +27,9 @@ namespace ProyectoFinalTPI.Backend.Entidades
             public Usuario_Interactivo Usuario { get; set; } = null!;
             public ICollection<Comentario> Comentarios { get; set; } = new List<Comentario>();
 
+            public int? GrupoId { get; set; }
+            public Grupo? Grupo { get; set; }
+
             public int? PublicacionOriginalId { get; set; }
             public Publicacion? PublicacionOriginal { get; set; }
     }

@@ -143,6 +143,24 @@ public class EtiquetadoPublicacionServicioTests
             IReadOnlyCollection<int> ids,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(new List<AutorResumenDto>());
+
+        public Task<Usuario?> ObtenerPorEmailAsync(string email, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<bool> ExistePorEmailAsync(string email, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task AgregarAsync(Usuario usuario, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task ActualizarAsync(Usuario usuario, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<Usuario?> ObtenerPorUsernameAsync(string username, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<int> ContarPublicacionesVisiblesAsync(int usuarioId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(0);
     }
 
     private sealed class Neo4jDriverFake
