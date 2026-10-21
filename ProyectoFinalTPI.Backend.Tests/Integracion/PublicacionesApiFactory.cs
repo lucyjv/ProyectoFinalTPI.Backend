@@ -30,6 +30,7 @@ public sealed class PublicacionesApiFactory : WebApplicationFactory<Program>
     }
 
     public MediaFake Media { get; } = new();
+    public Action<IServiceCollection>? ConfigurarServiciosAdicionales { get; init; }
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
@@ -43,6 +44,7 @@ public sealed class PublicacionesApiFactory : WebApplicationFactory<Program>
             services.AddSingleton<IMultimediaServicio>(Media);
             services.RemoveAll<IDriver>();
             services.AddSingleton(CrearNeo4jDriverFake());
+            ConfigurarServiciosAdicionales?.Invoke(services);
         });
     }
 

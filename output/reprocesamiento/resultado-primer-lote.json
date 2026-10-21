@@ -1,0 +1,47 @@
+{
+  "ejecutadoUtc": "2026-10-21T18:23:35.1908396Z",
+  "modelo": "gemini-3.5-flash-lite",
+  "trabajos": [
+    {
+      "PublicacionId": 49,
+      "VersionContenido": 1,
+      "estado": "SinMomento",
+      "Intentos": 1,
+      "CodigoError": null,
+      "VersionAnalizador": "gemini:gemini-3.5-flash-lite:momentos-v1"
+    },
+    {
+      "PublicacionId": 50,
+      "VersionContenido": 1,
+      "estado": "SinMomento",
+      "Intentos": 1,
+      "CodigoError": null,
+      "VersionAnalizador": "gemini:gemini-3.5-flash-lite:momentos-v1"
+    },
+    {
+      "PublicacionId": 51,
+      "VersionContenido": 1,
+      "estado": "SinMomento",
+      "Intentos": 1,
+      "CodigoError": null,
+      "VersionAnalizador": "gemini:gemini-3.5-flash-lite:momentos-v1"
+    },
+    {
+      "PublicacionId": 52,
+      "VersionContenido": 1,
+      "estado": "SinMomento",
+      "Intentos": 1,
+      "CodigoError": null,
+      "VersionAnalizador": "gemini:gemini-3.5-flash-lite:momentos-v1"
+    },
+    {
+      "PublicacionId": 53,
+      "VersionContenido": 1,
+      "estado": "SinMomento",
+      "Intentos": 1,
+      "CodigoError": null,
+      "VersionAnalizador": "gemini:gemini-3.5-flash-lite:momentos-v1"
+    }
+  ],
+  "asociaciones": []
+}

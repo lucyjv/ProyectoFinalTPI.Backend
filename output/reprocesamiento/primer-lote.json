@@ -1,0 +1,11 @@
+{
+  "recuerdos": [
+    { "publicacionId": 49, "versionContenido": 1 },
+    { "publicacionId": 50, "versionContenido": 1 },
+    { "publicacionId": 51, "versionContenido": 1 },
+    { "publicacionId": 52, "versionContenido": 1 },
+    { "publicacionId": 53, "versionContenido": 1 }
+  ],
+  "incluirFallidos": false,
+  "intervaloSegundos": 10
+}
