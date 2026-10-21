@@ -16,4 +16,27 @@ namespace ProyectoFinalTPI.Backend.Entidades
         public ICollection<Logros_Usuarios> LogrosUsuarios { get; set; } = new List<Logros_Usuarios>();
 
     }
+    public enum LogroEnum
+    {
+        PrimerPaso = 1,
+        PrimeraPalabra = 2,
+        ConAmigos = 3,
+        Melomano = 4,
+        TuristaDelPasado = 5,
+        Curioso = 6,
+        CronistaLocal = 7,
+        VozDeUnaEpoca = 8,
+        FotografoDelRecuerdo = 9,
+        Popular = 10,
+        Generoso = 11,
+        Conversador = 12,
+        LinceDeLasPraderas = 13,
+        RachaDeHierro = 14,
+        DecadaCompleta = 15,
+        Leyenda = 16,
+        Mecenas = 17,
+        Influencer = 18,
+        RachaDeOro = 19,
+        ViajeroDelTiempo = 20
+    }
 }

@@ -6,7 +6,6 @@ using ProyectoFinalTPI.Backend.Dtos.Publicacion;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
-using ProyectoFinalTPI.Backend.Repositorio;
 using ProyectoFinalTPI.Backend.Servicio.ProyectoFinalTPI.Backend.Servicio;
 
 namespace ProyectoFinalTPI.Backend.Servicio
@@ -61,7 +60,6 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
             return await _publicacionRepositorio.Crear(publicacionCompartida);
         }
-
         public async Task<ResultadoMapaDto> ObtenerPines(PublicacionFiltroDto filtro, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(filtro);
@@ -257,10 +255,9 @@ namespace ProyectoFinalTPI.Backend.Servicio
         {
             var usuarioId = publicacion.UsuarioId;
 
-            _logroServicio.VerificarYDarLogro(usuarioId, 1); // primera publicación
+            await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.PrimerPaso);
 
             var puntoUsuario = new Point(dto.LongitudUsuario, dto.LatitudUsuario) { SRID = 4326 };
-
             double distanciaEnGrados = publicacion.Lugar.Coordenadas.Distance(puntoUsuario);
 
             if (distanciaEnGrados <= 0.01)
@@ -269,17 +266,17 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
                 if (publicacionesCercanas >= 5)
                 {
-                    _logroServicio.VerificarYDarLogro(usuarioId, 3); // 5 recuerdos cercanos
+                    await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.CronistaLocal);
                 }
             }
 
             int decadasDelUsuario = await _publicacionRepositorio.ContarPosteosDeDiferentesEpocasDelUsuario(usuarioId);
             if (decadasDelUsuario >= 3)
             {
-                _logroServicio.VerificarYDarLogro(usuarioId, 4); // 3 épocas distintas
+                await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.VozDeUnaEpoca); 
             } if (decadasDelUsuario == 6)
             {
-                _logroServicio.VerificarYDarLogro(usuarioId, 5); // 6 epocas distintas
+                await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.DecadaCompleta);
             }
         }
         private Publicacion ConstruirPublicacion(CrearPublicacionDto dto, string urlMultimedia)

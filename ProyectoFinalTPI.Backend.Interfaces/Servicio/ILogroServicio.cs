@@ -9,8 +9,8 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Servicio
 {
     public interface ILogroServicio
     {
-        void VerificarYDarLogro(int idUsuario, int idLogro);
-        void MostrarLogrosDeUsuario(int idUsuario);
+        Task VerificarYDarLogro(int idUsuario, LogroEnum logro);
+        Task<List<Logros_Usuarios>> MostrarLogrosDeUsuario(int idUsuario);
 
     }
 }

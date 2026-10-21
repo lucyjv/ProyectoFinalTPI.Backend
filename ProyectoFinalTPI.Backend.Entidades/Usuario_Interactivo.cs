@@ -5,6 +5,8 @@
         public int PuntosNostalgia { get; set; }
         public DateTime? SuspendidoHasta { get; set; }
         public ICollection<Publicacion> Publicaciones { get; set; } = new List<Publicacion>();
-        public ICollection<Logros_Usuarios> LogrosUsuarios { get; set; } = new List<Logros_Usuarios>();
+        public ICollection<Logros_Usuarios> LogrosUsuarios { get; set; } = new List<Logros_Usuarios>()
+        public DateTime? UltimoIngresoUtc { get; set; }
+        public int RachaDiasActual { get; set; } = 0;
     }
 }

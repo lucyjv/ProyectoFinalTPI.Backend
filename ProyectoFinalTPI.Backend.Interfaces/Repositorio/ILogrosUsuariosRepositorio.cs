@@ -9,8 +9,8 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Repositorio
 {
     public interface ILogrosUsuariosRepositorio
     {
-        bool ExisteRegistro(int usuarioId, int logroId);
-        void Guardar(Logros_Usuarios usuarioLogro);
-        List<Logros_Usuarios> ObtenerPorUsuario(int usuarioId);
+        Task<bool> ExisteRegistro(int usuarioId, int logroId);
+        Task Guardar(Logros_Usuarios usuarioLogro);
+        Task<List<Logros_Usuarios>> ObtenerPorUsuario(int usuarioId);
     }
 }

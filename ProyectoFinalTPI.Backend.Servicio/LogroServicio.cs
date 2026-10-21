@@ -13,31 +13,28 @@ namespace ProyectoFinalTPI.Backend.Servicio
 {
     public class LogroServicio : ILogroServicio
     {
-        private readonly IPublicacionRepositorio _publicacionRepositorio;
-        private readonly IUsuarioRepositorio _usuarioRepositorio;
         private readonly ILogrosUsuariosRepositorio _logrosUsuariosRepositorio;
 
-        public LogroServicio(IPublicacionRepositorio publicacionRepositorio, IUsuarioRepositorio usuarioRepositorio, ILogrosUsuariosRepositorio logrosUsuariosRepositorio)
+        public LogroServicio(ILogrosUsuariosRepositorio logrosUsuariosRepositorio)
         {
-            _publicacionRepositorio = publicacionRepositorio;
-            _usuarioRepositorio = usuarioRepositorio;
             _logrosUsuariosRepositorio = logrosUsuariosRepositorio;
         }
 
-        public void EvaluarLogro(int idUsuario, int idLogro)
+        public async Task VerificarYDarLogro(int idUsuario, LogroEnum logro)
         {
-            bool ya_logrado = _logrosUsuariosRepositorio.ExisteRegistro(idUsuario, idLogro);
+            int idLogro = (int)logro;
+            bool ya_logrado = await _logrosUsuariosRepositorio.ExisteRegistro(idUsuario, idLogro);
             if (ya_logrado)
             {
                 return;
             }
             var nuevoLogroDesbloqueado = CrearLogroDeUsuario(idUsuario, idLogro, DateTime.UtcNow);
 
-            _logrosUsuariosRepositorio.Guardar(nuevoLogroDesbloqueado);
+            await _logrosUsuariosRepositorio.Guardar(nuevoLogroDesbloqueado);
         }
-        public void MostrarLogrosDeUsuario(int idUsuario)
+        public async Task<List<Logros_Usuarios>> MostrarLogrosDeUsuario(int idUsuario)
         {
-            _logrosUsuariosRepositorio.ObtenerPorUsuario(idUsuario);
+            return await _logrosUsuariosRepositorio.ObtenerPorUsuario(idUsuario);
         }
 
         private Logros_Usuarios CrearLogroDeUsuario(int idUsuario, int idLogro, DateTime fechaDesbloqueo)
