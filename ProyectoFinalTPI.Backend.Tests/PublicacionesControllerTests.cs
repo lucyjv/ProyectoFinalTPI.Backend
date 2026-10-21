@@ -669,6 +669,16 @@ namespace ProyectoFinalTPI.Backend.Tests
                 CancellationToken cancellationToken = default)
                 => Task.CompletedTask;
 
+            public Task<PuntuacionPublicacionDto> Puntuar(int publicacionId, int usuarioId, int puntaje, CancellationToken cancellationToken = default)
+                => Task.FromResult(new PuntuacionPublicacionDto { PublicacionId = publicacionId, PuntosTotales = puntaje, MiPuntuacion = puntaje });
+
+            public Task<PuntuacionPublicacionDto> QuitarPuntuacion(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
+                => Task.FromResult(new PuntuacionPublicacionDto { PublicacionId = publicacionId, PuntosTotales = 0, MiPuntuacion = null });
+
+            public Task CompletarResumenesPuntuaciones(IReadOnlyCollection<PublicacionDetalleDto> publicaciones, int? usuarioId,
+                CancellationToken cancellationToken = default)
+                => Task.CompletedTask;
+
             public Task<ResultadoPaginadoDto<ComentarioDto>> ObtenerComentarios(int publicacionId, string? cursor, int limite, CancellationToken cancellationToken = default)
             {
                 IdConsultado = publicacionId;

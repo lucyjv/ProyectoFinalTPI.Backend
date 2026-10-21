@@ -34,21 +34,68 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                    count(CASE WHEN usuario.postgresId = $usuarioId THEN 1 END) > 0 AS dioLike
             """;
 
+        private const string PuntuarPublicacionQuery = """
+            MERGE (usuario:Usuario {postgresId: $usuarioId})
+            MERGE (publicacion:Publicacion {postgresId: $publicacionId})
+            MERGE (usuario)-[puntuacion:PUNTUO]->(publicacion)
+            SET puntuacion.puntaje = $puntaje,
+                puntuacion.fecha = datetime()
+            """;
+
+        private const string QuitarPuntuacionQuery = """
+            MATCH (:Usuario {postgresId: $usuarioId})-[puntuacion:PUNTUO]->
+                  (:Publicacion {postgresId: $publicacionId})
+            DELETE puntuacion
+            """;
+
+        private const string ObtenerEstadoPuntuacionQuery = """
+            OPTIONAL MATCH (publicacion:Publicacion {postgresId: $publicacionId})
+            OPTIONAL MATCH (u:Usuario)-[r:PUNTUO]->(publicacion)
+            WITH publicacion,
+                 coalesce(sum(r.puntaje), 0) AS puntosTotales
+            OPTIONAL MATCH (:Usuario {postgresId: $usuarioId})-[miRating:PUNTUO]->(publicacion)
+            RETURN puntosTotales,
+                   miRating.puntaje AS miPuntuacion
+            """;
+
+        private const string ObtenerResumenPuntuacionesQuery = """
+            UNWIND $publicacionesIds AS publicacionId
+            OPTIONAL MATCH (publicacion:Publicacion {postgresId: publicacionId})
+            OPTIONAL MATCH (u:Usuario)-[r:PUNTUO]->(publicacion)
+            WITH publicacionId,
+                 coalesce(sum(r.puntaje), 0) AS puntosTotales
+            OPTIONAL MATCH (:Usuario {postgresId: $usuarioId})-[miRating:PUNTUO]->(:Publicacion {postgresId: publicacionId})
+            RETURN publicacionId,
+                   puntosTotales,
+                   miRating.puntaje AS miPuntuacion
+            """;
+
         // consulta nos devuelve las publicaciones con alto puntaje como candidatas al feed
-        // busca publicaciones candidatas para el feed usando los likes y las etiquetas guardadas en Neo4j
-        // Busca las publicaciones que le gustaron al usuario --> MATCH (usuario)-[:LE_GUSTA]->(semilla)
-        // Busca a otros usuarios que también dieron like a la semilla y las publicaciones a las que ellos dieron like.
-        //                  APORTA 2
+        // busca publicaciones candidatas para el feed usando los likes, puntuaciones y las etiquetas guardadas en Neo4j
+        // Busca las publicaciones que le gustaron o puntuó alto el usuario
+        // Busca a otros usuarios que también dieron like o puntuaron alto la semilla
+        //                  APORTA 2 por like, 3 por coincidencia en puntuación alta (>=3)
         // Busca usuarios etiquetados en la semilla y otras publicaciones donde estén etiquetados.
         //                  APORTA 1
-        // Descarta candidatos sin ID y publicaciones que el usuario ya marcó con like  
+        // Descarta candidatos sin ID y publicaciones que el usuario ya marcó con like o puntuó
         private const string RecomendacionesPorLikesQuery = """
-            MATCH (usuario:Usuario {postgresId: $usuarioId})-[:LE_GUSTA]->(semilla:Publicacion)
+            MATCH (usuario:Usuario {postgresId: $usuarioId})
+            OPTIONAL MATCH (usuario)-[:LE_GUSTA]->(semillaLike:Publicacion)
+            OPTIONAL MATCH (usuario)-[miPunt:PUNTUO]->(semillaPunt:Publicacion)
+            WHERE miPunt.puntaje >= 3
+            WITH usuario, collect(DISTINCT semillaLike) + collect(DISTINCT semillaPunt) AS semillas
+            UNWIND semillas AS semilla
             CALL {
                 WITH semilla
                 MATCH (otroUsuario:Usuario)-[:LE_GUSTA]->(semilla)
                 MATCH (otroUsuario)-[:LE_GUSTA]->(candidata:Publicacion)
                 RETURN candidata, count(DISTINCT otroUsuario) * 2 AS relevancia
+                UNION
+                WITH semilla
+                MATCH (otroUsuario:Usuario)-[p1:PUNTUO]->(semilla)
+                MATCH (otroUsuario)-[p2:PUNTUO]->(candidata:Publicacion)
+                WHERE p1.puntaje >= 3 AND p2.puntaje >= 3
+                RETURN candidata, count(DISTINCT otroUsuario) * 3 AS relevancia
                 UNION
                 WITH semilla
                 MATCH (etiquetado:Usuario)-[:ETIQUETADO_EN]->(semilla)
@@ -58,6 +105,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio
             WITH usuario, candidata, relevancia
             WHERE candidata.postgresId IS NOT NULL
               AND NOT (usuario)-[:LE_GUSTA]->(candidata)
+              AND NOT (usuario)-[:PUNTUO]->(candidata)
             RETURN candidata.postgresId AS publicacionId, sum(relevancia) AS puntaje
             ORDER BY puntaje DESC, publicacionId DESC
             LIMIT $cantidadMaxima
@@ -140,6 +188,91 @@ namespace ProyectoFinalTPI.Backend.Repositorio
             });
         }
 
+        public async Task PuntuarPublicacion(int publicacionId, int usuarioId, int puntaje, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
+            await session.ExecuteWriteAsync(async transaction =>
+            {
+                await transaction.RunAsync(PuntuarPublicacionQuery, new { publicacionId, usuarioId, puntaje });
+            });
+        }
+
+        public async Task QuitarPuntuacion(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
+            await session.ExecuteWriteAsync(async transaction =>
+            {
+                await transaction.RunAsync(QuitarPuntuacionQuery, new { publicacionId, usuarioId });
+            });
+        }
+
+        public async Task<PuntuacionPublicacionDto> ObtenerEstadoPuntuacion(int publicacionId, int? usuarioId, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
+            return await session.ExecuteReadAsync(async transaction =>
+            {
+                var cursor = await transaction.RunAsync(ObtenerEstadoPuntuacionQuery, new { publicacionId, usuarioId = usuarioId ?? -1 });
+                if (!await cursor.FetchAsync())
+                {
+                    return new PuntuacionPublicacionDto
+                    {
+                        PublicacionId = publicacionId,
+                        PuntosTotales = 0,
+                        MiPuntuacion = null
+                    };
+                }
+
+                var registro = cursor.Current;
+                int? miPuntaje = null;
+                if (registro["miPuntuacion"] != null)
+                {
+                    try { miPuntaje = registro["miPuntuacion"].As<int?>(); } catch { }
+                }
+
+                return new PuntuacionPublicacionDto
+                {
+                    PublicacionId = publicacionId,
+                    PuntosTotales = registro["puntosTotales"].As<int?>() ?? 0,
+                    MiPuntuacion = miPuntaje
+                };
+            });
+        }
+
+        public async Task<IReadOnlyDictionary<int, (int PuntosTotales, int? MiPuntuacion)>> ObtenerResumenPuntuaciones(
+            IReadOnlyCollection<int> publicacionesIds, int? usuarioId, CancellationToken cancellationToken = default)
+        {
+            if (publicacionesIds.Count == 0)
+                return new Dictionary<int, (int PuntosTotales, int? MiPuntuacion)>();
+
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
+            return await session.ExecuteReadAsync(async transaction =>
+            {
+                var cursor = await transaction.RunAsync(
+                    ObtenerResumenPuntuacionesQuery,
+                    new { publicacionesIds = publicacionesIds.Distinct().ToArray(), usuarioId = usuarioId ?? -1 });
+
+                var resumenes = new Dictionary<int, (int PuntosTotales, int? MiPuntuacion)>();
+                await foreach (var registro in cursor)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    int? miPuntaje = null;
+                    if (registro["miPuntuacion"] != null)
+                    {
+                        try { miPuntaje = registro["miPuntuacion"].As<int?>(); } catch { }
+                    }
+
+                    resumenes[registro["publicacionId"].As<int>()] =
+                        (registro["puntosTotales"].As<int?>() ?? 0,
+                         miPuntaje);
+                }
+                return (IReadOnlyDictionary<int, (int PuntosTotales, int? MiPuntuacion)>)resumenes;
+            });
+        }
+
         public async Task<IReadOnlyList<int>> ObtenerPublicacionesRelacionadasPorLikes(
             int usuarioId, int cantidadMaxima, CancellationToken cancellationToken = default)
         {
@@ -167,6 +300,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio
             return _context.Publicaciones
                            .Where(p => !p.EstaOculto)
                            .Include(p => p.Usuario)
+                           .Include(p => p.Lugar)
                            .ToList();
         }
 
