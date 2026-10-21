@@ -12,5 +12,15 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Servicio
         /// Lanza <see cref="KeyNotFoundException"/> si no existe ningún usuario con ese username.
         /// </summary>
         Task<UsuarioResumenDto> ObtenerPorUsernameAsync(string username, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Obtiene el perfil completo de un usuario por su username.
+        /// </summary>
+        Task<UsuarioPerfilDto> ObtenerPerfilPorUsernameAsync(string username, int? usuarioAutenticadoId, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Obtiene el perfil completo de un usuario por su identificador.
+        /// </summary>
+        Task<UsuarioPerfilDto> ObtenerPerfilPorIdAsync(int usuarioId, int? usuarioAutenticadoId, CancellationToken cancellationToken = default);
     }
 }

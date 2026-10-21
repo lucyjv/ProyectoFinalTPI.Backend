@@ -296,4 +296,36 @@ public class UsuarioServicioTests
             r => r.ObtenerPorUsernameAsync("lucia", It.IsAny<CancellationToken>()),
             Times.Once);
     }
+
+    [Fact]
+    public async Task ObtenerPerfilPorUsernameAsync_UsuarioPersonalExiste_DevuelvePerfilCompleto()
+    {
+        // Arrange
+        var usuario = new Usuario_Personal
+        {
+            Id = 17,
+            Username = "nico",
+            Nombre = "Nico",
+            Apellido = "Pérez",
+            Reputacion = ReputacionEnum.Nostalgico,
+            PuntosNostalgia = 10
+        };
+        _repositorioMock
+            .Setup(r => r.ObtenerPorUsernameAsync("nico", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(usuario);
+        _repositorioMock
+            .Setup(r => r.ContarPublicacionesVisiblesAsync(17, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+
+        // Act
+        var resultado = await _servicio.ObtenerPerfilPorUsernameAsync("nico", null);
+
+        // Assert
+        Assert.Equal(17, resultado.Id);
+        Assert.Equal("nico", resultado.Username);
+        Assert.Equal("Nico", resultado.Nombre);
+        Assert.Equal("Nostálgico", resultado.Reputacion);
+        Assert.Equal(10, resultado.PuntosNostalgia);
+        Assert.Equal(1, resultado.CantidadPublicaciones);
+    }
 }

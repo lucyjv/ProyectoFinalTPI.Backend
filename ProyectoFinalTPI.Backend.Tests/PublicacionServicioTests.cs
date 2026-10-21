@@ -782,6 +782,11 @@ namespace ProyectoFinalTPI.Backend.Tests
                 return Task.FromResult(PublicacionesPorIds.Where(p => publicacionesIds.Contains(p.Id)).ToList());
             }
 
+            public Task<List<PublicacionDetalleDto>> ObtenerPorUsuarioId(int usuarioId, CancellationToken cancellationToken = default)
+            {
+                return Task.FromResult(PublicacionesPorIds.Where(p => p.Autor.Id == usuarioId).ToList());
+            }
+
             public Task<IReadOnlyList<int>> ObtenerPublicacionesRelacionadasPorLikes(
                 int usuarioId, int cantidadMaxima, CancellationToken cancellationToken = default)
             {
@@ -839,6 +844,7 @@ namespace ProyectoFinalTPI.Backend.Tests
             public Task AgregarAsync(Usuario usuario, CancellationToken cancellationToken = default) => throw new NotImplementedException();
             public Task ActualizarAsync(Usuario usuario, CancellationToken cancellationToken = default) => throw new NotImplementedException();
             public Task<Usuario?> ObtenerPorUsernameAsync(string username, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+            public Task<int> ContarPublicacionesVisiblesAsync(int usuarioId, CancellationToken cancellationToken = default) => Task.FromResult(0);
         }
 
         private class MultimediaServicioFake : IMultimediaServicio

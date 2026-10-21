@@ -308,6 +308,19 @@ namespace ProyectoFinalTPI.Backend.Servicio
             return publicacion;
         }
 
+        public async Task<List<PublicacionDetalleDto>> ObtenerPorUsuarioId(int usuarioId, int? usuarioAutenticadoId, CancellationToken cancellationToken = default)
+        {
+            if (usuarioId <= 0)
+            {
+                throw new ArgumentException("El ID del usuario debe ser mayor que cero.");
+            }
+
+            var publicaciones = await _publicacionRepositorio.ObtenerPorUsuarioId(usuarioId, cancellationToken);
+            await CompletarResumenesLikes(publicaciones, usuarioAutenticadoId ?? 0, cancellationToken);
+            await CompletarResumenesPuntuaciones(publicaciones, usuarioAutenticadoId, cancellationToken);
+            return publicaciones;
+        }
+
         public async Task<ResultadoPaginadoDto<PublicacionDetalleDto>>ObtenerFeedSeguidos(int usuarioId, string? cursor, int limite,
         CancellationToken cancellationToken = default)
         {

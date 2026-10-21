@@ -30,5 +30,10 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Repositorio
         /// Devuelve null si no existe.
         /// </summary>
         Task<Usuario?> ObtenerPorUsernameAsync(string username, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Cuenta la cantidad de publicaciones visibles de un usuario.
+        /// </summary>
+        Task<int> ContarPublicacionesVisiblesAsync(int usuarioId, CancellationToken cancellationToken = default);
     }
 }

@@ -80,6 +80,22 @@ namespace ProyectoFinalTPI.Backend.Controllers
             return Ok(detalle);
         }
 
+        [HttpGet("usuario/{usuarioId:int}")]
+        [SwaggerOperation(
+            Summary = "Obtiene las publicaciones visibles de un usuario.",
+            Description = "Devuelve el listado de publicaciones creadas por el usuario indicado, con información de likes y puntuaciones."
+        )]
+        [SwaggerResponse(StatusCodes.Status200OK, "Listado de publicaciones del usuario.", typeof(List<PublicacionDetalleDto>))]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "El identificador del usuario no es válido.", typeof(ProblemDetails))]
+        public async Task<ActionResult<List<PublicacionDetalleDto>>> ObtenerPorUsuario(
+            int usuarioId,
+            CancellationToken cancellationToken)
+        {
+            var publicaciones = await _publicacionServicio.ObtenerPorUsuarioId(
+                usuarioId, User.ObtenerUsuarioId(), cancellationToken);
+            return Ok(publicaciones);
+        }
+
         [HttpPost]
         [SwaggerOperation(
             Summary = "Crea una publicación.",

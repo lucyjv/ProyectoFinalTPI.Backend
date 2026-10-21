@@ -20,6 +20,7 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Repositorio
         Task<List<PublicacionDetalleDto>> ObtenerPublicacionesParaVos(IReadOnlyCollection<CategoriaEnum> categorias, DateTime fechaCorte, CursorCronologicoDto? cursor,
         int limite, CancellationToken cancellationToken = default);
         Task<List<PublicacionDetalleDto>> ObtenerPublicacionesPorIds(IReadOnlyCollection<int> publicacionesIds, CancellationToken cancellationToken = default);
+        Task<List<PublicacionDetalleDto>> ObtenerPorUsuarioId(int usuarioId, CancellationToken cancellationToken = default);
         Task CrearLike(int publicacionId, int usuarioId, CancellationToken cancellationToken = default);
         Task QuitarLike(int publicacionId, int usuarioId, CancellationToken cancellationToken = default);
         Task<MeGustaPublicacionDto> ObtenerEstadoLike(int publicacionId, int usuarioId, CancellationToken cancellationToken = default);

@@ -690,6 +690,57 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                 .ToListAsync(cancellationToken);
         }
 
+        public async Task<List<PublicacionDetalleDto>> ObtenerPorUsuarioId(int usuarioId, CancellationToken cancellationToken = default)
+        {
+            return await _context.Publicaciones
+                .AsNoTracking()
+                .Where(p => !p.EstaOculto && p.UsuarioId == usuarioId)
+                .OrderByDescending(p => p.FechaCreación)
+                .ThenByDescending(p => p.Id)
+                .Select(p => new PublicacionDetalleDto
+                {
+                    Id = p.Id,
+                    Titulo = p.Titulo,
+                    Descripcion = p.Descripcion,
+                    Fecha = p.Fecha,
+                    FechaCreacion = p.FechaCreación,
+                    Categoria = p.Categoria,
+                    UrlMultimedia = p.UrlMultimedia,
+                    TipoMultimedia = p.TipoMultimedia,
+                    Autor = new AutorResumenDto
+                    {
+                        Id = p.UsuarioId,
+                        Username = p.Usuario.Username
+                    },
+                    Lugar = new LugarDetalleDto
+                    {
+                        Id = p.LugarId,
+                        Nombre = p.Lugar.Nombre,
+                        Direccion = p.Lugar.Direccion,
+                        Latitud = p.Lugar.Coordenadas.Y,
+                        Longitud = p.Lugar.Coordenadas.X
+                    },
+                    CantidadLikes = 0,
+                    CantidadComentarios = p.Comentarios.Count(c => !c.EstaOculto && !c.EstaEliminado),
+                    DioLike = false,
+                    Grupo = p.GrupoId.HasValue ? new GrupoResumenDto
+                    {
+                        Id = p.Grupo!.Id,
+                        Nombre = p.Grupo.Nombre,
+                        Descripcion = p.Grupo.Descripcion,
+                        Decada = p.Grupo.Decada,
+                        FechaCreacion = p.Grupo.FechaCreacion,
+                        Creador = new AutorResumenDto
+                        {
+                            Id = p.Grupo.CreadorId,
+                            Username = p.Grupo.Creador.Username
+                        },
+                        CantidadIntegrantes = p.Grupo.Integrantes.Count
+                    } : null
+                })
+                .ToListAsync(cancellationToken);
+        }
+
         public async Task<Dictionary<CategoriaEnum, int>> ObtenerCantidadPorCategoriaDelUsuario(int usuarioId, DateTime desde, 
             CancellationToken cancellationToken = default)
         {

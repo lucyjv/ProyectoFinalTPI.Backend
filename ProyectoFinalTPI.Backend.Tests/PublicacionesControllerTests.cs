@@ -659,6 +659,12 @@ namespace ProyectoFinalTPI.Backend.Tests
                 return Error == null ? Task.FromResult(Detalle) : Task.FromException<PublicacionDetalleDto>(Error);
             }
 
+            public Task<List<PublicacionDetalleDto>> ObtenerPorUsuarioId(int usuarioId, int? usuarioAutenticadoId, CancellationToken cancellationToken = default)
+            {
+                IdConsultado = usuarioId;
+                return Error == null ? Task.FromResult(new List<PublicacionDetalleDto> { Detalle }) : Task.FromException<List<PublicacionDetalleDto>>(Error);
+            }
+
             public Task<MeGustaPublicacionDto> DarLike(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
                 => throw new NotImplementedException();
 
