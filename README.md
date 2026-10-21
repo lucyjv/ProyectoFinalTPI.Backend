@@ -355,6 +355,319 @@ reemplazarla por un `ProblemDetails`.
 Las consultas públicas excluyen las publicaciones ocultas. Los comentarios se consultan por separado del detalle.
 Las etiquetas se almacenan en Neo4j como relaciones entre los nodos `Usuario` y `Publicacion`, cuyos datos maestros permanecen en PostgreSQL.
 
+### Red de recuerdos: integración de frontend (paso 1)
+
+El detalle de un recuerdo puede mostrar **"Ese día, por acá"** y **"Más historias de este lugar"**. Las relaciones ya se calculan al consultar; no requieren análisis ni un paso adicional al publicar. Los endpoints son públicos, no reciben `usuarioId` y no requieren JWT.
+
+#### Reglas del contrato
+
+| Bloque / tipo | Publicaciones incluidas |
+|---|---|
+| `dia` | Mismo día, mes y año del recuerdo de origen, a **200 metros o menos**. |
+| `lugar` | A **200 metros o menos**, sin restringir fecha. También incluye las coincidencias de `dia`. |
+
+- El radio es fijo y se mide desde el recuerdo consultado; no se envían coordenadas ni radio desde el cliente. El límite de **200 m está incluido**.
+- Ambos bloques se ordenan por distancia ascendente y luego por Id ascendente. No ordenarlos por fecha en el cliente: el cursor continúa ese orden.
+- Se excluyen el propio recuerdo, publicaciones ocultas y reposts. Si se consulta un repost visible, el backend resuelve su original visible. `publicacionId` del resumen identifica ese original y debe usarse al continuar.
+- La cercanía no es transitiva: al abrir otra tarjeta, las nuevas relaciones se calculan desde la ubicación de esa tarjeta.
+- Las tarjetas usan un DTO propio, con autor en campos planos (`autorId`, `autorUsername`). No es el DTO de detalle ni el de feed; no incluye likes, puntuaciones, comentarios o coordenadas. Para abrir una tarjeta, consultar el detalle existente: `GET /api/publicaciones/{id}`.
+- El paso 1 no devuelve `momentos` ni estado de análisis de IA. Esos campos pertenecen a entregas futuras y no deben esperarse en estas respuestas.
+
+#### 1. Cargar los dos bloques del detalle
+
+```http
+GET /api/publicaciones/10/relaciones
+```
+
+Devuelve `200 OK` con hasta **6 tarjetas por bloque**. IDs, textos y distancias de este ejemplo son ilustrativos:
+
+```json
+{
+  "publicacionId": 10,
+  "radioMetros": 200,
+  "dia": {
+    "items": [
+      {
+        "id": 11,
+        "titulo": "Los festejos con mi familia",
+        "descripcionBreve": "Así vivimos ese día cerca del Obelisco.",
+        "fecha": "1986-06-29T18:00:00Z",
+        "urlMultimedia": "https://example.com/recuerdo-11.jpg",
+        "tipoMultimedia": 0,
+        "autorId": 3,
+        "autorUsername": "ana",
+        "nombreLugar": "Obelisco",
+        "distanciaMetros": 125.43,
+        "mismoDia": true,
+        "mismoLugar": true
+      }
+    ],
+    "siguienteCursor": null,
+    "hayMas": false
+  },
+  "lugar": {
+    "items": [
+      {
+        "id": 12,
+        "titulo": "Una tarde en el centro",
+        "descripcionBreve": "Una visita años después.",
+        "fecha": "2000-04-20T00:00:00Z",
+        "urlMultimedia": "https://example.com/recuerdo-12.jpg",
+        "tipoMultimedia": 0,
+        "autorId": 4,
+        "autorUsername": "juan",
+        "nombreLugar": "Avenida Corrientes",
+        "distanciaMetros": 50,
+        "mismoDia": false,
+        "mismoLugar": true
+      },
+      {
+        "id": 11,
+        "titulo": "Los festejos con mi familia",
+        "descripcionBreve": "Así vivimos ese día cerca del Obelisco.",
+        "fecha": "1986-06-29T18:00:00Z",
+        "urlMultimedia": "https://example.com/recuerdo-11.jpg",
+        "tipoMultimedia": 0,
+        "autorId": 3,
+        "autorUsername": "ana",
+        "nombreLugar": "Obelisco",
+        "distanciaMetros": 125.43,
+        "mismoDia": true,
+        "mismoLugar": true
+      }
+    ],
+    "siguienteCursor": null,
+    "hayMas": false
+  }
+}
+```
+
+`descripcionBreve` contiene como máximo 180 caracteres, sin puntos suspensivos añadidos por el backend. `tipoMultimedia` es numérico: `0` = foto, `1` = video. `distanciaMetros` se entrega con precisión para la paginación; se puede redondear visualmente, sin modificar el cursor. `mismoLugar` siempre es `true` en estas consultas; `mismoDia` permite explicar coincidencias adicionales en el bloque de lugar.
+
+#### 2. Ver más y continuar páginas
+
+```http
+GET /api/publicaciones/10/relacionadas?tipo=dia&limite=20
+GET /api/publicaciones/10/relacionadas?tipo=lugar&limite=20
+```
+
+| Parámetro | Contrato |
+|---|---|
+| `tipo` | `dia` o `lugar`, en minúsculas. Por defecto `lugar`. |
+| `limite` | Entero entre 1 y 50. Por defecto 20. No modifica el máximo de 6 del endpoint de resumen. |
+| `cursor` | Omitir en la primera página. Para continuar, enviar el `siguienteCursor` del bloque o página anterior. |
+
+La respuesta es una página: `{ "items": [...], "siguienteCursor": "...", "hayMas": true }`. Si no hay más, `siguienteCursor` es `null` y `hayMas` es `false`. Una lista sin coincidencias devuelve `200`, `items: []`, `siguienteCursor: null`, `hayMas: false`; no es un error.
+
+Para **"Ver más"** hay dos alternativas:
+
+1. Conservar las tarjetas del resumen y continuar con el cursor de ese bloque, si `hayMas` es `true`.
+2. Abrir una lista completa y pedir su primera página sin cursor, reemplazando las tarjetas iniciales.
+
+No anexar una primera página sin cursor a las seis tarjetas del resumen: repetiría resultados. Los cursores son opacos; no construirlos ni decodificarlos. Usar `URLSearchParams` o equivalente porque pueden contener `+`, `/` y `=`. Mantener cursor y estado de carga independientes para cada tipo y recuerdo; no intercambiarlos. No hay número de página ni total de resultados.
+
+#### Tipos y cliente de ejemplo (TypeScript)
+
+`API_BASE_URL` debe apuntar a la raíz de la API configurada por el frontend, sin `/api` al final.
+
+```typescript
+type TipoRelacion = "dia" | "lugar";
+
+interface RecuerdoRelacionado {
+  id: number;
+  titulo: string;
+  descripcionBreve: string;
+  fecha: string; // ISO 8601 UTC
+  urlMultimedia: string;
+  tipoMultimedia: 0 | 1;
+  autorId: number;
+  autorUsername: string;
+  nombreLugar: string;
+  distanciaMetros: number;
+  mismoDia: boolean;
+  mismoLugar: boolean;
+}
+
+interface Pagina<T> {
+  items: T[];
+  siguienteCursor: string | null;
+  hayMas: boolean;
+}
+
+interface RelacionesRecuerdo {
+  publicacionId: number;
+  radioMetros: number;
+  dia: Pagina<RecuerdoRelacionado>;
+  lugar: Pagina<RecuerdoRelacionado>;
+}
+
+interface ProblemaApi {
+  status: number;
+  title?: string;
+  detail?: string;
+  instance?: string;
+  traceId?: string;
+}
+
+async function consultar<T>(ruta: string, signal?: AbortSignal): Promise<T> {
+  const respuesta = await fetch(`${API_BASE_URL}${ruta}`, { signal });
+  if (!respuesta.ok) {
+    const problema = await respuesta.json().catch(() => ({})) as Partial<ProblemaApi>;
+    throw Object.assign(new Error(problema.detail ?? "No se pudo cargar los recuerdos"), {
+      status: respuesta.status,
+      traceId: problema.traceId
+    });
+  }
+  return respuesta.json() as Promise<T>;
+}
+
+function obtenerRelaciones(id: number, signal?: AbortSignal) {
+  return consultar<RelacionesRecuerdo>(`/api/publicaciones/${id}/relaciones`, signal);
+}
+
+function obtenerRelacionadas(
+  id: number, tipo: TipoRelacion, cursor: string | null = null,
+  limite = 20, signal?: AbortSignal
+) {
+  const query = new URLSearchParams({ tipo, limite: String(limite) });
+  if (cursor !== null) query.set("cursor", cursor);
+  return consultar<Pagina<RecuerdoRelacionado>>(
+    `/api/publicaciones/${id}/relacionadas?${query}`, signal
+  );
+}
+
+// Ejemplo: conservar la vista inicial y anexar la siguiente página de "dia".
+const relaciones = await obtenerRelaciones(idRecuerdo);
+if (relaciones.dia.hayMas && relaciones.dia.siguienteCursor !== null) {
+  const siguiente = await obtenerRelacionadas(
+    relaciones.publicacionId, "dia", relaciones.dia.siguienteCursor
+  );
+  const itemsDia = [...relaciones.dia.items, ...siguiente.items];
+  // Guardar itemsDia y siguiente.siguienteCursor/hayMas en el estado de "dia".
+}
+```
+
+#### Fechas, estados y navegación
+
+- **Fecha del recuerdo:** la comparación de día completo usa UTC. Mostrarla con `timeZone: "UTC"` para evitar que una fecha a medianoche aparezca como el día anterior en Argentina. Ejemplo: `new Intl.DateTimeFormat("es-AR", { timeZone: "UTC", day: "numeric", month: "long", year: "numeric" }).format(new Date(item.fecha))`. No se está mostrando la fecha de creación del post.
+- **Carga:** consultar el detalle y las relaciones por separado. Mostrar carga propia para los bloques y permitir reintentar un fallo sin bloquear el recuerdo principal.
+- **Sin coincidencias:** ocultar el bloque o mostrar un estado vacío; no tratar `items: []` como 404.
+- **Tarjetas repetidas entre bloques:** `lugar` incluye las de `dia`. Si se quiere evitar duplicación visual, filtrar por Id en la presentación. Conservar los datos y cursores originales de cada bloque; `hayMas` se refiere al criterio completo del servidor, no a la cantidad visible después del filtro.
+- **Cambio de recuerdo:** cancelar solicitudes anteriores con `AbortController`, limpiar listas/cursores y cargar las nuevas relaciones. Ignorar resultados de solicitudes que ya no correspondan al recuerdo abierto. Deshabilitar "Cargar más" mientras haya una petición del mismo bloque en curso.
+- **Cambios entre páginas:** no hay una instantánea fija. Si se oculta o modifica una publicación, los resultados pueden cambiar. Deduplicar por Id al anexar páginas y reiniciar sin cursor al refrescar.
+
+#### Errores HTTP
+
+Los errores de validación/consulta usan `application/problem+json` (`ProblemDetails`). La respuesta puede incluir `status`, `title`, `detail`, `instance` y `traceId`; los errores de binding también pueden incluir `errors` por campo.
+
+| Estado | Causa / tratamiento sugerido |
+|---|---|
+| `400` | Id no positivo, tipo inválido, límite fuera de 1-50 o cursor inválido/de otro contexto. Revisar parámetros; si el cursor quedó obsoleto, reiniciar ese bloque sin cursor. |
+| `404` | El recuerdo no existe o está oculto; también si es un repost cuyo original no está disponible. Mostrar que las relaciones ya no están disponibles. |
+| `500` | Fallo inesperado. Permitir reintentar y conservar el detalle ya cargado. `traceId` sirve para reportar el fallo al backend. |
+
+Una URL con Id no entero no coincide con la ruta `{id:int}` y puede devolver un 404 del enrutador sin este cuerpo. El cliente debe basarse primero en el estado HTTP, como en el ejemplo anterior.
+
+#### Preparación y verificación de la integración
+
+En cada entorno del backend, aplicar las migraciones (incluye `20261021124515_AgregarIndicesRedRecuerdos`) desde la raíz:
+
+```powershell
+dotnet ef database update --project ProyectoFinalTPI.Backend.Repositorio --startup-project ProyectoFinalTPI.Backend
+```
+
+Comprobar en la UI: misma fecha completa; otra fecha dentro del radio solo en `lugar`; inclusión a 200 m y exclusión fuera; ausencia de ocultos/reposts; ambos bloques vacíos; navegación desde un repost; carga de más sin duplicados; cambio de recuerdo durante una petición y representación de fechas UTC sin desplazamiento.
+
+La suite del paso 1 tiene **48 casos por capa y 4 de integración** con PostGIS, incluido el límite exacto de 200 m y su paginación. Detalles de arquitectura y ejecución: [Red de recuerdos: paso 1](docs/red-recuerdos-paso-1.md).
+
+### Modelo de momentos (paso 2, backend interno)
+
+El backend incorpora `Momento`, `MomentoAlias` y `PublicacionMomento`, con fechas opcionales del acontecimiento, jerarquía padre/hijo sin ciclos y varias asociaciones por recuerdo. Los alias se normalizan; las asociaciones automáticas respetan decisiones previas del autor.
+
+Esta etapa creó la base interna de momentos. Los endpoints de exploración y correcciones se agregan en el paso 3, descrito a continuación; el análisis de IA se incorpora después. Para sincronizar la base, ejecutar `dotnet ef database update --project ProyectoFinalTPI.Backend.Repositorio --startup-project ProyectoFinalTPI.Backend` desde la raíz (incluye `20261021141850_AgregarModeloMomentos`).
+
+Reglas, contratos internos y pruebas: [Modelo de momentos: paso 2](docs/red-recuerdos-paso-2.md).
+
+### Momentos: integración de frontend y correcciones (paso 3)
+
+| Método | Ruta | Uso |
+|---|---|---|
+| GET | `/api/momentos?busqueda=...&limite=20&cursor=...` | Búsqueda paginada por nombre/alias; sin búsqueda lista todos. |
+| GET | `/api/momentos/{id}` | Detalle, padre, hijos directos y alias. |
+| GET | `/api/momentos/{id}/publicaciones?incluirDescendientes=true&limite=20&cursor=...` | Recuerdos visibles del momento y sus descendientes, sin duplicados. |
+| GET | `/api/publicaciones/{id}/momentos` | Asociaciones activas, origen, preferencia de automatización y versión de edición. |
+| PUT | `/api/publicaciones/{id}/momentos` | Corrección completa por el autor autenticado. |
+
+Las lecturas son públicas. Para mostrar **"Parte de este momento"**, consultar el GET de momentos del recuerdo por separado del endpoint de relaciones del paso 1. Enviar JWT en esa lectura si se quiere obtener `puedeCorregir` para el autor actual. La respuesta incluye `publicacionId`, `versionRelaciones`, `permitirMomentosAutomaticos`, `puedeCorregir` y `momentos: [{ momento: { id, nombre, fechaInicio, fechaFin, momentoPadreId }, origen }]`. El origen es `automatico` o `autor`.
+
+El PUT requiere JWT y recibe los tres campos obligatorios:
+
+```json
+{
+  "momentoIds": [2, 3],
+  "permitirMomentosAutomaticos": true,
+  "versionRelaciones": 3
+}
+```
+
+La selección admite hasta 50 Id positivos sin repetir; los omitidos quedan rechazados por el autor. Para indicar ningún acontecimiento, enviar lista vacía y automatización false. El autor se toma del token. El PUT devuelve el estado actualizado; si devuelve **409**, recargar el GET y dejar revisar la selección antes de reenviar. No reintentar automáticamente con otra versión. Rechazos y automatización desactivada se respetan en futuros análisis.
+
+Ambos listados usan `items`, `siguienteCursor`, `hayMas` y límite 1-50 (20 por defecto). La búsqueda ordena por Id ascendente; los recuerdos por fecha del recuerdo e Id descendentes. No reutilizar cursores entre consultas/contextos. Un GET desde un repost resuelve al original visible; guardar usando el `publicacionId` de la respuesta.
+
+Aplicar `20261021144634_AgregarCorreccionMomentos` mediante el comando habitual de `database update`. La generación automática de acontecimientos y la cola se incorporan en entregas posteriores. Ejemplos JSON completos, cliente TypeScript, fechas, errores y pruebas: [Integración de momentos: paso 3](docs/red-recuerdos-paso-3.md).
+
+### Análisis en segundo plano (paso 4)
+
+Crear un recuerdo original visible guarda también un trabajo persistente de análisis, en la misma transacción. El POST conserva `201 { id }` y no espera al analizador. El worker usa reservas con token/vencimiento, reintentos y control de versiones para recuperar interrupciones y descartar resultados de texto desactualizado. Las correcciones del autor siguen teniendo prioridad.
+
+El analizador temporal termina en `sinAnalizador`, sin inventar ni retirar asociaciones. El paso 5 permite habilitar Gemini para detectar y resolver acontecimientos colectivos.
+
+Frontend puede consultar el estado de la versión actual con `GET /api/publicaciones/{id}/analisis` (público):
+
+```json
+{
+  "publicacionId": 10,
+  "versionContenido": 1,
+  "estado": "pendiente"
+}
+```
+
+Consultar de forma espaciada mientras el detalle esté abierto y el estado sea `pendiente` o `procesando`; después recargar sus momentos. Lugar/día no esperan al análisis. `VersionContenido` es independiente de `VersionRelaciones`, que sigue usándose al corregir momentos. Las publicaciones anteriores no se encolan en masa y muestran `noProgramado` hasta que se seleccionen para reprocesar desde el paso 6.
+
+Aplicar `20261021160638_AgregarColaAnalisisRecuerdos` mediante el comando habitual de migración. Configuración, estados, recuperación, métricas y pruebas: [Cola de análisis: paso 4](docs/red-recuerdos-paso-4.md).
+
+### Detección de acontecimientos con Gemini (paso 5)
+
+Se integró Gemini detrás de `IAnalizadorRecuerdo`, con el modelo configurable `gemini-3.5-flash-lite`. Analiza título/descripción, propone acontecimientos colectivos con evidencia y confianza, reutiliza el catálogo o crea momentos y alias al confirmar el trabajo. El catálogo y los vínculos se guardan juntos; se respetan versiones y correcciones del autor. No requiere nuevas migraciones ni cambios en los endpoints de frontend.
+
+Gemini viene deshabilitado. Guardar `Gemini:ApiKey` en User Secrets del proyecto web y habilitar expresamente `Gemini:Habilitado` para procesar recuerdos reales. El nivel gratuito y sus cuotas dependen del proyecto en AI Studio. Google puede usar contenido enviado en el nivel gratuito para mejorar sus productos; evaluar primero con datos ficticios.
+
+La prueba aislada `dotnet run --project ProyectoFinalTPI.Backend --no-launch-profile -- --probar-gemini`, ejecutada en Development, envía tres ejemplos ficticios y no abre ni modifica la base. La clave no se envía al frontend. Cambiar luego `Gemini:Modelo` permite evaluar otro modelo compatible sin modificar la cola ni sus endpoints.
+
+Configuración completa, ejecución de la prueba, cuotas, privacidad y límites de la canonicalización: [Gemini y acontecimientos colectivos: paso 5](docs/red-recuerdos-paso-5.md).
+
+### Reprocesar recuerdos existentes por lotes (paso 6)
+
+Los administradores pueden previsualizar recuerdos elegibles con `GET /api/admin/analisis-recuerdos/reprocesamiento?limite=10`, y enviar una selección de IDs/versiones al POST de la misma ruta. La vista previa no modifica datos ni llama a Gemini. El POST responde 202 con los trabajos programados y los motivos de cada omisión.
+
+Se admiten hasta 25 recuerdos por lote y un intervalo de 10 a 3600 segundos. Incluye versiones sin trabajo o terminadas como `sinAnalizador`; los fallidos requieren `incluirFallidos=true`. No reactiva versiones ya analizadas, pendientes, procesando o descartadas. Excluye ocultos, reposts y automatización desactivada. Vuelve a validar cada versión al encolar, conserva las correcciones del autor y no duplica trabajos cuando se repite un lote.
+
+Encolar requiere un proveedor real y el worker habilitados; de lo contrario devuelve 503 sin cambios. Ambos endpoints requieren sesión de administrador (`esAdmin=true`). No hay migraciones nuevas ni procesamiento histórico automático. Vista previa local de solo lectura: `dotnet run --project ProyectoFinalTPI.Backend --no-launch-profile -- --previsualizar-reprocesamiento --limite 5`, en Development.
+
+Ejemplos completos, seguimiento, concurrencia y ejecución: [Reprocesamiento controlado: paso 6](docs/red-recuerdos-paso-6.md).
+
+### Prevención y gestión de momentos duplicados (paso 7)
+
+Las altas reutilizan una identidad normalizada por nombre y fechas, respaldada por un índice único. Se resuelven los IDs fusionados al momento canónico y se reutilizan sus alias. Las variantes semánticas dudosas requieren revisión: no se fusionan automáticamente por similitud textual.
+
+Los administradores cuentan con `GET /api/admin/momentos/{origenId}/duplicados`, `GET /api/admin/momentos/{origenId}/fusion?destinoId=...` y `POST /api/admin/momentos/{origenId}/fusion`. La confirmación requiere las versiones de catálogo de la vista previa. Conserva publicaciones, nombres anteriores, alias y rechazos del autor; actualiza las versiones de relaciones afectadas y deja referencias válidas para los IDs anteriores.
+
+Aplicar `20261021183413_AgregarIdentidadYFusionMomentos`. La migración no fusiona ni elimina datos. Semántica de conflictos, respuestas Swagger, concurrencia y ejemplos completos: [Gestión de duplicados: paso 7](docs/red-recuerdos-paso-7.md).
+
+### Plan de implementación para frontend
+
+El [plan de acción de frontend](docs/plan-frontend-red-recuerdos.md) reúne los 13 endpoints de la red de recuerdos, contratos TypeScript, reglas de paginación y versiones, entregas por pantalla, manejo de errores y criterios de aceptación. Incluye la experiencia pública, las correcciones del autor y la administración de reprocesamiento y duplicados; está preparado para compartir como contexto de implementación.
+
 ### Dar o quitar me gusta
 
 Ambas operaciones requieren un JWT válido en `Authorization: Bearer <token>`. El `publicacionId` se envía en la ruta; no se envía `usuarioId` ni un body, porque el usuario se identifica desde el token.

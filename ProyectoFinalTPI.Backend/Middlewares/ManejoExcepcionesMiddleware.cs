@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using ProyectoFinalTPI.Backend.Entidades;
 
 namespace ProyectoFinalTPI.Backend.Middlewares;
 
@@ -20,6 +21,9 @@ public sealed class ManejoExcepcionesMiddleware(
         {
             var (estado, titulo, detalle) = exception switch
             {
+                ConflictoCatalogoException => (409, "Conflicto de catálogo", exception.Message),
+                AnalisisNoDisponibleException => (503, "Análisis no disponible", exception.Message),
+                ConflictoRelacionesException => (409, "Conflicto de relaciones", exception.Message),
                 ArgumentException => (400, "Solicitud inválida", exception.Message),
                 UnauthorizedAccessException => (403, "Acceso denegado", exception.Message),
                 KeyNotFoundException => (404, "Recurso no encontrado", exception.Message),
