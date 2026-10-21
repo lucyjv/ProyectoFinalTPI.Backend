@@ -212,7 +212,10 @@ app.UseSwaggerUI(options =>
     options.RoutePrefix = "swagger";
 });
 
-app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 if (app.Environment.IsDevelopment())
 {
     ProyectoFinalTPI.Backend.DataSeeder.Seed(app.Services, app.Environment);

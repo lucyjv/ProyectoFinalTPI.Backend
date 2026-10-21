@@ -66,6 +66,61 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 }
         }
 
+        public async Task<PuntuacionPublicacionDto> Puntuar(
+            int publicacionId, int usuarioId, int puntaje, CancellationToken cancellationToken = default)
+        {
+            if (puntaje < 1 || puntaje > 5)
+                throw new ArgumentOutOfRangeException(nameof(puntaje), "La puntuación debe estar entre 1 y 5.");
+
+            await ValidarInteraccionConPublicacion(publicacionId, usuarioId, cancellationToken);
+
+            var publicacion = await _publicacionRepositorio.ObtenerPorId(publicacionId, cancellationToken);
+            if (publicacion != null && publicacion.UsuarioId == usuarioId)
+            {
+                throw new InvalidOperationException("No podés puntuar tu propia publicación.");
+            }
+
+            var estadoActual = await _publicacionRepositorio.ObtenerEstadoPuntuacion(publicacionId, usuarioId, cancellationToken);
+            if (estadoActual.MiPuntuacion == puntaje)
+            {
+                // Toggle: si vuelve a presionar el mismo puntaje, se quita la puntuación
+                await _publicacionRepositorio.QuitarPuntuacion(publicacionId, usuarioId, cancellationToken);
+            }
+            else
+            {
+                await _publicacionRepositorio.PuntuarPublicacion(publicacionId, usuarioId, puntaje, cancellationToken);
+            }
+
+            return await _publicacionRepositorio.ObtenerEstadoPuntuacion(publicacionId, usuarioId, cancellationToken);
+        }
+
+        public async Task<PuntuacionPublicacionDto> QuitarPuntuacion(
+            int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
+        {
+            await ValidarInteraccionConPublicacion(publicacionId, usuarioId, cancellationToken);
+            await _publicacionRepositorio.QuitarPuntuacion(publicacionId, usuarioId, cancellationToken);
+            return await _publicacionRepositorio.ObtenerEstadoPuntuacion(publicacionId, usuarioId, cancellationToken);
+        }
+
+        public async Task CompletarResumenesPuntuaciones(
+            IReadOnlyCollection<PublicacionDetalleDto> publicaciones, int? usuarioId,
+            CancellationToken cancellationToken = default)
+        {
+            if (publicaciones.Count == 0) return;
+
+            var resumenes = await _publicacionRepositorio.ObtenerResumenPuntuaciones(
+                publicaciones.Select(publicacion => publicacion.Id).Distinct().ToArray(),
+                usuarioId,
+                cancellationToken);
+
+            foreach (var publicacion in publicaciones)
+                if (resumenes.TryGetValue(publicacion.Id, out var resumen))
+                {
+                    publicacion.PuntosTotales = resumen.PuntosTotales;
+                    publicacion.MiPuntuacion = resumen.MiPuntuacion;
+                }
+        }
+
         private async Task ValidarInteraccionConPublicacion(
             int publicacionId, int usuarioId, CancellationToken cancellationToken)
         {
@@ -253,6 +308,19 @@ namespace ProyectoFinalTPI.Backend.Servicio
             return publicacion;
         }
 
+        public async Task<List<PublicacionDetalleDto>> ObtenerPorUsuarioId(int usuarioId, int? usuarioAutenticadoId, CancellationToken cancellationToken = default)
+        {
+            if (usuarioId <= 0)
+            {
+                throw new ArgumentException("El ID del usuario debe ser mayor que cero.");
+            }
+
+            var publicaciones = await _publicacionRepositorio.ObtenerPorUsuarioId(usuarioId, cancellationToken);
+            await CompletarResumenesLikes(publicaciones, usuarioAutenticadoId ?? 0, cancellationToken);
+            await CompletarResumenesPuntuaciones(publicaciones, usuarioAutenticadoId, cancellationToken);
+            return publicaciones;
+        }
+
         public async Task<ResultadoPaginadoDto<PublicacionDetalleDto>>ObtenerFeedSeguidos(int usuarioId, string? cursor, int limite,
         CancellationToken cancellationToken = default)
         {
@@ -293,6 +361,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 .ToList();
 
             await CompletarResumenesLikes(items, usuarioId, cancellationToken);
+            await CompletarResumenesPuntuaciones(items, usuarioId, cancellationToken);
 
             string? siguienteCursor = null;
 
@@ -399,6 +468,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
                         if (items.Count == limite)
                         {
                             await CompletarResumenesLikes(items, usuarioId, cancellationToken);
+                            await CompletarResumenesPuntuaciones(items, usuarioId, cancellationToken);
 
                             return new ResultadoPaginadoDto<PublicacionDetalleDto>
                             {
@@ -417,6 +487,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
             }
 
             await CompletarResumenesLikes(items, usuarioId, cancellationToken);
+            await CompletarResumenesPuntuaciones(items, usuarioId, cancellationToken);
 
             return new ResultadoPaginadoDto<PublicacionDetalleDto>
             {

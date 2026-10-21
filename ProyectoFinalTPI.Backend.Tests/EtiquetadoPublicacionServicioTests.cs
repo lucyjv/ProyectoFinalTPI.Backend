@@ -158,6 +158,9 @@ public class EtiquetadoPublicacionServicioTests
 
         public Task<Usuario?> ObtenerPorUsernameAsync(string username, CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
+
+        public Task<int> ContarPublicacionesVisiblesAsync(int usuarioId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(0);
     }
 
     private sealed class Neo4jDriverFake

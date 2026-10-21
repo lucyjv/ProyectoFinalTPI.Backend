@@ -659,6 +659,12 @@ namespace ProyectoFinalTPI.Backend.Tests
                 return Error == null ? Task.FromResult(Detalle) : Task.FromException<PublicacionDetalleDto>(Error);
             }
 
+            public Task<List<PublicacionDetalleDto>> ObtenerPorUsuarioId(int usuarioId, int? usuarioAutenticadoId, CancellationToken cancellationToken = default)
+            {
+                IdConsultado = usuarioId;
+                return Error == null ? Task.FromResult(new List<PublicacionDetalleDto> { Detalle }) : Task.FromException<List<PublicacionDetalleDto>>(Error);
+            }
+
             public Task<MeGustaPublicacionDto> DarLike(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
                 => throw new NotImplementedException();
 
@@ -666,6 +672,16 @@ namespace ProyectoFinalTPI.Backend.Tests
                 => throw new NotImplementedException();
 
             public Task CompletarResumenesLikes(IReadOnlyCollection<PublicacionDetalleDto> publicaciones, int usuarioId,
+                CancellationToken cancellationToken = default)
+                => Task.CompletedTask;
+
+            public Task<PuntuacionPublicacionDto> Puntuar(int publicacionId, int usuarioId, int puntaje, CancellationToken cancellationToken = default)
+                => Task.FromResult(new PuntuacionPublicacionDto { PublicacionId = publicacionId, PuntosTotales = puntaje, MiPuntuacion = puntaje });
+
+            public Task<PuntuacionPublicacionDto> QuitarPuntuacion(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
+                => Task.FromResult(new PuntuacionPublicacionDto { PublicacionId = publicacionId, PuntosTotales = 0, MiPuntuacion = null });
+
+            public Task CompletarResumenesPuntuaciones(IReadOnlyCollection<PublicacionDetalleDto> publicaciones, int? usuarioId,
                 CancellationToken cancellationToken = default)
                 => Task.CompletedTask;
 

@@ -97,5 +97,14 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                     u => u.Username.ToLower() == usernameNormalizado,
                     cancellationToken);
         }
+
+        /// <inheritdoc/>
+        public async Task<int> ContarPublicacionesVisiblesAsync(
+            int usuarioId, CancellationToken cancellationToken = default)
+        {
+            return await _context.Publicaciones
+                .AsNoTracking()
+                .CountAsync(p => p.UsuarioId == usuarioId && !p.EstaOculto, cancellationToken);
+        }
     }
 }

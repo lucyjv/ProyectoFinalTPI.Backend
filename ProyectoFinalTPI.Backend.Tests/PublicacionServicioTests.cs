@@ -589,6 +589,59 @@ namespace ProyectoFinalTPI.Backend.Tests
             Assert.Equal(1, _repositorio.ConsultasGenerales);
         }
 
+        [Theory]
+        [InlineData(0)]
+        [InlineData(6)]
+        [InlineData(-1)]
+        public async Task Puntuar_FallaSiPuntajeEstaFueraDeRango(int puntajeInvalido)
+        {
+            _usuarios.Existe = true;
+            _repositorio.ExisteVisible = true;
+
+            await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+                _servicio.Puntuar(1, 10, puntajeInvalido));
+        }
+
+        [Fact]
+        public async Task Puntuar_FallaSiUsuarioPuntuaSuPropiaPublicacion()
+        {
+            _usuarios.Existe = true;
+            _repositorio.ExisteVisible = true;
+            _repositorio.Original = new Publicacion { Id = 1, UsuarioId = 10 }; // Mismo usuario autor
+
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                _servicio.Puntuar(1, 10, 5));
+
+            Assert.Contains("propia publicación", ex.Message);
+        }
+
+        [Fact]
+        public async Task Puntuar_RegistraPuntajeExitosamente()
+        {
+            _usuarios.Existe = true;
+            _repositorio.ExisteVisible = true;
+            _repositorio.Original = new Publicacion { Id = 1, UsuarioId = 99 };
+
+            var resultado = await _servicio.Puntuar(1, 10, 5);
+
+            Assert.Equal(5, resultado.PuntosTotales);
+            Assert.Equal(5, resultado.MiPuntuacion);
+            Assert.Equal(5, _repositorio.UltimoPuntajeGuardado);
+        }
+
+        [Fact]
+        public async Task Puntuar_HaceToggleSiSeEnviaElMismoPuntaje()
+        {
+            _usuarios.Existe = true;
+            _repositorio.ExisteVisible = true;
+            _repositorio.Original = new Publicacion { Id = 1, UsuarioId = 99 };
+            _repositorio.UltimoPuntajeGuardado = 4; // Ya tenía puntaje 4
+
+            var resultado = await _servicio.Puntuar(1, 10, 4);
+
+            Assert.True(_repositorio.QuitarPuntuacionLlamado);
+        }
+
         // Estos dobles reemplazan las dependencias externas del servicio.
         private class PublicacionRepositorioFake : IPublicacionRepositorio
         {
@@ -676,6 +729,35 @@ namespace ProyectoFinalTPI.Backend.Tests
                 => Task.FromResult<IReadOnlyDictionary<int, (int Cantidad, bool DioLike)>>(
                     publicacionesIds.Distinct().ToDictionary(id => id, _ => (Cantidad: 0, DioLike: false)));
 
+            public int? UltimoPuntajeGuardado { get; set; }
+            public bool QuitarPuntuacionLlamado { get; set; }
+
+            public Task PuntuarPublicacion(int publicacionId, int usuarioId, int puntaje, CancellationToken cancellationToken = default)
+            {
+                UltimoPuntajeGuardado = puntaje;
+                return Task.CompletedTask;
+            }
+
+            public Task QuitarPuntuacion(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
+            {
+                QuitarPuntuacionLlamado = true;
+                UltimoPuntajeGuardado = null;
+                return Task.CompletedTask;
+            }
+
+            public Task<PuntuacionPublicacionDto> ObtenerEstadoPuntuacion(int publicacionId, int? usuarioId, CancellationToken cancellationToken = default)
+                => Task.FromResult(new PuntuacionPublicacionDto
+                {
+                    PublicacionId = publicacionId,
+                    PuntosTotales = UltimoPuntajeGuardado ?? 0,
+                    MiPuntuacion = UltimoPuntajeGuardado
+                });
+
+            public Task<IReadOnlyDictionary<int, (int PuntosTotales, int? MiPuntuacion)>> ObtenerResumenPuntuaciones(
+                IReadOnlyCollection<int> publicacionesIds, int? usuarioId, CancellationToken cancellationToken = default)
+                => Task.FromResult<IReadOnlyDictionary<int, (int PuntosTotales, int? MiPuntuacion)>>(
+                    publicacionesIds.Distinct().ToDictionary(id => id, _ => (PuntosTotales: 0, MiPuntuacion: (int?)null)));
+
             public Task<List<ComentarioDto>> ObtenerComentarios(int publicacionId, CursorCronologicoDto? cursor, int limite, CancellationToken cancellationToken = default)
             {
                 ConsultasComentarios++;
@@ -698,6 +780,11 @@ namespace ProyectoFinalTPI.Backend.Tests
             {
                 LotesConsultados.Add(publicacionesIds.ToArray());
                 return Task.FromResult(PublicacionesPorIds.Where(p => publicacionesIds.Contains(p.Id)).ToList());
+            }
+
+            public Task<List<PublicacionDetalleDto>> ObtenerPorUsuarioId(int usuarioId, CancellationToken cancellationToken = default)
+            {
+                return Task.FromResult(PublicacionesPorIds.Where(p => p.Autor.Id == usuarioId).ToList());
             }
 
             public Task<IReadOnlyList<int>> ObtenerPublicacionesRelacionadasPorLikes(
@@ -757,6 +844,7 @@ namespace ProyectoFinalTPI.Backend.Tests
             public Task AgregarAsync(Usuario usuario, CancellationToken cancellationToken = default) => throw new NotImplementedException();
             public Task ActualizarAsync(Usuario usuario, CancellationToken cancellationToken = default) => throw new NotImplementedException();
             public Task<Usuario?> ObtenerPorUsernameAsync(string username, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+            public Task<int> ContarPublicacionesVisiblesAsync(int usuarioId, CancellationToken cancellationToken = default) => Task.FromResult(0);
         }
 
         private class MultimediaServicioFake : IMultimediaServicio

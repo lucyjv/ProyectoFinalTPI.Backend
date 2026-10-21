@@ -7,6 +7,7 @@ using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Requests.Publicaciones;
 using ProyectoFinalTPI.Backend.Mappings;
 using ProyectoFinalTPI.Backend.Extensions;
+using ProyectoFinalTPI.Backend.Entidades;
 
 namespace ProyectoFinalTPI.Backend.Controllers
 {
@@ -70,10 +71,29 @@ namespace ProyectoFinalTPI.Backend.Controllers
             CancellationToken cancellationToken)
         {
             var detalle = await _publicacionServicio.ObtenerDetallePorId(id, cancellationToken);
+            var usuarioIdActual = User.ObtenerUsuarioId();
             await _publicacionServicio.CompletarResumenesLikes(
-                [detalle], User.ObtenerUsuarioId() ?? 0, cancellationToken);
+                [detalle], usuarioIdActual ?? 0, cancellationToken);
+            await _publicacionServicio.CompletarResumenesPuntuaciones(
+                [detalle], usuarioIdActual, cancellationToken);
 
             return Ok(detalle);
+        }
+
+        [HttpGet("usuario/{usuarioId:int}")]
+        [SwaggerOperation(
+            Summary = "Obtiene las publicaciones visibles de un usuario.",
+            Description = "Devuelve el listado de publicaciones creadas por el usuario indicado, con información de likes y puntuaciones."
+        )]
+        [SwaggerResponse(StatusCodes.Status200OK, "Listado de publicaciones del usuario.", typeof(List<PublicacionDetalleDto>))]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "El identificador del usuario no es válido.", typeof(ProblemDetails))]
+        public async Task<ActionResult<List<PublicacionDetalleDto>>> ObtenerPorUsuario(
+            int usuarioId,
+            CancellationToken cancellationToken)
+        {
+            var publicaciones = await _publicacionServicio.ObtenerPorUsuarioId(
+                usuarioId, User.ObtenerUsuarioId(), cancellationToken);
+            return Ok(publicaciones);
         }
 
         [HttpPost]
@@ -238,6 +258,72 @@ namespace ProyectoFinalTPI.Backend.Controllers
             if (!usuarioId.HasValue || usuarioId.Value <= 0) return Unauthorized();
 
             return Ok(await _publicacionServicio.QuitarLike( publicacionId, usuarioId.Value, cancellationToken));
+        }
+
+        [Authorize]
+        [HttpPut("{publicacionId:int}/puntuacion")]
+        [SwaggerOperation(
+            Summary = "Puntúa una publicación (1 a 5).",
+            Description = "Requiere autenticación y categoría Nostálgico. Si se envía la misma puntuación previa, se desmarca/elimina (toggle)."
+        )]
+        [SwaggerResponse(StatusCodes.Status200OK, "Puntuación registrada o actualizada.", typeof(PuntuacionPublicacionDto))]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "Puntuación o publicación no válida.", typeof(ProblemDetails))]
+        [SwaggerResponse(StatusCodes.Status401Unauthorized, "No autenticado.")]
+        [SwaggerResponse(StatusCodes.Status403Forbidden, "Nivel insuficiente para puntuar (debe ser Nostálgico o superior).", typeof(ProblemDetails))]
+        [SwaggerResponse(StatusCodes.Status404NotFound, "Publicación no encontrada.", typeof(ProblemDetails))]
+        public async Task<ActionResult<PuntuacionPublicacionDto>> Puntuar(
+            int publicacionId,
+            [FromBody] PuntuarPublicacionDto dto,
+            CancellationToken cancellationToken = default)
+        {
+            var usuarioId = User.ObtenerUsuarioId();
+            if (!usuarioId.HasValue || usuarioId.Value <= 0) return Unauthorized();
+
+            try
+            {
+                var resultado = await _publicacionServicio.Puntuar(
+                    publicacionId, usuarioId.Value, dto.Puntaje, cancellationToken);
+                return Ok(resultado);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+                {
+                    Title = "Nivel insuficiente para puntuar",
+                    Detail = ex.Message,
+                    Status = StatusCodes.Status403Forbidden
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new ProblemDetails
+                {
+                    Title = "Operación no permitida",
+                    Detail = ex.Message,
+                    Status = StatusCodes.Status400BadRequest
+                });
+            }
+        }
+
+        [Authorize]
+        [HttpDelete("{publicacionId:int}/puntuacion")]
+        [SwaggerOperation(
+            Summary = "Quita la puntuación de una publicación.",
+            Description = "Requiere autenticación. Elimina la puntuación del usuario en la publicación y devuelve el estado actualizado."
+        )]
+        [SwaggerResponse(StatusCodes.Status200OK, "Puntuación eliminada.", typeof(PuntuacionPublicacionDto))]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "El identificador de la publicación no es válido.", typeof(ProblemDetails))]
+        [SwaggerResponse(StatusCodes.Status401Unauthorized, "No autenticado.")]
+        [SwaggerResponse(StatusCodes.Status404NotFound, "Publicación no encontrada.", typeof(ProblemDetails))]
+        public async Task<ActionResult<PuntuacionPublicacionDto>> QuitarPuntuacion(
+            int publicacionId, CancellationToken cancellationToken = default)
+        {
+            var usuarioId = User.ObtenerUsuarioId();
+            if (!usuarioId.HasValue || usuarioId.Value <= 0) return Unauthorized();
+
+            var resultado = await _publicacionServicio.QuitarPuntuacion(
+                publicacionId, usuarioId.Value, cancellationToken);
+            return Ok(resultado);
         }
 
 
