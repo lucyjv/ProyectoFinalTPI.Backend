@@ -24,5 +24,20 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Repositorio
         /// Invocado periódicamente por <c>LimpiezaMensajesService</c>.
         /// </summary>
         Task EliminarExpiradosAsync();
+
+        /// <summary>
+        /// Devuelve todos los mensajes no expirados en los que el usuario participó
+        /// (como emisor o destinatario), agrupados por el "otro usuario" del par.
+        /// Por cada conversación se incluye únicamente el mensaje más reciente.
+        /// Si el usuario no tiene conversaciones activas devuelve una colección vacía.
+        /// </summary>
+        Task<IEnumerable<MensajeChat>> ObtenerConversacionesActivasAsync(int usuarioId);
+
+        /// <summary>
+        /// Elimina todos los mensajes entre dos usuarios (en ambas direcciones),
+        /// tanto expirados como no expirados.
+        /// Devuelve la cantidad de mensajes eliminados.
+        /// </summary>
+        Task<int> EliminarConversacionAsync(int usuarioId, int otroUsuarioId);
     }
 }

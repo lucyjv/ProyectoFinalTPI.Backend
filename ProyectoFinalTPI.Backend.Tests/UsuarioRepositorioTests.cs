@@ -187,5 +187,26 @@ namespace ProyectoFinalTPI.Backend.Tests
             Assert.DoesNotContain(4, resultado);
             Assert.DoesNotContain(5, resultado);
         }
+
+        [Fact]
+        public async Task BuscarPorUsernameAsyncDevuelveCoincidenciasParcialesSinDistinguirMayusculas()
+        {
+            await SeedUsuariosAsync();
+
+            var resultado = await _repositorio.BuscarPorUsernameAsync("RIO", 10);
+
+            Assert.Equal(3, resultado.Count);
+            Assert.Equal(new[] { "usuario1", "usuario2", "usuario3" }, resultado.Select(usuario => usuario.Username));
+        }
+
+        [Fact]
+        public async Task BuscarPorUsernameAsyncRespetaElLimite()
+        {
+            await SeedUsuariosAsync();
+
+            var resultado = await _repositorio.BuscarPorUsernameAsync("usuario", 2);
+
+            Assert.Equal(2, resultado.Count);
+        }
     }
 }

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Services;
+using ProyectoFinalTPI.Backend.Extensions;
 
 namespace ProyectoFinalTPI.Backend.Hubs
 {
@@ -108,13 +109,8 @@ namespace ProyectoFinalTPI.Backend.Hubs
         /// </summary>
         private int ObtenerUsuarioId()
         {
-            var sub = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier)
-                   ?? Context.User?.FindFirstValue("sub");
-
-            if (sub is null || !int.TryParse(sub, out var id))
-                throw new HubException("No se pudo identificar al usuario. Token inválido.");
-
-            return id;
+            return Context.User.ObtenerUsuarioId()
+                ?? throw new HubException("No se pudo identificar al usuario. Token inválido.");
         }
     }
 }

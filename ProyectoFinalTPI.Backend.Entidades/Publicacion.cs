@@ -26,6 +26,14 @@ namespace ProyectoFinalTPI.Backend.Entidades
             public int UsuarioId { get; set; }    
             public Usuario_Interactivo Usuario { get; set; } = null!;
             public ICollection<Comentario> Comentarios { get; set; } = new List<Comentario>();
+            public ICollection<PublicacionMomento> Momentos { get; set; } = new List<PublicacionMomento>();
+            public bool PermitirMomentosAutomaticos { get; set; } = true;
+            public long VersionRelaciones { get; set; }
+            public long VersionContenido { get; set; } = 1;
+            public ICollection<TrabajoAnalisisRecuerdo> TrabajosAnalisis { get; set; } = new List<TrabajoAnalisisRecuerdo>();
+
+            public int? GrupoId { get; set; }
+            public Grupo? Grupo { get; set; }
 
             public int? PublicacionOriginalId { get; set; }
             public Publicacion? PublicacionOriginal { get; set; }

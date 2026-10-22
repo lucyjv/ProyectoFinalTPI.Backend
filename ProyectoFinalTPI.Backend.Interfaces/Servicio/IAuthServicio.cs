@@ -7,11 +7,17 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Servicio
         /// <summary>
         /// Registra un nuevo usuario. Lanza InvalidOperationException si el email ya existe.
         /// </summary>
-        Task<AuthRespuestaDto> RegistrarAsync(RegistroDto dto);
+        Task<ResultadoAutenticacionDto> RegistrarAsync(RegistroDto dto, string? userAgent = null, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Autentica un usuario. Lanza UnauthorizedAccessException si las credenciales son incorrectas.
         /// </summary>
-        Task<AuthRespuestaDto> LoginAsync(LoginDto dto);
+        Task<ResultadoAutenticacionDto> LoginAsync(LoginDto dto, string? userAgent = null, CancellationToken cancellationToken = default);
+
+        Task<ResultadoAutenticacionDto> RenovarAsync(string refreshToken, CancellationToken cancellationToken = default);
+
+        Task CerrarSesionAsync(string? refreshToken, CancellationToken cancellationToken = default);
+
+        Task CerrarTodasLasSesionesAsync(int usuarioId, CancellationToken cancellationToken = default);
     }
 }

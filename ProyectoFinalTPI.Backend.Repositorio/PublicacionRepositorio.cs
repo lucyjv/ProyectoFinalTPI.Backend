@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
+using Neo4j.Driver;
 using ProyectoFinalTPI.Backend.Dtos;
 using ProyectoFinalTPI.Backend.Dtos.Comentario;
+using ProyectoFinalTPI.Backend.Dtos.Grupo;
 using ProyectoFinalTPI.Backend.Dtos.Lugar;
 using ProyectoFinalTPI.Backend.Dtos.Publicacion;
 using ProyectoFinalTPI.Backend.Dtos.Usuario;
@@ -12,18 +14,379 @@ namespace ProyectoFinalTPI.Backend.Repositorio
 {
     public class PublicacionRepositorio : IPublicacionRepositorio
     {
-        private readonly ApplicationDbContext _context;
+        private const string CrearLikeQuery = """
+            MERGE (usuario:Usuario {postgresId: $usuarioId})
+            MERGE (publicacion:Publicacion {postgresId: $publicacionId})
+            MERGE (usuario)-[like:LE_GUSTA]->(publicacion)
+            ON CREATE SET like.creadaEn = datetime()
+            """;
 
-        public PublicacionRepositorio(ApplicationDbContext context)
+        private const string QuitarLikeQuery = """
+            MATCH (:Usuario {postgresId: $usuarioId})-[like:LE_GUSTA]->
+                  (:Publicacion {postgresId: $publicacionId})
+            DELETE like
+            """;
+
+        private const string ObtenerEstadoLikeQuery = """
+            OPTIONAL MATCH (publicacion:Publicacion {postgresId: $publicacionId})
+            OPTIONAL MATCH (usuario:Usuario)-[like:LE_GUSTA]->(publicacion)
+            RETURN count(like) AS cantidadLikes,
+                   count(CASE WHEN usuario.postgresId = $usuarioId THEN 1 END) > 0 AS dioLike
+            """;
+
+        private const string PuntuarPublicacionQuery = """
+            MERGE (usuario:Usuario {postgresId: $usuarioId})
+            MERGE (publicacion:Publicacion {postgresId: $publicacionId})
+            MERGE (usuario)-[puntuacion:PUNTUO]->(publicacion)
+            SET puntuacion.puntaje = $puntaje,
+                puntuacion.fecha = datetime()
+            """;
+
+        private const string QuitarPuntuacionQuery = """
+            MATCH (:Usuario {postgresId: $usuarioId})-[puntuacion:PUNTUO]->
+                  (:Publicacion {postgresId: $publicacionId})
+            DELETE puntuacion
+            """;
+
+        private const string ObtenerEstadoPuntuacionQuery = """
+            OPTIONAL MATCH (publicacion:Publicacion {postgresId: $publicacionId})
+            OPTIONAL MATCH (u:Usuario)-[r:PUNTUO]->(publicacion)
+            WITH publicacion,
+                 coalesce(sum(r.puntaje), 0) AS puntosTotales
+            OPTIONAL MATCH (:Usuario {postgresId: $usuarioId})-[miRating:PUNTUO]->(publicacion)
+            RETURN puntosTotales,
+                   miRating.puntaje AS miPuntuacion
+            """;
+
+        private const string ObtenerResumenPuntuacionesQuery = """
+            UNWIND $publicacionesIds AS publicacionId
+            OPTIONAL MATCH (publicacion:Publicacion {postgresId: publicacionId})
+            OPTIONAL MATCH (u:Usuario)-[r:PUNTUO]->(publicacion)
+            WITH publicacionId,
+                 coalesce(sum(r.puntaje), 0) AS puntosTotales
+            OPTIONAL MATCH (:Usuario {postgresId: $usuarioId})-[miRating:PUNTUO]->(:Publicacion {postgresId: publicacionId})
+            RETURN publicacionId,
+                   puntosTotales,
+                   miRating.puntaje AS miPuntuacion
+            """;
+
+        // Cada semilla aporta una sola vez, aunque el usuario le haya dado like y la haya puntuado.
+        // Los pesos de likes, puntuaciones altas y etiquetas llegan como parámetros configurables.
+        private const string RecomendacionesFeedQuery = """
+            MATCH (usuario:Usuario {postgresId: $usuarioId})
+            OPTIONAL MATCH (usuario)-[:LE_GUSTA]->(semillaLike:Publicacion)
+            OPTIONAL MATCH (usuario)-[miPunt:PUNTUO]->(semillaPunt:Publicacion)
+            WHERE miPunt.puntaje >= 3
+            WITH usuario, collect(DISTINCT semillaLike) + collect(DISTINCT semillaPunt) AS semillas
+            UNWIND semillas AS semilla
+            WITH DISTINCT usuario, semilla
+            CALL {
+                WITH semilla
+                MATCH (otroUsuario:Usuario)-[:LE_GUSTA]->(semilla)
+                MATCH (otroUsuario)-[:LE_GUSTA]->(candidata:Publicacion)
+                RETURN candidata, count(DISTINCT otroUsuario) * $pesoLike AS relevancia
+                UNION ALL
+                WITH semilla
+                MATCH (otroUsuario:Usuario)-[p1:PUNTUO]->(semilla)
+                MATCH (otroUsuario)-[p2:PUNTUO]->(candidata:Publicacion)
+                WHERE p1.puntaje >= 3 AND p2.puntaje >= 3
+                RETURN candidata, count(DISTINCT otroUsuario) * $pesoPuntuacion AS relevancia
+                UNION ALL
+                WITH semilla
+                MATCH (etiquetado:Usuario)-[:ETIQUETADO_EN]->(semilla)
+                MATCH (etiquetado)-[:ETIQUETADO_EN]->(candidata:Publicacion)
+                RETURN candidata, count(DISTINCT etiquetado) * $pesoEtiqueta AS relevancia
+            }
+            WITH usuario, candidata, relevancia
+            WHERE candidata.postgresId IS NOT NULL
+              AND NOT (usuario)-[:LE_GUSTA]->(candidata)
+              AND NOT (usuario)-[:PUNTUO]->(candidata)
+              AND NOT EXISTS {
+                  MATCH (usuario)-[vista:VIO]->(candidata)
+                  WHERE vista.ultimaVez >= $vistasDesdeUnixMs
+              }
+            RETURN candidata.postgresId AS publicacionId, sum(relevancia) AS puntaje
+            ORDER BY puntaje DESC, publicacionId DESC
+            LIMIT $cantidadMaxima
+            """;
+
+        private const string ObtenerInteraccionesFeedQuery = """
+            MATCH (usuario:Usuario {postgresId: $usuarioId})
+            CALL {
+                WITH usuario
+                MATCH (usuario)-[:LE_GUSTA]->(publicacion:Publicacion)
+                RETURN publicacion.postgresId AS publicacionId, true AS dioLike,
+                       null AS miPuntuacion, null AS ultimaImpresionUnixMs
+                UNION
+                WITH usuario
+                MATCH (usuario)-[puntuacion:PUNTUO]->(publicacion:Publicacion)
+                RETURN publicacion.postgresId AS publicacionId, false AS dioLike,
+                       puntuacion.puntaje AS miPuntuacion, null AS ultimaImpresionUnixMs
+                UNION
+                WITH usuario
+                MATCH (usuario)-[vista:VIO]->(publicacion:Publicacion)
+                RETURN publicacion.postgresId AS publicacionId, false AS dioLike,
+                       null AS miPuntuacion, vista.ultimaVez AS ultimaImpresionUnixMs
+            }
+            WITH publicacionId, dioLike, miPuntuacion, ultimaImpresionUnixMs
+            WHERE publicacionId IS NOT NULL
+            RETURN publicacionId, dioLike, miPuntuacion, ultimaImpresionUnixMs
+            """;
+
+        private const string RegistrarImpresionesFeedQuery = """
+            MERGE (usuario:Usuario {postgresId: $usuarioId})
+            WITH usuario
+            UNWIND $publicacionesIds AS publicacionId
+            MERGE (publicacion:Publicacion {postgresId: publicacionId})
+            MERGE (usuario)-[vista:VIO]->(publicacion)
+            SET vista.ultimaVez = $ultimaVezUnixMs
+            """;
+
+        private readonly ApplicationDbContext _context;
+        private readonly IDriver? _neo4jDriver;
+
+        public PublicacionRepositorio(ApplicationDbContext context, IDriver? neo4jDriver = null)
         {
             _context = context;
+            _neo4jDriver = neo4jDriver;
         }
+
+        public async Task CrearLike( int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
+            await session.ExecuteWriteAsync(async transaction =>
+            {
+                await transaction.RunAsync(CrearLikeQuery, new { publicacionId, usuarioId });
+            });
+        }
+
+        public async Task QuitarLike( int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
+            await session.ExecuteWriteAsync(async transaction =>
+            {
+                await transaction.RunAsync(QuitarLikeQuery, new { publicacionId, usuarioId });
+            });
+        }
+
+        public async Task<MeGustaPublicacionDto> ObtenerEstadoLike( int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
+            return await session.ExecuteReadAsync(async transaction =>
+            {
+                var cursor = await transaction.RunAsync( ObtenerEstadoLikeQuery, new { publicacionId, usuarioId });
+                var registro = await cursor.SingleAsync(); // recibe los valores de cantidadLikes y dioLike para pasarlos al DTO
+
+                return new MeGustaPublicacionDto
+                {
+                    PublicacionId = publicacionId,
+                    CantidadLikes = registro["cantidadLikes"].As<int>(),
+                    DioLike = registro["dioLike"].As<bool>()
+                };
+            });
+        }
+
+        public async Task<IReadOnlyDictionary<int, (int Cantidad, bool DioLike)>> ObtenerResumenLikes(
+            IReadOnlyCollection<int> publicacionesIds, int usuarioId, CancellationToken cancellationToken = default)
+        {
+            if (publicacionesIds.Count == 0)
+                return new Dictionary<int, (int Cantidad, bool DioLike)>();
+
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
+            return await session.ExecuteReadAsync(async transaction =>
+            {
+                var cursor = await transaction.RunAsync("""
+                    UNWIND $publicacionesIds AS publicacionId
+                    OPTIONAL MATCH (usuario:Usuario)-[like:LE_GUSTA]->
+                                  (:Publicacion {postgresId: publicacionId})
+                    RETURN publicacionId,
+                           count(like) AS cantidadLikes,
+                           count(CASE WHEN usuario.postgresId = $usuarioId THEN 1 END) > 0 AS dioLike
+                    """, new { publicacionesIds = publicacionesIds.Distinct().ToArray(), usuarioId });
+
+                var resumenes = new Dictionary<int, (int Cantidad, bool DioLike)>();
+                await foreach (var registro in cursor)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    resumenes[registro["publicacionId"].As<int>()] =
+                        (registro["cantidadLikes"].As<int>(), registro["dioLike"].As<bool>());
+                }
+                return (IReadOnlyDictionary<int, (int Cantidad, bool DioLike)>)resumenes;
+            });
+        }
+
+        public async Task PuntuarPublicacion(int publicacionId, int usuarioId, int puntaje, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
+            await session.ExecuteWriteAsync(async transaction =>
+            {
+                await transaction.RunAsync(PuntuarPublicacionQuery, new { publicacionId, usuarioId, puntaje });
+            });
+        }
+
+        public async Task QuitarPuntuacion(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
+            await session.ExecuteWriteAsync(async transaction =>
+            {
+                await transaction.RunAsync(QuitarPuntuacionQuery, new { publicacionId, usuarioId });
+            });
+        }
+
+        public async Task<PuntuacionPublicacionDto> ObtenerEstadoPuntuacion(int publicacionId, int? usuarioId, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
+            return await session.ExecuteReadAsync(async transaction =>
+            {
+                var cursor = await transaction.RunAsync(ObtenerEstadoPuntuacionQuery, new { publicacionId, usuarioId = usuarioId ?? -1 });
+                if (!await cursor.FetchAsync())
+                {
+                    return new PuntuacionPublicacionDto
+                    {
+                        PublicacionId = publicacionId,
+                        PuntosTotales = 0,
+                        MiPuntuacion = null
+                    };
+                }
+
+                var registro = cursor.Current;
+                int? miPuntaje = null;
+                if (registro["miPuntuacion"] != null)
+                {
+                    try { miPuntaje = registro["miPuntuacion"].As<int?>(); } catch { }
+                }
+
+                return new PuntuacionPublicacionDto
+                {
+                    PublicacionId = publicacionId,
+                    PuntosTotales = registro["puntosTotales"].As<int?>() ?? 0,
+                    MiPuntuacion = miPuntaje
+                };
+            });
+        }
+
+        public async Task<IReadOnlyDictionary<int, (int PuntosTotales, int? MiPuntuacion)>> ObtenerResumenPuntuaciones(
+            IReadOnlyCollection<int> publicacionesIds, int? usuarioId, CancellationToken cancellationToken = default)
+        {
+            if (publicacionesIds.Count == 0)
+                return new Dictionary<int, (int PuntosTotales, int? MiPuntuacion)>();
+
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
+            return await session.ExecuteReadAsync(async transaction =>
+            {
+                var cursor = await transaction.RunAsync(
+                    ObtenerResumenPuntuacionesQuery,
+                    new { publicacionesIds = publicacionesIds.Distinct().ToArray(), usuarioId = usuarioId ?? -1 });
+
+                var resumenes = new Dictionary<int, (int PuntosTotales, int? MiPuntuacion)>();
+                await foreach (var registro in cursor)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    int? miPuntaje = null;
+                    if (registro["miPuntuacion"] != null)
+                    {
+                        try { miPuntaje = registro["miPuntuacion"].As<int?>(); } catch { }
+                    }
+
+                    resumenes[registro["publicacionId"].As<int>()] =
+                        (registro["puntosTotales"].As<int?>() ?? 0,
+                         miPuntaje);
+                }
+                return (IReadOnlyDictionary<int, (int PuntosTotales, int? MiPuntuacion)>)resumenes;
+            });
+        }
+
+        public async Task<IReadOnlyList<RecomendacionPublicacionDto>> ObtenerRecomendacionesFeed(
+            int usuarioId, int cantidadMaxima, long vistasDesdeUnixMs, PesosRecomendacionFeedDto pesos,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
+            return await session.ExecuteReadAsync(async transaction =>
+            {
+                var cursor = await transaction.RunAsync(RecomendacionesFeedQuery,
+                    new
+                    {
+                        usuarioId, cantidadMaxima, vistasDesdeUnixMs,
+                        pesoLike = pesos.Like,
+                        pesoPuntuacion = pesos.Puntuacion,
+                        pesoEtiqueta = pesos.Etiqueta
+                    });
+                var recomendaciones = new List<RecomendacionPublicacionDto>();
+                await foreach (var registro in cursor)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    recomendaciones.Add(new RecomendacionPublicacionDto
+                    {
+                        PublicacionId = registro["publicacionId"].As<int>(),
+                        PuntajeColaborativo = registro["puntaje"].As<long>()
+                    });
+                }
+                return (IReadOnlyList<RecomendacionPublicacionDto>)recomendaciones;
+            });
+        }
+
+        public async Task<IReadOnlyList<InteraccionFeedDto>> ObtenerInteraccionesFeed(
+            int usuarioId, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
+            return await session.ExecuteReadAsync(async transaction =>
+            {
+                var cursor = await transaction.RunAsync(ObtenerInteraccionesFeedQuery, new { usuarioId });
+                var interacciones = new List<InteraccionFeedDto>();
+                await foreach (var registro in cursor)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var puntuacion = registro["miPuntuacion"];
+                    var ultimaImpresion = registro["ultimaImpresionUnixMs"];
+                    interacciones.Add(new InteraccionFeedDto
+                    {
+                        PublicacionId = registro["publicacionId"].As<int>(),
+                        DioLike = registro["dioLike"].As<bool>(),
+                        MiPuntuacion = puntuacion is null ? null : puntuacion.As<int>(),
+                        UltimaImpresionUnixMs = ultimaImpresion is null ? null : ultimaImpresion.As<long>()
+                    });
+                }
+                return (IReadOnlyList<InteraccionFeedDto>)interacciones;
+            });
+        }
+
+        public async Task RegistrarImpresionesFeed(int usuarioId, IReadOnlyCollection<int> publicacionesIds,
+            CancellationToken cancellationToken = default)
+        {
+            if (publicacionesIds.Count == 0) return;
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
+            await session.ExecuteWriteAsync(async transaction =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await transaction.RunAsync(RegistrarImpresionesFeedQuery, new
+                {
+                    usuarioId,
+                    publicacionesIds = publicacionesIds.Distinct().ToArray(),
+                    ultimaVezUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+                });
+            });
+        }
+
+        private IDriver ObtenerNeo4jDriver() => _neo4jDriver ??
+            throw new InvalidOperationException("El driver de Neo4j no esta configurado");
 
         public List<Publicacion> ObtenerTodasPublicaciones()
         {
             return _context.Publicaciones
                            .Where(p => !p.EstaOculto)
                            .Include(p => p.Usuario)
+                           .Include(p => p.Lugar)
                            .ToList();
         }
 
@@ -45,13 +408,6 @@ namespace ProyectoFinalTPI.Backend.Repositorio
             await _context.Publicaciones.AddAsync(publicacion);
             await _context.SaveChangesAsync();
             return publicacion.Id;
-        }
-
-        public async Task<int> CrearComentario(Comentario comentario, CancellationToken cancellationToken = default)
-        {
-            await _context.Set<Comentario>().AddAsync(comentario, cancellationToken);
-            await _context.SaveChangesAsync(cancellationToken);
-            return comentario.Id;
         }
 
         public async Task<Publicacion?> ObtenerPorId(int id, CancellationToken cancellationToken = default)
@@ -97,7 +453,9 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                     Id = p.Id,
                     Latitud = p.Lugar.Coordenadas.Y,
                     Longitud = p.Lugar.Coordenadas.X,
-                    Categoria = p.Categoria
+                    Categoria = p.Categoria,
+                    Titulo = p.Titulo,
+                    Año = p.Fecha.Year
                 })
                 .Take(limite + 1)
                 .ToListAsync(cancellationToken);
@@ -167,11 +525,23 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                         Latitud = p.Lugar.Coordenadas.Y,
                         Longitud = p.Lugar.Coordenadas.X
                     },
-
-                    // TODO: implementar el contador de likes y la interacción del usuario.
                     CantidadLikes = 0,
-                    CantidadComentarios = p.Comentarios.Count(c => !c.EstaOculto),
-                    DioLike = false
+                    CantidadComentarios = p.Comentarios.Count(c => !c.EstaOculto && !c.EstaEliminado),
+                    DioLike = false,
+                    Grupo = p.GrupoId.HasValue ? new GrupoResumenDto
+                    {
+                        Id = p.Grupo!.Id,
+                        Nombre = p.Grupo.Nombre,
+                        Descripcion = p.Grupo.Descripcion,
+                        Decada = p.Grupo.Decada,
+                        FechaCreacion = p.Grupo.FechaCreacion,
+                        Creador = new AutorResumenDto
+                        {
+                            Id = p.Grupo.CreadorId,
+                            Username = p.Grupo.Creador.Username
+                        },
+                        CantidadIntegrantes = p.Grupo.Integrantes.Count
+                    } : null
                 })
                 .SingleOrDefaultAsync(cancellationToken);
         }
@@ -235,48 +605,23 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                         Latitud = p.Lugar.Coordenadas.Y,
                         Longitud = p.Lugar.Coordenadas.X
                     },
-
-                    // TODO: implementar el contador de likes y la interacción del usuario.
                     CantidadLikes = 0,
-                    CantidadComentarios = p.Comentarios.Count(c => !c.EstaOculto),
-                    DioLike = false
-                })
-                .Take(limite + 1)
-                .ToListAsync(cancellationToken);
-        }
-
-        public async Task<List<ComentarioDto>> ObtenerComentarios(int publicacionId, CursorCronologicoDto? cursor, int limite, CancellationToken cancellationToken = default)
-        {
-            var consulta = _context.Publicaciones
-                .AsNoTracking()
-                .Where(p =>
-                    p.Id == publicacionId &&
-                    !p.EstaOculto)
-                .SelectMany(p => p.Comentarios)
-                .Where(c => !c.EstaOculto);
-
-            if (cursor != null)
-            {
-                consulta = consulta.Where(c =>
-                    c.FechaCreacion < cursor.FechaCreacion ||
-                    (c.FechaCreacion == cursor.FechaCreacion &&
-                     c.Id < cursor.Id));
-            }
-
-            return await consulta
-                .OrderByDescending(c => c.FechaCreacion)
-                .ThenByDescending(c => c.Id)
-                .Select(c => new ComentarioDto
-                {
-                    Id = c.Id,
-                    Contenido = c.Contenido,
-                    FechaCreacion = c.FechaCreacion,
-
-                    Autor = new AutorResumenDto
+                    CantidadComentarios = p.Comentarios.Count(c => !c.EstaOculto && !c.EstaEliminado),
+                    DioLike = false,
+                    Grupo = p.GrupoId.HasValue ? new GrupoResumenDto
                     {
-                        Id = c.Usuario.Id,
-                        Username = c.Usuario.Username
-                    }
+                        Id = p.Grupo!.Id,
+                        Nombre = p.Grupo.Nombre,
+                        Descripcion = p.Grupo.Descripcion,
+                        Decada = p.Grupo.Decada,
+                        FechaCreacion = p.Grupo.FechaCreacion,
+                        Creador = new AutorResumenDto
+                        {
+                            Id = p.Grupo.CreadorId,
+                            Username = p.Grupo.Creador.Username
+                        },
+                        CantidadIntegrantes = p.Grupo.Integrantes.Count
+                    } : null
                 })
                 .Take(limite + 1)
                 .ToListAsync(cancellationToken);
@@ -290,14 +635,29 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                     cancellationToken);
         }
 
-        public async Task<List<PublicacionDetalleDto>> ObtenerPublicacionesParaVos(IReadOnlyCollection<CategoriaEnum> categorias, DateTime fechaCorte,
-        CursorCronologicoDto? cursor, int limite, CancellationToken cancellationToken = default)
+        public Task<List<PublicacionDetalleDto>> ObtenerPublicacionesParaVos(
+            IReadOnlyCollection<CategoriaEnum> categorias, DateTime fechaCorte,
+            CursorCronologicoDto? cursor, int limite, CancellationToken cancellationToken = default)
+        {
+            return ObtenerPublicacionesParaVos(categorias, fechaCorte, cursor, limite,
+                Array.Empty<int>(), cancellationToken);
+        }
+
+        public async Task<List<PublicacionDetalleDto>> ObtenerPublicacionesParaVos(
+            IReadOnlyCollection<CategoriaEnum> categorias, DateTime fechaCorte,
+            CursorCronologicoDto? cursor, int limite, IReadOnlyCollection<int> excluirIds,
+            CancellationToken cancellationToken = default)
         {
             var consulta = _context.Publicaciones
                 .AsNoTracking()
                 .Where(p =>
                     !p.EstaOculto &&
                     p.FechaCreación <= fechaCorte);
+
+            if (excluirIds.Count > 0)
+            {
+                consulta = consulta.Where(p => !excluirIds.Contains(p.Id));
+            }
 
             if (categorias.Count > 0)
             {
@@ -346,11 +706,23 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                         Latitud = p.Lugar.Coordenadas.Y,
                         Longitud = p.Lugar.Coordenadas.X
                     },
-
-                    // TODO: implementar el contador de likes y la interacción del usuario.
                     CantidadLikes = 0,
-                    CantidadComentarios = p.Comentarios.Count(c => !c.EstaOculto),
-                    DioLike = false
+                    CantidadComentarios = p.Comentarios.Count(c => !c.EstaOculto && !c.EstaEliminado),
+                    DioLike = false,
+                    Grupo = p.GrupoId.HasValue ? new GrupoResumenDto
+                    {
+                        Id = p.Grupo!.Id,
+                        Nombre = p.Grupo.Nombre,
+                        Descripcion = p.Grupo.Descripcion,
+                        Decada = p.Grupo.Decada,
+                        FechaCreacion = p.Grupo.FechaCreacion,
+                        Creador = new AutorResumenDto
+                        {
+                            Id = p.Grupo.CreadorId,
+                            Username = p.Grupo.Creador.Username
+                        },
+                        CantidadIntegrantes = p.Grupo.Integrantes.Count
+                    } : null
                 })
                 .Take(limite + 1)
                 .ToListAsync(cancellationToken);
@@ -398,11 +770,74 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                         Latitud = p.Lugar.Coordenadas.Y,
                         Longitud = p.Lugar.Coordenadas.X
                     },
-
-                    // TODO: implementar el contador de likes y la interacción del usuario.
                     CantidadLikes = 0,
-                    CantidadComentarios = p.Comentarios.Count(c => !c.EstaOculto),
-                    DioLike = false
+                    CantidadComentarios = p.Comentarios.Count(c => !c.EstaOculto && !c.EstaEliminado),
+                    DioLike = false,
+                    Grupo = p.GrupoId.HasValue ? new GrupoResumenDto
+                    {
+                        Id = p.Grupo!.Id,
+                        Nombre = p.Grupo.Nombre,
+                        Descripcion = p.Grupo.Descripcion,
+                        Decada = p.Grupo.Decada,
+                        FechaCreacion = p.Grupo.FechaCreacion,
+                        Creador = new AutorResumenDto
+                        {
+                            Id = p.Grupo.CreadorId,
+                            Username = p.Grupo.Creador.Username
+                        },
+                        CantidadIntegrantes = p.Grupo.Integrantes.Count
+                    } : null
+                })
+                .ToListAsync(cancellationToken);
+        }
+
+        public async Task<List<PublicacionDetalleDto>> ObtenerPorUsuarioId(int usuarioId, CancellationToken cancellationToken = default)
+        {
+            return await _context.Publicaciones
+                .AsNoTracking()
+                .Where(p => !p.EstaOculto && p.UsuarioId == usuarioId)
+                .OrderByDescending(p => p.FechaCreación)
+                .ThenByDescending(p => p.Id)
+                .Select(p => new PublicacionDetalleDto
+                {
+                    Id = p.Id,
+                    Titulo = p.Titulo,
+                    Descripcion = p.Descripcion,
+                    Fecha = p.Fecha,
+                    FechaCreacion = p.FechaCreación,
+                    Categoria = p.Categoria,
+                    UrlMultimedia = p.UrlMultimedia,
+                    TipoMultimedia = p.TipoMultimedia,
+                    Autor = new AutorResumenDto
+                    {
+                        Id = p.UsuarioId,
+                        Username = p.Usuario.Username
+                    },
+                    Lugar = new LugarDetalleDto
+                    {
+                        Id = p.LugarId,
+                        Nombre = p.Lugar.Nombre,
+                        Direccion = p.Lugar.Direccion,
+                        Latitud = p.Lugar.Coordenadas.Y,
+                        Longitud = p.Lugar.Coordenadas.X
+                    },
+                    CantidadLikes = 0,
+                    CantidadComentarios = p.Comentarios.Count(c => !c.EstaOculto && !c.EstaEliminado),
+                    DioLike = false,
+                    Grupo = p.GrupoId.HasValue ? new GrupoResumenDto
+                    {
+                        Id = p.Grupo!.Id,
+                        Nombre = p.Grupo.Nombre,
+                        Descripcion = p.Grupo.Descripcion,
+                        Decada = p.Grupo.Decada,
+                        FechaCreacion = p.Grupo.FechaCreacion,
+                        Creador = new AutorResumenDto
+                        {
+                            Id = p.Grupo.CreadorId,
+                            Username = p.Grupo.Creador.Username
+                        },
+                        CantidadIntegrantes = p.Grupo.Integrantes.Count
+                    } : null
                 })
                 .ToListAsync(cancellationToken);
         }

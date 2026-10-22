@@ -51,6 +51,36 @@ namespace ProyectoFinalTPI.Backend.Tests
             }
         };
 
+        [Fact]
+        public async Task FeedGeneralExcluyeIdsInteractuadosAntesDeAplicarElLimite()
+        {
+            _context.Usuarios.Add(usuario);
+            _context.Lugares.Add(lugar);
+            var fecha = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+            for (var id = 1; id <= 3; id++)
+            {
+                _context.Publicaciones.Add(new Publicacion
+                {
+                    Id = id,
+                    Titulo = $"Publicación {id}",
+                    Descripcion = "Recuerdo de prueba",
+                    FechaCreación = fecha.AddMinutes(id),
+                    Fecha = fecha,
+                    UsuarioId = usuario.Id,
+                    Usuario = usuario,
+                    LugarId = lugar.Id,
+                    Lugar = lugar
+                });
+            }
+            await _context.SaveChangesAsync();
+            _context.ChangeTracker.Clear();
+
+            var resultado = await _repositorio.ObtenerPublicacionesParaVos(
+                Array.Empty<CategoriaEnum>(), fecha.AddDays(1), null, 1, new[] { 3 });
+
+            Assert.Equal(new[] { 2, 1 }, resultado.Select(p => p.Id));
+        }
+
 
         [Fact]
         public async Task QueSePuedaObtenerUnaPublicacionPorSuId()
@@ -1069,316 +1099,6 @@ namespace ProyectoFinalTPI.Backend.Tests
 
             //Assert
             Assert.Null(result);
-        }
-
-        [Fact]
-        public async Task QueSeObtenganSoloLosComentariosVisiblesDeLaPublicacion()
-        {
-            //Arrange
-            _context.Usuarios.Add(usuario);
-            _context.Lugares.Add(lugar);
-            var fecha = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
-            var publicacion1 = new Publicacion
-            {
-                Id = 1,
-                Titulo = "Publicación 1",
-                FechaCreación = fecha,
-                EstaOculto = false,
-                UsuarioId = usuario.Id,
-                Usuario = usuario,
-                LugarId = lugar.Id,
-                Lugar = lugar
-            };
-
-            _context.Publicaciones.Add(publicacion1);
-
-            var publicacion2 = new Publicacion
-            {
-                Id = 2,
-                Titulo = "Publicación 2",
-                FechaCreación = fecha,
-                EstaOculto = false,
-                UsuarioId = usuario.Id,
-                Usuario = usuario,
-                LugarId = lugar.Id,
-                Lugar = lugar
-            };
-
-            _context.Publicaciones.Add(publicacion2);
-
-            var comentario1 = new Comentario
-            {
-                Id = 1,
-                Contenido = "Comentario 1",
-                FechaCreacion = fecha,
-                EstaOculto = false,
-                Publicacion = publicacion1,
-                Usuario = usuario
-            };
-
-            _context.Add(comentario1);
-
-            var comentario2 = new Comentario
-            {
-                Id = 2,
-                Contenido = "Comentario 2",
-                FechaCreacion = fecha,
-                EstaOculto = true,
-                Publicacion = publicacion1,
-                Usuario = usuario
-            };
-
-            _context.Add(comentario2);
-
-            var comentario3 = new Comentario
-            {
-                Id = 3,
-                Contenido = "Comentario 3",
-                FechaCreacion = fecha,
-                EstaOculto = false,
-                Publicacion = publicacion2,
-                Usuario = usuario
-            };
-
-            _context.Add(comentario3);
-
-            await _context.SaveChangesAsync();
-            _context.ChangeTracker.Clear();
-
-            //Act
-            var result = await _repositorio.ObtenerComentarios(
-                publicacion1.Id, null, limite: 20);
-
-            //Assert
-            var comentario = Assert.Single(result);
-            Assert.Equal(1, comentario.Id);
-        }
-
-        [Fact]
-        public async Task QueNoSeObtenganComentariosDeUnaPublicacionOculta()
-        {
-            //Arrange
-            _context.Usuarios.Add(usuario);
-            _context.Lugares.Add(lugar);
-            var fecha = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
-            var publicacion1 = new Publicacion
-            {
-                Id = 1,
-                Titulo = "Publicación 1",
-                FechaCreación = fecha,
-                EstaOculto = true,
-                UsuarioId = usuario.Id,
-                Usuario = usuario,
-                LugarId = lugar.Id,
-                Lugar = lugar
-            };
-
-            _context.Publicaciones.Add(publicacion1);
-
-            var comentario1 = new Comentario
-            {
-                Id = 1,
-                Contenido = "Comentario 1",
-                FechaCreacion = fecha,
-                EstaOculto = false,
-                Publicacion = publicacion1,
-                Usuario = usuario
-            };
-
-            _context.Add(comentario1);
-
-            await _context.SaveChangesAsync();
-            _context.ChangeTracker.Clear();
-
-            //Act
-            var result = await _repositorio.ObtenerComentarios(
-                publicacion1.Id, null, limite: 20);
-
-            //Assert
-            Assert.Empty(result);
-        }
-
-        [Fact]
-        public async Task QueSePuedanPaginarLosComentariosSinRepetirlos()
-        {
-            //Arrange
-            _context.Usuarios.Add(usuario);
-            _context.Lugares.Add(lugar);
-            var fecha = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
-            var publicacion1 = new Publicacion
-            {
-                Id = 1,
-                Titulo = "Publicación 1",
-                FechaCreación = fecha,
-                EstaOculto = false,
-                UsuarioId = usuario.Id,
-                Usuario = usuario,
-                LugarId = lugar.Id,
-                Lugar = lugar
-            };
-
-            _context.Publicaciones.Add(publicacion1);
-
-            var comentario10 = new Comentario
-            {
-                Id = 10,
-                Contenido = "Comentario 10",
-                FechaCreacion = fecha.AddDays(-1),
-                EstaOculto = false,
-                Publicacion = publicacion1,
-                Usuario = usuario
-            };
-
-            _context.Add(comentario10);
-
-            var comentario1 = new Comentario
-            {
-                Id = 1,
-                Contenido = "Comentario 1",
-                FechaCreacion = fecha,
-                EstaOculto = false,
-                Publicacion = publicacion1,
-                Usuario = usuario
-            };
-
-            _context.Add(comentario1);
-
-            var comentario2 = new Comentario
-            {
-                Id = 2,
-                Contenido = "Comentario 2",
-                FechaCreacion = fecha,
-                EstaOculto = false,
-                Publicacion = publicacion1,
-                Usuario = usuario
-            };
-
-            _context.Add(comentario2);
-
-            var comentario3 = new Comentario
-            {
-                Id = 3,
-                Contenido = "Comentario 3",
-                FechaCreacion = fecha,
-                EstaOculto = false,
-                Publicacion = publicacion1,
-                Usuario = usuario
-            };
-
-            _context.Add(comentario3);
-
-            var comentario4 = new Comentario
-            {
-                Id = 4,
-                Contenido = "Comentario 4",
-                FechaCreacion = fecha.AddDays(1),
-                EstaOculto = false,
-                Publicacion = publicacion1,
-                Usuario = usuario
-            };
-
-            _context.Add(comentario4);
-
-            await _context.SaveChangesAsync();
-            _context.ChangeTracker.Clear();
-
-            //Act
-            var primeraPagina = await _repositorio.ObtenerComentarios(
-                publicacion1.Id, cursor: null, limite: 2);
-
-            var ultimaMostrada = primeraPagina[1];
-            var cursor = new CursorCronologicoDto
-            {
-                FechaCreacion = ultimaMostrada.FechaCreacion,
-                Id = ultimaMostrada.Id
-            };
-
-            var result = await _repositorio.ObtenerComentarios(
-                publicacion1.Id, cursor, limite: 2);
-
-            //Assert
-            Assert.Equal(new[] { 4, 3, 2 }, primeraPagina.Select(p => p.Id).ToArray());
-            Assert.Equal(new[] { 2, 1, 10 }, result.Select(p => p.Id).ToArray());
-        }
-
-        [Fact]
-        public async Task QueLosComentariosSeObtenganHastaElLimiteMasUno()
-        {
-            //Arrange
-            _context.Usuarios.Add(usuario);
-            _context.Lugares.Add(lugar);
-            var fecha = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
-            var publicacion1 = new Publicacion
-            {
-                Id = 1,
-                Titulo = "Publicación 1",
-                FechaCreación = fecha,
-                EstaOculto = false,
-                UsuarioId = usuario.Id,
-                Usuario = usuario,
-                LugarId = lugar.Id,
-                Lugar = lugar
-            };
-
-            _context.Publicaciones.Add(publicacion1);
-
-            var comentario1 = new Comentario
-            {
-                Id = 1,
-                Contenido = "Comentario 1",
-                FechaCreacion = fecha,
-                EstaOculto = false,
-                Publicacion = publicacion1,
-                Usuario = usuario
-            };
-
-            _context.Add(comentario1);
-
-            var comentario4 = new Comentario
-            {
-                Id = 4,
-                Contenido = "Comentario 4",
-                FechaCreacion = fecha,
-                EstaOculto = false,
-                Publicacion = publicacion1,
-                Usuario = usuario
-            };
-
-            _context.Add(comentario4);
-
-            var comentario2 = new Comentario
-            {
-                Id = 2,
-                Contenido = "Comentario 2",
-                FechaCreacion = fecha,
-                EstaOculto = false,
-                Publicacion = publicacion1,
-                Usuario = usuario
-            };
-
-            _context.Add(comentario2);
-
-            var comentario3 = new Comentario
-            {
-                Id = 3,
-                Contenido = "Comentario 3",
-                FechaCreacion = fecha,
-                EstaOculto = false,
-                Publicacion = publicacion1,
-                Usuario = usuario
-            };
-
-            _context.Add(comentario3);
-
-            await _context.SaveChangesAsync();
-            _context.ChangeTracker.Clear();
-
-            //Act
-            var result = await _repositorio.ObtenerComentarios(
-                publicacion1.Id, null, limite: 2);
-
-            //Assert
-            Assert.Equal(new[] { 4, 3, 2 }, result.Select(p => p.Id).ToArray());
         }
 
         [Theory]

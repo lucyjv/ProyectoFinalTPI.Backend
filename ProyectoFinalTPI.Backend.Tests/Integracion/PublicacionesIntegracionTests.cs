@@ -1,10 +1,12 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NetTopologySuite.Geometries;
 using ProyectoFinalTPI.Backend.Dtos;
+using ProyectoFinalTPI.Backend.Dtos.Auth;
 using ProyectoFinalTPI.Backend.Dtos.Comentario;
 using ProyectoFinalTPI.Backend.Dtos.Mapa;
 using ProyectoFinalTPI.Backend.Dtos.Publicacion;
@@ -27,8 +29,23 @@ public class PublicacionesIntegracionTests : IClassFixture<PostgisFixture>
 
     private readonly Usuario_Personal usuario = new()
     {
-        Id = 10, Username = "usuarioTest", Email = "test@example.com"
+        Id = 10, Username = "usuarioTest", Email = "test@example.com",
+        Contraseña = BCrypt.Net.BCrypt.HashPassword("contraseña123")
     };
+
+    private static async Task AutenticarAsync(HttpClient client)
+    {
+        using var login = await client.PostAsJsonAsync("/api/auth/login", new
+        {
+            email = "test@example.com",
+            contraseña = "contraseña123"
+        });
+        login.EnsureSuccessStatusCode();
+        var autenticacion = await login.Content.ReadFromJsonAsync<AuthRespuestaDto>();
+        Assert.NotNull(autenticacion);
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", autenticacion.Token);
+    }
 
     private readonly Lugar lugar = new()
     {
@@ -51,11 +68,12 @@ public class PublicacionesIntegracionTests : IClassFixture<PostgisFixture>
         };
         context.Publicaciones.Add(publicacion);
         await context.SaveChangesAsync();
+        await AutenticarAsync(client);
         var desde = DateTime.UtcNow;
 
         //Act
         using var response = await client.PostAsJsonAsync("/api/publicaciones/1/comentarios",
-            new { contenido = "  Qué lindo recuerdo  ", usuarioId = usuario.Id });
+            new { contenido = "  Qué lindo recuerdo  " });
         var result = await response.Content.ReadFromJsonAsync<ComentarioDto>();
         using var consulta = await client.GetAsync("/api/publicaciones/1/comentarios");
         var pagina = await consulta.Content.ReadFromJsonAsync<ResultadoPaginadoDto<ComentarioDto>>();
@@ -67,6 +85,7 @@ public class PublicacionesIntegracionTests : IClassFixture<PostgisFixture>
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         Assert.NotNull(result);
         Assert.Equal("Qué lindo recuerdo", result.Contenido);
+        Assert.NotNull(result.Autor);
         Assert.Equal(usuario.Id, result.Autor.Id);
         Assert.Equal(1, guardado.Publicacion.Id);
         Assert.False(guardado.EstaOculto);
@@ -94,10 +113,11 @@ public class PublicacionesIntegracionTests : IClassFixture<PostgisFixture>
         };
         context.Publicaciones.Add(publicacion);
         await context.SaveChangesAsync();
+        await AutenticarAsync(client);
 
         //Act
         using var response = await client.PostAsJsonAsync("/api/publicaciones/1/comentarios",
-            new { contenido, usuarioId = usuario.Id });
+            new { contenido });
         var result = await response.Content.ReadFromJsonAsync<ValidationProblemDetails>();
 
         //Assert
@@ -110,7 +130,7 @@ public class PublicacionesIntegracionTests : IClassFixture<PostgisFixture>
     }
 
     [Fact]
-    public async Task QueNoSeCreeUnComentarioSiElUsuarioNoExiste()
+    public async Task QueNoSeCreeUnComentarioSinAutenticacion()
     {
         //Arrange
         await using var factory = new PublicacionesApiFactory(_postgres);
@@ -127,15 +147,10 @@ public class PublicacionesIntegracionTests : IClassFixture<PostgisFixture>
 
         //Act
         using var response = await client.PostAsJsonAsync("/api/publicaciones/1/comentarios",
-            new { contenido = "Comentario", usuarioId = 99 });
-        var result = await response.Content.ReadFromJsonAsync<ProblemDetails>();
+            new { contenido = "Comentario" });
 
         //Assert
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-        Assert.NotNull(result);
-        Assert.Equal(404, result.Status);
-        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
-        Assert.False(string.IsNullOrWhiteSpace(result.Detail));
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.Empty(await context.Set<Comentario>().ToListAsync());
     }
 
@@ -157,10 +172,11 @@ public class PublicacionesIntegracionTests : IClassFixture<PostgisFixture>
         context.Publicaciones.Add(publicacion);
         publicacion.EstaOculto = oculta;
         await context.SaveChangesAsync();
+        await AutenticarAsync(client);
 
         //Act
         using var response = await client.PostAsJsonAsync($"/api/publicaciones/{(oculta ? 1 : 99)}/comentarios",
-            new { contenido = "Comentario", usuarioId = usuario.Id });
+            new { contenido = "Comentario" });
         var result = await response.Content.ReadFromJsonAsync<ProblemDetails>();
 
         //Assert
@@ -173,11 +189,9 @@ public class PublicacionesIntegracionTests : IClassFixture<PostgisFixture>
     }
 
     [Theory]
-    [InlineData(0, 10)]
-    [InlineData(-1, 10)]
-    [InlineData(1, 0)]
-    [InlineData(1, -1)]
-    public async Task QueNoSeCreeUnComentarioConIdsInvalidos(int publicacionId, int usuarioId)
+    [InlineData(0)]
+    [InlineData(-1)]
+    public async Task QueNoSeCreeUnComentarioConPublicacionIdInvalido(int publicacionId)
     {
         //Arrange
         await using var factory = new PublicacionesApiFactory(_postgres);
@@ -191,10 +205,11 @@ public class PublicacionesIntegracionTests : IClassFixture<PostgisFixture>
         };
         context.Publicaciones.Add(publicacion);
         await context.SaveChangesAsync();
+        await AutenticarAsync(client);
 
         //Act
         using var response = await client.PostAsJsonAsync($"/api/publicaciones/{publicacionId}/comentarios",
-            new { contenido = "Comentario", usuarioId });
+            new { contenido = "Comentario" });
         var result = await response.Content.ReadFromJsonAsync<ValidationProblemDetails>();
 
         //Assert
@@ -583,6 +598,7 @@ public class PublicacionesIntegracionTests : IClassFixture<PostgisFixture>
         var comentario = Assert.Single(result.Items);
         Assert.Equal(1, comentario.Id);
         Assert.Equal("Comentario 1", comentario.Contenido);
+        Assert.NotNull(comentario.Autor);
         Assert.Equal(usuario.Id, comentario.Autor.Id);
     }
 

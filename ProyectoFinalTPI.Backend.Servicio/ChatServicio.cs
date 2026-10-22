@@ -28,10 +28,10 @@ namespace ProyectoFinalTPI.Backend.Servicio
             var ahora = DateTime.UtcNow;
             var mensaje = new MensajeChat
             {
-                EmisorId       = emisorId,
-                DestinatarioId = destinatarioId,
-                Contenido      = contenido,
-                FechaEnvio     = ahora,
+                EmisorId        = emisorId,
+                DestinatarioId  = destinatarioId,
+                Contenido       = contenido,
+                FechaEnvio      = ahora,
                 FechaExpiracion = ahora.Add(TiempoExpiracion)
             };
 
@@ -62,6 +62,42 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 DestinatarioId = m.DestinatarioId,
                 Contenido      = m.Contenido,
                 FechaEnvio     = m.FechaEnvio
+            });
+        }
+
+        /// <inheritdoc/>
+        public async Task EliminarConversacionAsync(int usuarioId, int otroUsuarioId)
+        {
+            if (otroUsuarioId == usuarioId)
+                throw new ArgumentException("No podés eliminar una conversación con vos mismo.");
+
+            var eliminados = await _repositorio.EliminarConversacionAsync(usuarioId, otroUsuarioId);
+
+            if (eliminados == 0)
+                throw new KeyNotFoundException("No existe ninguna conversación entre los usuarios indicados.");
+        }
+
+        /// <inheritdoc/>
+        public async Task<IEnumerable<ConversacionResumenDto>> ObtenerConversacionesActivasAsync(
+            int usuarioId)
+        {
+            var ultimos = await _repositorio.ObtenerConversacionesActivasAsync(usuarioId);
+
+            return ultimos.Select(m =>
+            {
+                // Determinamos quién es el "otro" en cada mensaje.
+                var otroId       = m.EmisorId == usuarioId ? m.DestinatarioId : m.EmisorId;
+                var otroUsername = m.EmisorId == usuarioId
+                    ? m.Destinatario?.Username ?? string.Empty
+                    : m.Emisor?.Username       ?? string.Empty;
+
+                return new ConversacionResumenDto
+                {
+                    OtroUsuarioId       = otroId,
+                    OtroUsuarioUsername = otroUsername,
+                    UltimoMensaje       = m.Contenido,
+                    FechaUltimoMensaje  = m.FechaEnvio
+                };
             });
         }
     }

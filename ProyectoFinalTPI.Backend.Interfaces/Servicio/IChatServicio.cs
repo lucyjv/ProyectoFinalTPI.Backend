@@ -26,5 +26,20 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Servicio
         /// ordenado cronológicamente.
         /// </summary>
         Task<IEnumerable<MensajeChatDto>> ObtenerHistorialAsync(int usuarioAId, int usuarioBId);
+
+        /// <summary>
+        /// Devuelve el resumen de todas las conversaciones activas del usuario,
+        /// una entrada por cada "otro usuario" con quien haya intercambiado mensajes
+        /// no expirados. Cada entrada muestra el último mensaje de esa conversación.
+        /// Devuelve lista vacía si no hay conversaciones activas.
+        /// </summary>
+        Task<IEnumerable<ConversacionResumenDto>> ObtenerConversacionesActivasAsync(int usuarioId);
+
+        /// <summary>
+        /// Elimina todos los mensajes entre el usuario autenticado y otro usuario específico.
+        /// Lanza <see cref="ArgumentException"/> si <paramref name="otroUsuarioId"/> es igual a <paramref name="usuarioId"/>.
+        /// Lanza <see cref="KeyNotFoundException"/> si no existe ninguna conversación entre los dos usuarios.
+        /// </summary>
+        Task EliminarConversacionAsync(int usuarioId, int otroUsuarioId);
     }
 }
