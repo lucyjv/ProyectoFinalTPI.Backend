@@ -82,6 +82,42 @@ namespace ProyectoFinalTPI.Backend.Controllers
                     cancellationToken));
         }
 
+        [HttpPost("impresiones")]
+        [SwaggerOperation(
+            Summary = "Registra impresiones del feed Para vos.",
+            Description = "Actualiza en Neo4j la fecha de última impresión para cada publicación recibida. El usuario se identifica mediante el token."
+        )]
+        [SwaggerResponse(StatusCodes.Status204NoContent, "Impresiones registradas.")]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "La lista de publicaciones no es válida.")]
+        [SwaggerResponse(StatusCodes.Status401Unauthorized, "Se requiere una sesión autenticada.")]
+        [SwaggerResponse(StatusCodes.Status404NotFound, "El usuario autenticado no existe.")]
+        public async Task<IActionResult> RegistrarImpresiones(
+            [FromBody] RegistrarImpresionesFeedRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            if (request is null)
+                return BadRequest(new { mensaje = "Debés enviar publicacionesIds." });
+
+            var usuarioId = User.ObtenerUsuarioId();
+            if (!usuarioId.HasValue || usuarioId.Value <= 0)
+                return Unauthorized(new { mensaje = "Debés iniciar sesión para registrar impresiones." });
+
+            try
+            {
+                await _publicacionServicio.RegistrarImpresionesFeed(
+                    usuarioId.Value, request.PublicacionesIds ?? Array.Empty<int>(), cancellationToken);
+                return NoContent();
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { mensaje = ex.Message });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { mensaje = ex.Message });
+            }
+        }
+
         private int ObtenerUsuarioId(int? queryUsuarioId)
         {
             return User.ObtenerUsuarioId() ?? queryUsuarioId.GetValueOrDefault();

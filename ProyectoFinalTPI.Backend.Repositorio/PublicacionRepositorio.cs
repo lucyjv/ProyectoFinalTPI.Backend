@@ -77,7 +77,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio
         //                  APORTA 2 por like, 3 por coincidencia en puntuación alta (>=3)
         // Busca usuarios etiquetados en la semilla y otras publicaciones donde estén etiquetados.
         //                  APORTA 1
-        // Descarta candidatos sin ID y publicaciones que el usuario ya marcó con like o puntuó
+        // Descarta candidatos sin ID, ya likeados, puntuados o vistos recientemente.
         private const string RecomendacionesPorLikesQuery = """
             MATCH (usuario:Usuario {postgresId: $usuarioId})
             OPTIONAL MATCH (usuario)-[:LE_GUSTA]->(semillaLike:Publicacion)
@@ -106,9 +106,45 @@ namespace ProyectoFinalTPI.Backend.Repositorio
             WHERE candidata.postgresId IS NOT NULL
               AND NOT (usuario)-[:LE_GUSTA]->(candidata)
               AND NOT (usuario)-[:PUNTUO]->(candidata)
+              AND NOT EXISTS {
+                  MATCH (usuario)-[vista:VIO]->(candidata)
+                  WHERE vista.ultimaVez >= $vistasDesdeUnixMs
+              }
             RETURN candidata.postgresId AS publicacionId, sum(relevancia) AS puntaje
             ORDER BY puntaje DESC, publicacionId DESC
             LIMIT $cantidadMaxima
+            """;
+
+        private const string ObtenerInteraccionesFeedQuery = """
+            MATCH (usuario:Usuario {postgresId: $usuarioId})
+            CALL {
+                WITH usuario
+                MATCH (usuario)-[:LE_GUSTA]->(publicacion:Publicacion)
+                RETURN publicacion.postgresId AS publicacionId, true AS dioLike,
+                       null AS miPuntuacion, null AS ultimaImpresionUnixMs
+                UNION
+                WITH usuario
+                MATCH (usuario)-[puntuacion:PUNTUO]->(publicacion:Publicacion)
+                RETURN publicacion.postgresId AS publicacionId, false AS dioLike,
+                       puntuacion.puntaje AS miPuntuacion, null AS ultimaImpresionUnixMs
+                UNION
+                WITH usuario
+                MATCH (usuario)-[vista:VIO]->(publicacion:Publicacion)
+                RETURN publicacion.postgresId AS publicacionId, false AS dioLike,
+                       null AS miPuntuacion, vista.ultimaVez AS ultimaImpresionUnixMs
+            }
+            WITH publicacionId, dioLike, miPuntuacion, ultimaImpresionUnixMs
+            WHERE publicacionId IS NOT NULL
+            RETURN publicacionId, dioLike, miPuntuacion, ultimaImpresionUnixMs
+            """;
+
+        private const string RegistrarImpresionesFeedQuery = """
+            MERGE (usuario:Usuario {postgresId: $usuarioId})
+            WITH usuario
+            UNWIND $publicacionesIds AS publicacionId
+            MERGE (publicacion:Publicacion {postgresId: publicacionId})
+            MERGE (usuario)-[vista:VIO]->(publicacion)
+            SET vista.ultimaVez = $ultimaVezUnixMs
             """;
 
         private readonly ApplicationDbContext _context;
@@ -281,7 +317,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio
             return await session.ExecuteReadAsync(async transaction =>
             {
                 var cursor = await transaction.RunAsync(
-                    RecomendacionesPorLikesQuery, new { usuarioId, cantidadMaxima });
+                    RecomendacionesPorLikesQuery, new { usuarioId, cantidadMaxima, vistasDesdeUnixMs = long.MaxValue });
                 var ids = new List<int>();
                 await foreach (var registro in cursor)
                 {
@@ -289,6 +325,82 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                     ids.Add(registro["publicacionId"].As<int>());
                 }
                 return (IReadOnlyList<int>)ids;
+            });
+        }
+
+        public async Task<IReadOnlyList<RecomendacionPublicacionDto>> ObtenerRecomendacionesFeed(
+            int usuarioId, int cantidadMaxima, long vistasDesdeUnixMs,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
+            return await session.ExecuteReadAsync(async transaction =>
+            {
+                var cursor = await transaction.RunAsync(RecomendacionesPorLikesQuery,
+                    new { usuarioId, cantidadMaxima, vistasDesdeUnixMs });
+                var recomendaciones = new List<RecomendacionPublicacionDto>();
+                await foreach (var registro in cursor)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    recomendaciones.Add(new RecomendacionPublicacionDto
+                    {
+                        PublicacionId = registro["publicacionId"].As<int>(),
+                        PuntajeColaborativo = registro["puntaje"].As<long>()
+                    });
+                }
+                return (IReadOnlyList<RecomendacionPublicacionDto>)recomendaciones;
+            });
+        }
+
+        public async Task<IReadOnlyList<InteraccionFeedDto>> ObtenerInteraccionesFeed(
+            int usuarioId, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
+            return await session.ExecuteReadAsync(async transaction =>
+            {
+                var cursor = await transaction.RunAsync(ObtenerInteraccionesFeedQuery, new { usuarioId });
+                var interacciones = new List<InteraccionFeedDto>();
+                await foreach (var registro in cursor)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    int? miPuntuacion = null;
+                    long? ultimaImpresion = null;
+                    if (registro["miPuntuacion"] != null)
+                    {
+                        try { miPuntuacion = registro["miPuntuacion"].As<int?>(); } catch { }
+                    }
+                    if (registro["ultimaImpresionUnixMs"] != null)
+                    {
+                        try { ultimaImpresion = registro["ultimaImpresionUnixMs"].As<long?>(); } catch { }
+                    }
+                    interacciones.Add(new InteraccionFeedDto
+                    {
+                        PublicacionId = registro["publicacionId"].As<int>(),
+                        DioLike = registro["dioLike"].As<bool>(),
+                        MiPuntuacion = miPuntuacion,
+                        UltimaImpresionUnixMs = ultimaImpresion
+                    });
+                }
+                return (IReadOnlyList<InteraccionFeedDto>)interacciones;
+            });
+        }
+
+        public async Task RegistrarImpresionesFeed(int usuarioId, IReadOnlyCollection<int> publicacionesIds,
+            CancellationToken cancellationToken = default)
+        {
+            if (publicacionesIds.Count == 0) return;
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
+            await session.ExecuteWriteAsync(async transaction =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await transaction.RunAsync(RegistrarImpresionesFeedQuery, new
+                {
+                    usuarioId,
+                    publicacionesIds = publicacionesIds.Distinct().ToArray(),
+                    ultimaVezUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+                });
             });
         }
 
@@ -549,14 +661,29 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                     cancellationToken);
         }
 
-        public async Task<List<PublicacionDetalleDto>> ObtenerPublicacionesParaVos(IReadOnlyCollection<CategoriaEnum> categorias, DateTime fechaCorte,
-        CursorCronologicoDto? cursor, int limite, CancellationToken cancellationToken = default)
+        public Task<List<PublicacionDetalleDto>> ObtenerPublicacionesParaVos(
+            IReadOnlyCollection<CategoriaEnum> categorias, DateTime fechaCorte,
+            CursorCronologicoDto? cursor, int limite, CancellationToken cancellationToken = default)
+        {
+            return ObtenerPublicacionesParaVos(categorias, fechaCorte, cursor, limite,
+                Array.Empty<int>(), cancellationToken);
+        }
+
+        public async Task<List<PublicacionDetalleDto>> ObtenerPublicacionesParaVos(
+            IReadOnlyCollection<CategoriaEnum> categorias, DateTime fechaCorte,
+            CursorCronologicoDto? cursor, int limite, IReadOnlyCollection<int> excluirIds,
+            CancellationToken cancellationToken = default)
         {
             var consulta = _context.Publicaciones
                 .AsNoTracking()
                 .Where(p =>
                     !p.EstaOculto &&
                     p.FechaCreación <= fechaCorte);
+
+            if (excluirIds.Count > 0)
+            {
+                consulta = consulta.Where(p => !excluirIds.Contains(p.Id));
+            }
 
             if (categorias.Count > 0)
             {
