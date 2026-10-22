@@ -70,37 +70,32 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                    miRating.puntaje AS miPuntuacion
             """;
 
-        // consulta nos devuelve las publicaciones con alto puntaje como candidatas al feed
-        // busca publicaciones candidatas para el feed usando los likes, puntuaciones y las etiquetas guardadas en Neo4j
-        // Busca las publicaciones que le gustaron o puntuó alto el usuario
-        // Busca a otros usuarios que también dieron like o puntuaron alto la semilla
-        //                  APORTA 2 por like, 3 por coincidencia en puntuación alta (>=3)
-        // Busca usuarios etiquetados en la semilla y otras publicaciones donde estén etiquetados.
-        //                  APORTA 1
-        // Descarta candidatos sin ID, ya likeados, puntuados o vistos recientemente.
-        private const string RecomendacionesPorLikesQuery = """
+        // Cada semilla aporta una sola vez, aunque el usuario le haya dado like y la haya puntuado.
+        // Los pesos de likes, puntuaciones altas y etiquetas llegan como parámetros configurables.
+        private const string RecomendacionesFeedQuery = """
             MATCH (usuario:Usuario {postgresId: $usuarioId})
             OPTIONAL MATCH (usuario)-[:LE_GUSTA]->(semillaLike:Publicacion)
             OPTIONAL MATCH (usuario)-[miPunt:PUNTUO]->(semillaPunt:Publicacion)
             WHERE miPunt.puntaje >= 3
             WITH usuario, collect(DISTINCT semillaLike) + collect(DISTINCT semillaPunt) AS semillas
             UNWIND semillas AS semilla
+            WITH DISTINCT usuario, semilla
             CALL {
                 WITH semilla
                 MATCH (otroUsuario:Usuario)-[:LE_GUSTA]->(semilla)
                 MATCH (otroUsuario)-[:LE_GUSTA]->(candidata:Publicacion)
-                RETURN candidata, count(DISTINCT otroUsuario) * 2 AS relevancia
-                UNION
+                RETURN candidata, count(DISTINCT otroUsuario) * $pesoLike AS relevancia
+                UNION ALL
                 WITH semilla
                 MATCH (otroUsuario:Usuario)-[p1:PUNTUO]->(semilla)
                 MATCH (otroUsuario)-[p2:PUNTUO]->(candidata:Publicacion)
                 WHERE p1.puntaje >= 3 AND p2.puntaje >= 3
-                RETURN candidata, count(DISTINCT otroUsuario) * 3 AS relevancia
-                UNION
+                RETURN candidata, count(DISTINCT otroUsuario) * $pesoPuntuacion AS relevancia
+                UNION ALL
                 WITH semilla
                 MATCH (etiquetado:Usuario)-[:ETIQUETADO_EN]->(semilla)
                 MATCH (etiquetado)-[:ETIQUETADO_EN]->(candidata:Publicacion)
-                RETURN candidata, count(DISTINCT etiquetado) AS relevancia
+                RETURN candidata, count(DISTINCT etiquetado) * $pesoEtiqueta AS relevancia
             }
             WITH usuario, candidata, relevancia
             WHERE candidata.postgresId IS NOT NULL
@@ -309,35 +304,22 @@ namespace ProyectoFinalTPI.Backend.Repositorio
             });
         }
 
-        public async Task<IReadOnlyList<int>> ObtenerPublicacionesRelacionadasPorLikes(
-            int usuarioId, int cantidadMaxima, CancellationToken cancellationToken = default)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            await using var session = ObtenerNeo4jDriver().AsyncSession();
-            return await session.ExecuteReadAsync(async transaction =>
-            {
-                var cursor = await transaction.RunAsync(
-                    RecomendacionesPorLikesQuery, new { usuarioId, cantidadMaxima, vistasDesdeUnixMs = long.MaxValue });
-                var ids = new List<int>();
-                await foreach (var registro in cursor)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    ids.Add(registro["publicacionId"].As<int>());
-                }
-                return (IReadOnlyList<int>)ids;
-            });
-        }
-
         public async Task<IReadOnlyList<RecomendacionPublicacionDto>> ObtenerRecomendacionesFeed(
-            int usuarioId, int cantidadMaxima, long vistasDesdeUnixMs,
+            int usuarioId, int cantidadMaxima, long vistasDesdeUnixMs, PesosRecomendacionFeedDto pesos,
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             await using var session = ObtenerNeo4jDriver().AsyncSession();
             return await session.ExecuteReadAsync(async transaction =>
             {
-                var cursor = await transaction.RunAsync(RecomendacionesPorLikesQuery,
-                    new { usuarioId, cantidadMaxima, vistasDesdeUnixMs });
+                var cursor = await transaction.RunAsync(RecomendacionesFeedQuery,
+                    new
+                    {
+                        usuarioId, cantidadMaxima, vistasDesdeUnixMs,
+                        pesoLike = pesos.Like,
+                        pesoPuntuacion = pesos.Puntuacion,
+                        pesoEtiqueta = pesos.Etiqueta
+                    });
                 var recomendaciones = new List<RecomendacionPublicacionDto>();
                 await foreach (var registro in cursor)
                 {
@@ -364,22 +346,14 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                 await foreach (var registro in cursor)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    int? miPuntuacion = null;
-                    long? ultimaImpresion = null;
-                    if (registro["miPuntuacion"] != null)
-                    {
-                        try { miPuntuacion = registro["miPuntuacion"].As<int?>(); } catch { }
-                    }
-                    if (registro["ultimaImpresionUnixMs"] != null)
-                    {
-                        try { ultimaImpresion = registro["ultimaImpresionUnixMs"].As<long?>(); } catch { }
-                    }
+                    var puntuacion = registro["miPuntuacion"];
+                    var ultimaImpresion = registro["ultimaImpresionUnixMs"];
                     interacciones.Add(new InteraccionFeedDto
                     {
                         PublicacionId = registro["publicacionId"].As<int>(),
                         DioLike = registro["dioLike"].As<bool>(),
-                        MiPuntuacion = miPuntuacion,
-                        UltimaImpresionUnixMs = ultimaImpresion
+                        MiPuntuacion = puntuacion is null ? null : puntuacion.As<int>(),
+                        UltimaImpresionUnixMs = ultimaImpresion is null ? null : ultimaImpresion.As<long>()
                     });
                 }
                 return (IReadOnlyList<InteraccionFeedDto>)interacciones;

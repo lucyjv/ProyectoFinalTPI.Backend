@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Neo4j.Driver;
+using ProyectoFinalTPI.Backend.Dtos.Publicacion;
 using ProyectoFinalTPI.Backend.Repositorio;
 using ProyectoFinalTPI.Backend.Repositorio.Data;
 using Xunit;
@@ -46,15 +47,24 @@ public class PublicacionRepositorioNeo4jFeedTests
         var repositorio = new PublicacionRepositorio(contexto, neo4j.Driver);
         const long vistasDesde = 123456789;
 
-        var resultado = await repositorio.ObtenerRecomendacionesFeed(10, 50, vistasDesde);
+        var resultado = await repositorio.ObtenerRecomendacionesFeed(
+            10, 50, vistasDesde, new PesosRecomendacionFeedDto(4, 5, 2));
 
         Assert.Empty(resultado);
         Assert.Contains("LE_GUSTA", neo4j.Query);
         Assert.Contains("PUNTUO", neo4j.Query);
         Assert.Contains("ETIQUETADO_EN", neo4j.Query);
         Assert.Contains("VIO", neo4j.Query);
+        Assert.Contains("WITH DISTINCT usuario, semilla", neo4j.Query);
+        Assert.Contains("UNION ALL", neo4j.Query);
+        Assert.Contains("$pesoLike", neo4j.Query);
+        Assert.Contains("$pesoPuntuacion", neo4j.Query);
+        Assert.Contains("$pesoEtiqueta", neo4j.Query);
         Assert.Equal(vistasDesde, Parametro<long>(neo4j.Parametros, "vistasDesdeUnixMs"));
         Assert.Equal(50, Parametro<int>(neo4j.Parametros, "cantidadMaxima"));
+        Assert.Equal(4, Parametro<int>(neo4j.Parametros, "pesoLike"));
+        Assert.Equal(5, Parametro<int>(neo4j.Parametros, "pesoPuntuacion"));
+        Assert.Equal(2, Parametro<int>(neo4j.Parametros, "pesoEtiqueta"));
     }
 
     [Fact]
@@ -71,6 +81,33 @@ public class PublicacionRepositorioNeo4jFeedTests
         Assert.Contains("PUNTUO", neo4j.Query);
         Assert.Contains("VIO", neo4j.Query);
         Assert.Equal(10, Parametro<int>(neo4j.Parametros, "usuarioId"));
+    }
+
+    [Fact]
+    public async Task InteraccionesConservanPuntuacionYFechaDeVista()
+    {
+        var registro = TestDispatchProxy<IRecord>.Create((metodo, argumentos) =>
+        {
+            if (metodo.Name != "get_Item") throw new NotSupportedException(metodo.Name);
+            return ((string)argumentos![0]!) switch
+            {
+                "publicacionId" => 42L,
+                "dioLike" => true,
+                "miPuntuacion" => 4L,
+                "ultimaImpresionUnixMs" => 123456789L,
+                _ => throw new KeyNotFoundException()
+            };
+        });
+        var neo4j = new Neo4jFeedFake(new[] { registro });
+        await using var contexto = CrearContexto();
+        var repositorio = new PublicacionRepositorio(contexto, neo4j.Driver);
+
+        var interaccion = Assert.Single(await repositorio.ObtenerInteraccionesFeed(10));
+
+        Assert.Equal(42, interaccion.PublicacionId);
+        Assert.True(interaccion.DioLike);
+        Assert.Equal(4, interaccion.MiPuntuacion);
+        Assert.Equal(123456789L, interaccion.UltimaImpresionUnixMs);
     }
 
     private static ApplicationDbContext CrearContexto()
@@ -90,12 +127,13 @@ public class PublicacionRepositorioNeo4jFeedTests
         public object? Parametros { get; private set; }
         public IDriver Driver { get; }
 
-        public Neo4jFeedFake()
+        public Neo4jFeedFake(IReadOnlyList<IRecord>? registros = null)
         {
+            registros ??= Array.Empty<IRecord>();
             var cursor = TestDispatchProxy<IResultCursor>.Create((metodo, _) =>
             {
                 if (metodo.Name == nameof(IAsyncEnumerable<IRecord>.GetAsyncEnumerator))
-                    return new EmptyRecordEnumerator();
+                    return new RecordEnumerator(registros);
                 if (metodo.Name == nameof(IAsyncDisposable.DisposeAsync))
                     return ValueTask.CompletedTask;
                 throw new NotSupportedException(metodo.Name);
@@ -123,10 +161,11 @@ public class PublicacionRepositorioNeo4jFeedTests
         }
     }
 
-    private sealed class EmptyRecordEnumerator : IAsyncEnumerator<IRecord>
+    private sealed class RecordEnumerator(IReadOnlyList<IRecord> registros) : IAsyncEnumerator<IRecord>
     {
-        public IRecord Current => null!;
-        public ValueTask<bool> MoveNextAsync() => ValueTask.FromResult(false);
+        private int _indice = -1;
+        public IRecord Current => registros[_indice];
+        public ValueTask<bool> MoveNextAsync() => ValueTask.FromResult(++_indice < registros.Count);
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 }

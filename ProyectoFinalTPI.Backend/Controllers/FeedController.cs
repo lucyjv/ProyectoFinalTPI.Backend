@@ -25,7 +25,7 @@ namespace ProyectoFinalTPI.Backend.Controllers
         [HttpGet("para-vos")]
         [SwaggerOperation(
             Summary = "Obtiene el feed personalizado.",
-            Description = "Devuelve publicaciones recomendadas con paginación por cursor y un límite de 1 a 50. Prioriza el usuario del token; admite usuarioId como alternativa. Si la sesión del cursor ya no está disponible, debe reiniciarse la consulta sin cursor."
+            Description = "Combina coincidencias de likes, puntuaciones altas y etiquetas con afinidad de categoría y cercanía a lugares de publicaciones con like. Cada semilla cuenta una vez. Excluye publicaciones ya likeadas o puntuadas; prioriza las no vistas y recupera vistas antiguas o recientes si falta contenido. Usa cursor y un límite de 1 a 50. Prioriza el usuario del token; admite usuarioId como alternativa. Si la sesión vence, reinicie la consulta sin cursor."
         )]
         [SwaggerResponse(StatusCodes.Status200OK, "Página de publicaciones recomendadas.", typeof(ResultadoPaginadoDto<PublicacionDetalleDto>))]
         [SwaggerResponse(StatusCodes.Status400BadRequest, "Los datos o parámetros enviados no son válidos.")]
@@ -85,7 +85,7 @@ namespace ProyectoFinalTPI.Backend.Controllers
         [HttpPost("impresiones")]
         [SwaggerOperation(
             Summary = "Registra impresiones del feed Para vos.",
-            Description = "Actualiza en Neo4j la fecha de última impresión para cada publicación recibida. El usuario se identifica mediante el token."
+            Description = "Recibe {\"publicacionesIds\":[42,41]} con entre 1 y 50 IDs positivos. Elimina duplicados, registra solo publicaciones visibles y actualiza en Neo4j la fecha de última impresión. Requiere el usuario del token."
         )]
         [SwaggerResponse(StatusCodes.Status204NoContent, "Impresiones registradas.")]
         [SwaggerResponse(StatusCodes.Status400BadRequest, "La lista de publicaciones no es válida.")]

@@ -121,6 +121,18 @@ builder.Services.AddScoped<IAnalizadorRecuerdo>(sp =>
 builder.Services.AddScoped<IAnalisisRecuerdosServicio, AnalisisRecuerdosServicio>();
 builder.Services.AddHostedService<AnalisisRecuerdosWorker>();
 builder.Services.AddScoped<IPublicacionServicio, PublicacionServicio>();
+builder.Services.AddOptions<FeedRecomendacionesOptions>()
+    .Bind(builder.Configuration.GetSection(FeedRecomendacionesOptions.Seccion))
+    .Validate(opciones => opciones.DiasDeExclusionDeImpresiones > 0
+        && opciones.CantidadMaximaCandidatas > 0
+        && opciones.PesoLike >= 0
+        && opciones.PesoPuntuacion >= 0
+        && opciones.PesoEtiqueta >= 0
+        && opciones.PesoAfinidadCategoria >= 0
+        && opciones.PesoCercania >= 0
+        && opciones.DistanciaDeReferenciaKm > 0,
+        "Los parámetros de FeedRecomendaciones deben ser positivos; los pesos pueden ser cero.")
+    .ValidateOnStart();
 builder.Services.AddScoped<IComentarioRepositorio, ComentarioRepositorio>();
 builder.Services.AddScoped<IComentarioServicio, ComentarioServicio>();
 builder.Services.AddScoped<IGrupoRepositorio, GrupoRepositorio>();

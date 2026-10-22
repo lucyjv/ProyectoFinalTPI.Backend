@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Options;
 using ProyectoFinalTPI.Backend.Dtos;
 using ProyectoFinalTPI.Backend.Dtos.Comentario;
 using ProyectoFinalTPI.Backend.Dtos.Lugar;
@@ -24,7 +25,8 @@ namespace ProyectoFinalTPI.Backend.Tests
         public PublicacionServicioTests()
         {
             _servicio = new PublicacionServicio(
-                _repositorio, _usuarios, _multimedia, _sesiones, _seguimiento);
+                _repositorio, _usuarios, _multimedia, _sesiones, _seguimiento,
+                Options.Create(new FeedRecomendacionesOptions()));
         }
 
         [Fact]
@@ -648,6 +650,25 @@ namespace ProyectoFinalTPI.Backend.Tests
         }
 
         [Fact]
+        public async Task ElRankingEnviaAlRepositorioLosPesosConfigurados()
+        {
+            var opciones = new FeedRecomendacionesOptions
+            {
+                PesoLike = 5,
+                PesoPuntuacion = 7,
+                PesoEtiqueta = 2
+            };
+            var servicio = new PublicacionServicio(
+                _repositorio, _usuarios, _multimedia, _sesiones, _seguimiento,
+                Options.Create(opciones));
+
+            await servicio.ObtenerPublicacionesParaVos(10, null, 20);
+
+            Assert.Equal(new PesosRecomendacionFeedDto(5, 7, 2),
+                _repositorio.PesosRecomendacionConsultados);
+        }
+
+        [Fact]
         public async Task ElFeedExcluyeLikesYPuntuacionesInclusoSiSonRecomendados()
         {
             _repositorio.InteraccionesFeed = new[]
@@ -880,6 +901,7 @@ namespace ProyectoFinalTPI.Backend.Tests
             public int UsuarioRecomendacionesConsultado { get; private set; }
             public int LimiteRecomendaciones { get; private set; }
             public long VistasDesdeConsultadas { get; private set; }
+            public PesosRecomendacionFeedDto? PesosRecomendacionConsultados { get; private set; }
 
             public Task<int> Crear(Publicacion publicacion)
             {
@@ -990,22 +1012,15 @@ namespace ProyectoFinalTPI.Backend.Tests
                 return Task.FromResult(PublicacionesPorIds.Where(p => p.Autor.Id == usuarioId).ToList());
             }
 
-            public Task<IReadOnlyList<int>> ObtenerPublicacionesRelacionadasPorLikes(
-                int usuarioId, int cantidadMaxima, CancellationToken cancellationToken = default)
-            {
-                ConsultasRecomendaciones++;
-                UsuarioRecomendacionesConsultado = usuarioId;
-                LimiteRecomendaciones = cantidadMaxima;
-                return Task.FromResult(Recomendaciones);
-            }
-
             public Task<IReadOnlyList<RecomendacionPublicacionDto>> ObtenerRecomendacionesFeed(
-                int usuarioId, int cantidadMaxima, long vistasDesdeUnixMs, CancellationToken cancellationToken = default)
+                int usuarioId, int cantidadMaxima, long vistasDesdeUnixMs,
+                PesosRecomendacionFeedDto pesos, CancellationToken cancellationToken = default)
             {
                 ConsultasRecomendaciones++;
                 UsuarioRecomendacionesConsultado = usuarioId;
                 LimiteRecomendaciones = cantidadMaxima;
                 VistasDesdeConsultadas = vistasDesdeUnixMs;
+                PesosRecomendacionConsultados = pesos;
                 if (RecomendacionesConPuntaje is not null)
                     return Task.FromResult(RecomendacionesConPuntaje);
                 var resultado = Recomendaciones.Select((id, indice) => new RecomendacionPublicacionDto

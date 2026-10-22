@@ -692,7 +692,7 @@ Antes de escribir en Neo4j, el backend comprueba en PostgreSQL que el usuario ex
 
 `cantidadLikes` cuenta las relaciones de like de esa publicación y `dioLike` indica si el usuario del token le dio like. Después de quitarlo, para ese usuario `dioLike` será `false`; el contador reflejará los likes restantes. Se devuelve `401 Unauthorized` si falta un JWT válido, `400 Bad Request` ante un ID inválido, `404 Not Found` si el usuario o la publicación no existen o la publicación está oculta, y `500 Internal Server Error` ante un fallo inesperado.
 
-Los likes se guardan en Neo4j y también alimentan `GET /api/feed/para-vos`: se recomiendan publicaciones que gustaron a usuarios con likes en común o que comparten usuarios etiquetados con publicaciones que el usuario marcó. El feed excluye publicaciones que el usuario ya likeó y valida en PostgreSQL que las recomendadas sigan visibles. No se necesita una migración de PostgreSQL para los likes.
+Los likes se guardan en Neo4j y alimentan `GET /api/feed/para-vos` junto con las puntuaciones y las etiquetas. El feed excluye publicaciones que el usuario ya likeó o puntuó y valida en PostgreSQL que las candidatas sigan visibles. Las reglas completas de ranking están en la sección «Endpoints del feed». No se necesita una migración de PostgreSQL para los likes.
 
 ### Endpoints de seguimientos
 
@@ -771,6 +771,21 @@ publicación. Los campos `cantidadLikes` y `dioLike` se consultan en Neo4j.
 
 “Para vos” combina las coincidencias sociales existentes con afinidad por categoría y cercanía a lugares de publicaciones que el usuario marcó con like. La afinidad por categoría no limita la década. Las publicaciones que ya tienen like o puntuación se excluyen; las publicaciones no vistas tienen prioridad. Luego se muestran las vistas hace más de 14 días y, si todavía falta contenido, las vistas recientes, empezando por las menos recientes. La ubicación y categoría se leen de PostgreSQL; las interacciones y las impresiones se almacenan en Neo4j.
 
+Cada publicación semilla se considera una sola vez aunque el usuario le haya dado like y también la haya puntuado. Las coincidencias por like, puntuación alta y etiquetas suman señales independientes. Los pesos se pueden ajustar con la sección `FeedRecomendaciones` de la configuración o con variables de entorno, sin cambiar la consulta Cypher:
+
+| Clave | Valor inicial | Uso |
+|---|---:|---|
+| `PesoLike` | 2 | Coincidencias de likes en Neo4j. |
+| `PesoPuntuacion` | 3 | Coincidencias de puntuaciones de 3 o más en Neo4j. |
+| `PesoEtiqueta` | 1 | Personas etiquetadas en ambas publicaciones. |
+| `PesoAfinidadCategoria` | 4 | Afinidad de categoría, sin limitar la década. |
+| `PesoCercania` | 3 | Cercanía a lugares de publicaciones con like. |
+| `DistanciaDeReferenciaKm` | 50 | Escala de decaimiento del puntaje por distancia. |
+| `DiasDeExclusionDeImpresiones` | 14 | Plazo que define una vista reciente. |
+| `CantidadMaximaCandidatas` | 500 | Máximo de publicaciones que puede devolver el ranking. |
+
+Por ejemplo, `FeedRecomendaciones__PesoLike=4` cambia ese peso al iniciar el backend. Los pesos admiten cero; el plazo, el máximo de candidatas y la distancia de referencia deben ser mayores que cero.
+
 El frontend registra las publicaciones devueltas por cada página de “Para vos” con:
 
 ```http
@@ -800,7 +815,7 @@ GET /api/publicaciones/25/comentarios?limite=20
 
 Si “Para vos” no encuentra recomendaciones visibles, muestra publicaciones generales visibles ordenadas por fecha de creación de más nueva a más antigua (y por ID descendente en caso de empate). No requiere que el usuario haya creado publicaciones ni dado likes.
 
-Para recargar “Para vos”, se realiza otra petición sin cursor. Esto genera una nueva selección. Cada sesión conserva hasta 500 publicaciones, también cuando usa el listado general, y vence a los 30 minutos; si deja de estar disponible, el endpoint devuelve `410 Gone`.
+Para recargar “Para vos”, se realiza otra petición sin cursor. Esto genera una nueva selección. Cada sesión conserva hasta 500 publicaciones por defecto, también cuando usa el listado general, y vence a los 30 minutos; si deja de estar disponible, el endpoint devuelve `410 Gone`.
 
 ### Endpoints de seguimiento
 
