@@ -98,6 +98,25 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                     cancellationToken);
         }
 
+        public async Task<List<AutorResumenDto>> BuscarPorUsernameAsync(
+            string texto, int limite, CancellationToken cancellationToken = default)
+        {
+            var textoNormalizado = texto.Trim().ToLower();
+
+            return await _context.Usuarios
+                .AsNoTracking()
+                .Where(usuario => usuario.Username.ToLower().Contains(textoNormalizado))
+                .OrderByDescending(usuario => usuario.Username.ToLower().StartsWith(textoNormalizado))
+                .ThenBy(usuario => usuario.Username)
+                .Take(limite)
+                .Select(usuario => new AutorResumenDto
+                {
+                    Id = usuario.Id,
+                    Username = usuario.Username
+                })
+                .ToListAsync(cancellationToken);
+        }
+
         /// <inheritdoc/>
         public async Task<int> ContarPublicacionesVisiblesAsync(
             int usuarioId, CancellationToken cancellationToken = default)
