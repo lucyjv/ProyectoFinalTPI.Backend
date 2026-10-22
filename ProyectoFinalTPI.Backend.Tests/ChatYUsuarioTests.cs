@@ -1,6 +1,7 @@
 using Moq;
 using Xunit;
 using ProyectoFinalTPI.Backend.Dtos.Chat;
+using ProyectoFinalTPI.Backend.Dtos.Usuario;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
@@ -295,6 +296,37 @@ public class UsuarioServicioTests
         _repositorioMock.Verify(
             r => r.ObtenerPorUsernameAsync("lucia", It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task BuscarAsync_NormalizaYDelegaLaBusquedaParcial()
+    {
+        var usuarios = new List<AutorResumenDto>
+        {
+            new() { Id = 2, Username = "lucia" }
+        };
+        _repositorioMock
+            .Setup(r => r.BuscarPorUsernameAsync("luci", 5, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(usuarios);
+
+        var resultado = await _servicio.BuscarAsync("  luci  ", 5);
+
+        Assert.Same(usuarios, resultado);
+        _repositorioMock.Verify(
+            r => r.BuscarPorUsernameAsync("luci", 5, It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Theory]
+    [InlineData("a", 10)]
+    [InlineData("usuario", 0)]
+    [InlineData("usuario", 21)]
+    public async Task BuscarAsync_RechazaParametrosInvalidos(string texto, int limite)
+    {
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => _servicio.BuscarAsync(texto, limite));
+        _repositorioMock.Verify(
+            r => r.BuscarPorUsernameAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]

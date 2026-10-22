@@ -32,6 +32,14 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Repositorio
         Task<Usuario?> ObtenerPorUsernameAsync(string username, CancellationToken cancellationToken = default);
 
         /// <summary>
+        /// Busca usuarios cuyo username contiene el texto indicado, sin distinguir mayúsculas.
+        /// </summary>
+        Task<List<AutorResumenDto>> BuscarPorUsernameAsync(
+            string texto,
+            int limite,
+            CancellationToken cancellationToken = default);
+
+        /// <summary>
         /// Cuenta la cantidad de publicaciones visibles de un usuario.
         /// </summary>
         Task<int> ContarPublicacionesVisiblesAsync(int usuarioId, CancellationToken cancellationToken = default);
