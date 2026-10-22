@@ -51,6 +51,36 @@ namespace ProyectoFinalTPI.Backend.Tests
             }
         };
 
+        [Fact]
+        public async Task FeedGeneralExcluyeIdsInteractuadosAntesDeAplicarElLimite()
+        {
+            _context.Usuarios.Add(usuario);
+            _context.Lugares.Add(lugar);
+            var fecha = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+            for (var id = 1; id <= 3; id++)
+            {
+                _context.Publicaciones.Add(new Publicacion
+                {
+                    Id = id,
+                    Titulo = $"Publicación {id}",
+                    Descripcion = "Recuerdo de prueba",
+                    FechaCreación = fecha.AddMinutes(id),
+                    Fecha = fecha,
+                    UsuarioId = usuario.Id,
+                    Usuario = usuario,
+                    LugarId = lugar.Id,
+                    Lugar = lugar
+                });
+            }
+            await _context.SaveChangesAsync();
+            _context.ChangeTracker.Clear();
+
+            var resultado = await _repositorio.ObtenerPublicacionesParaVos(
+                Array.Empty<CategoriaEnum>(), fecha.AddDays(1), null, 1, new[] { 3 });
+
+            Assert.Equal(new[] { 2, 1 }, resultado.Select(p => p.Id));
+        }
+
 
         [Fact]
         public async Task QueSePuedaObtenerUnaPublicacionPorSuId()
