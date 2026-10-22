@@ -452,10 +452,23 @@ publicación. Los campos `cantidadLikes` y `dioLike` se consultan en Neo4j.
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| `GET` | `/api/feed/para-vos` | Recomienda publicaciones relacionadas con los likes del usuario, usando likes en común y usuarios etiquetados compartidos en Neo4j. Excluye publicaciones que el usuario ya likeó. |
+| `GET` | `/api/feed/para-vos` | Ordena publicaciones por coincidencias sociales, afinidad de categoría y cercanía a lugares que le gustaron al usuario. Excluye likes y puntuaciones; prioriza publicaciones no vistas y recupera vistas si falta contenido. |
 | `GET` | `/api/feed/seguidos` | Devuelve las publicaciones de las cuentas que sigue el usuario, ordenadas de más recientes a más antiguas. Los seguimientos se consultan en Neo4j. |
+| `POST` | `/api/feed/impresiones` | Registra hasta 50 publicaciones mostradas en “Para vos”. Requiere JWT y recibe `publicacionesIds`; actualiza `(:Usuario)-[:VIO {ultimaVez}]->(:Publicacion)` en Neo4j. |
 
-Ambos reciben temporalmente `usuarioId` por query hasta integrar autenticación. Las descripciones del feed tienen un máximo de 300 caracteres.
+“Para vos” combina las coincidencias sociales existentes con afinidad por categoría y cercanía a lugares de publicaciones que el usuario marcó con like. La afinidad por categoría no limita la década. Las publicaciones que ya tienen like o puntuación se excluyen; las publicaciones no vistas tienen prioridad. Luego se muestran las vistas hace más de 14 días y, si todavía falta contenido, las vistas recientes, empezando por las menos recientes. La ubicación y categoría se leen de PostgreSQL; las interacciones y las impresiones se almacenan en Neo4j.
+
+El frontend registra las publicaciones devueltas por cada página de “Para vos” con:
+
+```http
+POST /api/feed/impresiones
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{"publicacionesIds":[42,41,39]}
+```
+
+Los `GET` priorizan el usuario del JWT y admiten `usuarioId` por query como alternativa temporal. `POST /api/feed/impresiones` requiere JWT. Las descripciones del feed tienen un máximo de 300 caracteres.
 
 ### Paginación
 

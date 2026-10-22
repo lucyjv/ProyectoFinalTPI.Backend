@@ -406,21 +406,8 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
             if (cursorDecodificado == null)
             {
-                const int cantidadMaximaRecomendaciones = 500;
-
-                var recomendaciones = await ObtenerRecomendacionesPorLikes(
-                    usuarioId, cantidadMaximaRecomendaciones, cancellationToken);
-
-                if (recomendaciones.Count == 0)
-                {
-                    var generales = await _publicacionRepositorio.ObtenerPublicacionesParaVos(
-                        Array.Empty<CategoriaEnum>(), DateTime.UtcNow, null,
-                        cantidadMaximaRecomendaciones, cancellationToken);
-                    recomendaciones = generales.Take(cantidadMaximaRecomendaciones)
-                        .Select(p => p.Id).ToArray();
-                }
-
-                sesion = _sesionFypRepositorio.Crear( usuarioId,recomendaciones);
+                var recomendaciones = await CrearRankingFeedAsync(usuarioId, cancellationToken);
+                sesion = _sesionFypRepositorio.Crear(usuarioId, recomendaciones);
 
                 posicion = 0;
             }
@@ -496,22 +483,161 @@ namespace ProyectoFinalTPI.Backend.Servicio
             };
         }
 
-        private async Task<IReadOnlyList<int>> ObtenerRecomendacionesPorLikes(
-            int usuarioId, int cantidadMaxima, CancellationToken cancellationToken)
+        private async Task<IReadOnlyList<int>> CrearRankingFeedAsync(
+            int usuarioId, CancellationToken cancellationToken)
         {
-            // Obtiene una lista de IDs de publicaciones recomendadas para el usuario
-            var idsRecomendados = await _publicacionRepositorio.ObtenerPublicacionesRelacionadasPorLikes(
-                usuarioId, cantidadMaxima, cancellationToken);
-            if (idsRecomendados.Count == 0) return Array.Empty<int>();
+            const int cantidadMaxima = FeedRecomendacionesOptions.CantidadMaximaCandidatas;
+            var ahora = DateTimeOffset.UtcNow;
+            var vistasDesde = ahora.AddDays(-FeedRecomendacionesOptions.DiasDeExclusionDeImpresiones)
+                .ToUnixTimeMilliseconds();
 
-            // Busca los detalles de esas publicaciones para convertirlas en PublicacionDetalleDto
-            var publicacionesVisibles = await _publicacionRepositorio.ObtenerPublicacionesPorIds(
-                idsRecomendados, cancellationToken);
+            var interacciones = await _publicacionRepositorio.ObtenerInteraccionesFeed(
+                usuarioId, cancellationToken);
+            var idsInteractuados = interacciones
+                .Where(interaccion => interaccion.DioLike || interaccion.MiPuntuacion.HasValue)
+                .Select(interaccion => interaccion.PublicacionId)
+                .ToHashSet();
+            var vistas = interacciones
+                .Where(interaccion => interaccion.UltimaImpresionUnixMs.HasValue)
+                .GroupBy(interaccion => interaccion.PublicacionId)
+                .ToDictionary(grupo => grupo.Key,
+                    grupo => grupo.Max(interaccion => interaccion.UltimaImpresionUnixMs!.Value));
+            var vistasRecientes = vistas
+                .Where(vista => vista.Value >= vistasDesde)
+                .Select(vista => vista.Key)
+                .ToHashSet();
+            var idsExcluidos = idsInteractuados.Concat(vistas.Keys).Distinct().ToArray();
 
-            // Filtran las recomendaciones con solo los ID de publicaciones visibles,
-            // manteniendo el orden por relevancia que devolvio Neo4j
-            var idsVisibles = publicacionesVisibles.Select(publicacion => publicacion.Id).ToHashSet();
-            return idsRecomendados.Where(idsVisibles.Contains).ToArray();
+            var semillasIds = interacciones
+                .Where(interaccion => interaccion.DioLike || interaccion.MiPuntuacion >= 3)
+                .Select(interaccion => interaccion.PublicacionId)
+                .Distinct()
+                .ToArray();
+            var semillas = semillasIds.Length == 0
+                ? new List<PublicacionDetalleDto>()
+                : await _publicacionRepositorio.ObtenerPublicacionesPorIds(semillasIds, cancellationToken);
+
+            var recomendacionesColaborativas = await _publicacionRepositorio.ObtenerRecomendacionesFeed(
+                usuarioId, cantidadMaxima, vistasDesde, cancellationToken);
+            var candidatosGenerales = await _publicacionRepositorio.ObtenerPublicacionesParaVos(
+                Array.Empty<CategoriaEnum>(), DateTime.UtcNow, null, cantidadMaxima,
+                idsExcluidos, cancellationToken);
+            var idsCandidatos = recomendacionesColaborativas.Select(r => r.PublicacionId)
+                .Concat(candidatosGenerales.Select(p => p.Id))
+                .Distinct()
+                .ToArray();
+            var vistasAntiguas = vistas.Where(vista => vista.Value < vistasDesde)
+                .OrderBy(vista => vista.Value)
+                .Select(vista => vista.Key)
+                .Where(id => !idsInteractuados.Contains(id) && !idsCandidatos.Contains(id))
+                .Take(cantidadMaxima)
+                .ToArray();
+            idsCandidatos = idsCandidatos.Concat(vistasAntiguas).Distinct().ToArray();
+
+            // Las impresiones recientes son el último recurso para completar el feed.
+            // Se agregan después de las publicaciones nunca vistas y de las vistas antiguas.
+            var vistasRecientesFallback = vistas
+                .Where(vista => vista.Value >= vistasDesde)
+                .OrderBy(vista => vista.Value)
+                .Select(vista => vista.Key)
+                .Where(id => !idsInteractuados.Contains(id) && !idsCandidatos.Contains(id))
+                .Take(cantidadMaxima)
+                .ToArray();
+            idsCandidatos = idsCandidatos.Concat(vistasRecientesFallback).Distinct().ToArray();
+
+            var publicaciones = idsCandidatos.Length == 0
+                ? new List<PublicacionDetalleDto>()
+                : await _publicacionRepositorio.ObtenerPublicacionesPorIds(idsCandidatos, cancellationToken);
+            var recomendacionesPorId = recomendacionesColaborativas
+                .GroupBy(recomendacion => recomendacion.PublicacionId)
+                .ToDictionary(grupo => grupo.Key, grupo => grupo.Max(r => r.PuntajeColaborativo));
+            var ultimaVistaPorId = vistas;
+
+            var pesosCategorias = CalcularAfinidadesCategorias(interacciones, semillas);
+            var lugaresSemilla = semillas.Where(semilla =>
+                    interacciones.Any(interaccion => interaccion.PublicacionId == semilla.Id && interaccion.DioLike))
+                .Select(semilla => (semilla.Lugar.Latitud, semilla.Lugar.Longitud))
+                .ToArray();
+
+            return publicaciones
+                .Where(publicacion => !idsInteractuados.Contains(publicacion.Id))
+                .OrderBy(publicacion => !ultimaVistaPorId.ContainsKey(publicacion.Id)
+                    ? 0
+                    : vistasRecientes.Contains(publicacion.Id) ? 2 : 1)
+                .ThenBy(publicacion => ultimaVistaPorId.GetValueOrDefault(publicacion.Id, long.MaxValue))
+                .ThenByDescending(publicacion =>
+                    recomendacionesPorId.GetValueOrDefault(publicacion.Id)
+                    + pesosCategorias.GetValueOrDefault(publicacion.Categoria)
+                        * FeedRecomendacionesOptions.PesoAfinidadCategoria
+                    + CalcularPuntajeCercania(publicacion, lugaresSemilla,
+                        FeedRecomendacionesOptions.PesoCercania,
+                        FeedRecomendacionesOptions.DistanciaDeReferenciaKm))
+                .ThenByDescending(publicacion => publicacion.FechaCreacion)
+                .ThenByDescending(publicacion => publicacion.Id)
+                .Take(cantidadMaxima)
+                .Select(publicacion => publicacion.Id)
+                .ToArray();
+        }
+
+        private static Dictionary<CategoriaEnum, double> CalcularAfinidadesCategorias(
+            IReadOnlyCollection<InteraccionFeedDto> interacciones,
+            IReadOnlyCollection<PublicacionDetalleDto> semillas)
+        {
+            var pesos = interacciones
+                .Where(interaccion => interaccion.DioLike || interaccion.MiPuntuacion >= 3)
+                .GroupBy(interaccion => interaccion.PublicacionId)
+                .ToDictionary(grupo => grupo.Key, grupo => grupo.Max(interaccion =>
+                    interaccion.DioLike ? 1d : (interaccion.MiPuntuacion ?? 0) / 5d));
+            var pesoTotal = pesos.Values.Sum();
+            if (pesoTotal == 0) return new Dictionary<CategoriaEnum, double>();
+
+            return semillas
+                .Where(semilla => pesos.ContainsKey(semilla.Id))
+                .GroupBy(semilla => semilla.Categoria)
+                .ToDictionary(grupo => grupo.Key,
+                    grupo => grupo.Sum(semilla => pesos[semilla.Id]) / pesoTotal);
+        }
+
+        private static double CalcularPuntajeCercania(PublicacionDetalleDto candidata,
+            IReadOnlyCollection<(double Latitud, double Longitud)> lugaresSemilla,
+            double peso, double distanciaKm)
+        {
+            if (lugaresSemilla.Count == 0) return 0;
+            var distanciaMinima = lugaresSemilla.Min(lugar => DistanciaKm(
+                candidata.Lugar.Latitud, candidata.Lugar.Longitud, lugar.Latitud, lugar.Longitud));
+            return peso * Math.Exp(-distanciaMinima / distanciaKm);
+        }
+
+        private static double DistanciaKm(double latitud1, double longitud1, double latitud2, double longitud2)
+        {
+            const double radioTierraKm = 6371d;
+            var dLatitud = GradosARadianes(latitud2 - latitud1);
+            var dLongitud = GradosARadianes(longitud2 - longitud1);
+            var a = Math.Pow(Math.Sin(dLatitud / 2), 2)
+                    + Math.Cos(GradosARadianes(latitud1)) * Math.Cos(GradosARadianes(latitud2))
+                    * Math.Pow(Math.Sin(dLongitud / 2), 2);
+            a = Math.Clamp(a, 0d, 1d);
+            return radioTierraKm * 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+        }
+
+        private static double GradosARadianes(double grados) => grados * Math.PI / 180d;
+
+        public async Task RegistrarImpresionesFeed(int usuarioId, IReadOnlyCollection<int> publicacionesIds,
+            CancellationToken cancellationToken = default)
+        {
+            if (usuarioId <= 0) throw new ArgumentException("El ID del usuario debe ser mayor que cero.");
+            if (publicacionesIds.Count is < 1 or > 50)
+                throw new ArgumentException("Se deben enviar entre 1 y 50 publicaciones.");
+            if (publicacionesIds.Any(id => id <= 0))
+                throw new ArgumentException("Los IDs de publicaciones deben ser mayores que cero.");
+            if (!await _usuarioRepositorio.ExisteUsuario(usuarioId, cancellationToken))
+                throw new KeyNotFoundException("El usuario autenticado no existe.");
+
+            var idsUnicos = publicacionesIds.Distinct().ToArray();
+            var visibles = await _publicacionRepositorio.ObtenerPublicacionesPorIds(idsUnicos, cancellationToken);
+            var idsVisibles = visibles.Select(publicacion => publicacion.Id).ToArray();
+            if (idsVisibles.Length > 0)
+                await _publicacionRepositorio.RegistrarImpresionesFeed(usuarioId, idsVisibles, cancellationToken);
         }
 
         public async Task Eliminar(int id, int? autorId = null, CancellationToken cancellationToken = default)

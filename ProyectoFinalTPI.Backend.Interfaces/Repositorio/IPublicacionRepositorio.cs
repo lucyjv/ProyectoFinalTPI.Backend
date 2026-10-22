@@ -33,6 +33,15 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Repositorio
             IReadOnlyCollection<int> publicacionesIds, int? usuarioId, CancellationToken cancellationToken = default);
         Task<IReadOnlyList<int>> ObtenerPublicacionesRelacionadasPorLikes(
             int usuarioId, int cantidadMaxima, CancellationToken cancellationToken = default);
+        Task<IReadOnlyList<RecomendacionPublicacionDto>> ObtenerRecomendacionesFeed(
+            int usuarioId, int cantidadMaxima, long vistasDesdeUnixMs, CancellationToken cancellationToken = default);
+        Task<IReadOnlyList<InteraccionFeedDto>> ObtenerInteraccionesFeed(
+            int usuarioId, CancellationToken cancellationToken = default);
+        Task RegistrarImpresionesFeed(int usuarioId, IReadOnlyCollection<int> publicacionesIds,
+            CancellationToken cancellationToken = default);
+        Task<List<PublicacionDetalleDto>> ObtenerPublicacionesParaVos(IReadOnlyCollection<CategoriaEnum> categorias,
+            DateTime fechaCorte, CursorCronologicoDto? cursor, int limite, IReadOnlyCollection<int> excluirIds,
+            CancellationToken cancellationToken = default);
         Task<Dictionary<CategoriaEnum, int>> ObtenerCantidadPorCategoriaDelUsuario(int usuarioId, DateTime desde, CancellationToken cancellationToken = default);
         Task<bool> Eliminar(int id, int? autorId = null, CancellationToken cancellationToken = default);
         Task<bool> EliminarRepost(int originalId, int? autorId = null, CancellationToken cancellationToken = default);

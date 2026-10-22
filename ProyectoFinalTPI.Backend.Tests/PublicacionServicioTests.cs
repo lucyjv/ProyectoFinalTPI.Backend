@@ -674,6 +674,7 @@ namespace ProyectoFinalTPI.Backend.Tests
             public List<PublicacionDetalleDto> PublicacionesPorIds { get; set; } = new();
             public List<int[]> LotesConsultados { get; } = new();
             public IReadOnlyList<int> Recomendaciones { get; set; } = Array.Empty<int>();
+            public IReadOnlyList<InteraccionFeedDto> InteraccionesFeed { get; set; } = Array.Empty<InteraccionFeedDto>();
             public int ConsultasRecomendaciones { get; private set; }
             public int UsuarioRecomendacionesConsultado { get; private set; }
             public int LimiteRecomendaciones { get; private set; }
@@ -796,14 +797,38 @@ namespace ProyectoFinalTPI.Backend.Tests
                 return Task.FromResult(Recomendaciones);
             }
 
+            public Task<IReadOnlyList<RecomendacionPublicacionDto>> ObtenerRecomendacionesFeed(
+                int usuarioId, int cantidadMaxima, long vistasDesdeUnixMs, CancellationToken cancellationToken = default)
+            {
+                ConsultasRecomendaciones++;
+                UsuarioRecomendacionesConsultado = usuarioId;
+                LimiteRecomendaciones = cantidadMaxima;
+                var resultado = Recomendaciones.Select((id, indice) => new RecomendacionPublicacionDto
+                {
+                    PublicacionId = id,
+                    PuntajeColaborativo = Recomendaciones.Count - indice
+                }).ToArray();
+                return Task.FromResult<IReadOnlyList<RecomendacionPublicacionDto>>(resultado);
+            }
+
+            public Task<IReadOnlyList<InteraccionFeedDto>> ObtenerInteraccionesFeed(
+                int usuarioId, CancellationToken cancellationToken = default)
+                => Task.FromResult(InteraccionesFeed);
+
+            public Task RegistrarImpresionesFeed(int usuarioId, IReadOnlyCollection<int> publicacionesIds,
+                CancellationToken cancellationToken = default) => Task.CompletedTask;
+
             public List<Publicacion> ObtenerTodasPublicaciones() => throw new NotImplementedException();
             public List<Publicacion> ObtenerPublicacionPorCategoria(CategoriaEnum categoria) => throw new NotImplementedException();
             public int ConsultasGenerales { get; private set; }
             public Task<List<PublicacionDetalleDto>> ObtenerPublicacionesParaVos(IReadOnlyCollection<CategoriaEnum> categorias, DateTime fechaCorte, CursorCronologicoDto? cursor, int limite, CancellationToken cancellationToken = default)
+                => ObtenerPublicacionesParaVos(categorias, fechaCorte, cursor, limite, Array.Empty<int>(), cancellationToken);
+
+            public Task<List<PublicacionDetalleDto>> ObtenerPublicacionesParaVos(IReadOnlyCollection<CategoriaEnum> categorias, DateTime fechaCorte, CursorCronologicoDto? cursor, int limite, IReadOnlyCollection<int> excluirIds, CancellationToken cancellationToken = default)
             {
                 ConsultasGenerales++;
                 Assert.Empty(categorias);
-                return Task.FromResult(PublicacionesPorIds.Where(p => p.FechaCreacion <= fechaCorte)
+                return Task.FromResult(PublicacionesPorIds.Where(p => p.FechaCreacion <= fechaCorte && !excluirIds.Contains(p.Id))
                     .OrderByDescending(p => p.FechaCreacion).ThenByDescending(p => p.Id)
                     .Take(limite + 1).ToList());
             }

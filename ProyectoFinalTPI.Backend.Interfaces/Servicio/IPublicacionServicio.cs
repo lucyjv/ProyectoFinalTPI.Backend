@@ -28,6 +28,8 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Servicio
             CancellationToken cancellationToken = default);
         Task<ResultadoPaginadoDto<PublicacionDetalleDto>>ObtenerPublicacionesParaVos(int usuarioId, string? cursor, int limite,
             CancellationToken cancellationToken = default);
+        Task RegistrarImpresionesFeed(int usuarioId, IReadOnlyCollection<int> publicacionesIds,
+            CancellationToken cancellationToken = default);
         Task Eliminar(int id, int? autorId = null, CancellationToken cancellationToken = default);
         Task EliminarRepost(int originalId, int? autorId = null, CancellationToken cancellationToken = default);
     }
