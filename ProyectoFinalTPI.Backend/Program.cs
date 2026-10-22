@@ -73,6 +73,13 @@ builder.Services.AddScoped<IRecomendacionServicio, RecomendacionServicio>();
 
 builder.Services.AddMemoryCache();
 
+builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
+builder.Services.AddHttpClient("GooglePhotos", client => client.Timeout = TimeSpan.FromSeconds(30))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false })
+    .RemoveAllLoggers();
+builder.Services.AddSingleton<GooglePhotosService>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<GooglePhotosService>());
+
 builder.Services.AddSingleton<
     ISesionFypRepositorio,
     SesionFypRepositorio>();
