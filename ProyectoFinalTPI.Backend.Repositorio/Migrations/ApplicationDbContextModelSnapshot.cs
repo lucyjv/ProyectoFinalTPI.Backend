@@ -598,6 +598,9 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.HasIndex("Email")
                         .IsUnique();
 
+                    b.HasIndex("Username")
+                        .IsUnique();
+
                     b.ToTable("Usuario", (string)null);
 
                     b.HasDiscriminator<string>("tipo_usuario").HasValue("Usuario");

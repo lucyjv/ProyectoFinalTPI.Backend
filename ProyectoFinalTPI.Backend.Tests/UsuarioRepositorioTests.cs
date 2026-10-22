@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -139,7 +139,7 @@ namespace ProyectoFinalTPI.Backend.Tests
         public async Task ObtenerUsuariosPorIdsAsyncDeberiaRetornarSoloUsuariosExistentes()
         {
             await SeedUsuariosAsync();
-            var idsBuscar = new List<int> { 1, 3, 99 }; 
+            var idsBuscar = new List<int> { 1, 3, 99 };
 
             var resultado = await _repositorio.ObtenerUsuariosPorIdsAsync(idsBuscar);
 
@@ -175,7 +175,7 @@ namespace ProyectoFinalTPI.Backend.Tests
         public async Task ObtenerIdsExistentesAsyncDeberiaRetornarSoloIdsQueExisten()
         {
             await SeedUsuariosAsync();
-            var idsBuscar = new List<int> { 2, 4, 5, 1 }; 
+            var idsBuscar = new List<int> { 2, 4, 5, 1 };
 
             var resultado = await _repositorio.ObtenerIdsExistentesAsync(idsBuscar);
 
@@ -207,6 +207,59 @@ namespace ProyectoFinalTPI.Backend.Tests
             var resultado = await _repositorio.BuscarPorUsernameAsync("usuario", 2);
 
             Assert.Equal(2, resultado.Count);
+        }
+
+        // ── ExistePorUsernameAsync ────────────────────────────────────────────
+
+        [Fact]
+        public async Task ExistePorUsernameAsyncDeberiaRetornarTrueCuandoUsernameExiste()
+        {
+            await SeedUsuariosAsync();
+
+            var resultado = await _repositorio.ExistePorUsernameAsync("usuario1");
+
+            Assert.True(resultado);
+        }
+
+        [Fact]
+        public async Task ExistePorUsernameAsyncDeberiaRetornarFalseCuandoUsernameNoExiste()
+        {
+            await SeedUsuariosAsync();
+
+            var resultado = await _repositorio.ExistePorUsernameAsync("noexiste");
+
+            Assert.False(resultado);
+        }
+
+        [Fact]
+        public async Task ExistePorUsernameAsyncDeberiaSerCaseInsensitive()
+        {
+            await SeedUsuariosAsync();
+
+            var resultadoMayusculas  = await _repositorio.ExistePorUsernameAsync("USUARIO1");
+            var resultadoMixto       = await _repositorio.ExistePorUsernameAsync("Usuario1");
+
+            Assert.True(resultadoMayusculas);
+            Assert.True(resultadoMixto);
+        }
+
+        [Fact]
+        public async Task ExistePorUsernameAsyncDeberiaIgnorarEspaciosAlRededorDelUsername()
+        {
+            await SeedUsuariosAsync();
+
+            var resultado = await _repositorio.ExistePorUsernameAsync("  usuario1  ");
+
+            Assert.True(resultado);
+        }
+
+        [Fact]
+        public async Task ExistePorUsernameAsyncDeberiaRetornarFalseCuandoNoHayUsuarios()
+        {
+            // Sin seed — base de datos vacía.
+            var resultado = await _repositorio.ExistePorUsernameAsync("cualquiera");
+
+            Assert.False(resultado);
         }
     }
 }

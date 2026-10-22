@@ -37,9 +37,13 @@ public class AuthServicio : IAuthServicio
         if (await _usuarioRepositorio.ExistePorEmailAsync(email, cancellationToken))
             throw new InvalidOperationException("Ya existe una cuenta registrada con ese email.");
 
+        var username = dto.Username.Trim();
+        if (await _usuarioRepositorio.ExistePorUsernameAsync(username, cancellationToken))
+            throw new InvalidOperationException("Ya existe una cuenta registrada con ese nombre de usuario.");
+
         var usuario = new Usuario_Personal
         {
-            Username = dto.Username.Trim(),
+            Username = username,
             Email = email,
             Contraseña = BC.HashPassword(dto.Contraseña),
             EsAdmin = false,
