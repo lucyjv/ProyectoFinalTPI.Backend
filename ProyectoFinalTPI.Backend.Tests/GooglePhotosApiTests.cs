@@ -16,11 +16,14 @@ using Microsoft.IdentityModel.Tokens;
 using ProyectoFinalTPI.Backend.Repositorio.Data;
 using ProyectoFinalTPI.Backend.Services;
 using Xunit;
+using Moq;
+using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 
 namespace ProyectoFinalTPI.Backend.Tests;
 
 public sealed class GooglePhotosApiTests
 {
+    private static readonly Guid ActiveSession = Guid.ParseExact("1b2c3d4e5f6041728394a5b6c7d8e9f0", "N");
     private const string Key = "google-photos-tests-only-key-at-least-32-characters";
     private sealed class Factory : WebApplicationFactory<Program>
     {
@@ -43,6 +46,11 @@ public sealed class GooglePhotosApiTests
                     options.TokenValidationParameters.ValidIssuer = "photos-test";
                     options.TokenValidationParameters.ValidAudience = "photos-test";
                 });
+                var sessions = new Mock<ISesionUsuarioRepositorio>();
+                sessions.Setup(repo => repo.EstaActivaAsync(ActiveSession, It.IsAny<CancellationToken>()))
+                    .ReturnsAsync(true);
+                services.RemoveAll<ISesionUsuarioRepositorio>();
+                services.AddSingleton(sessions.Object);
                 services.RemoveAll<DbContextOptions<ApplicationDbContext>>();
                 services.RemoveAll<IDbContextOptionsConfiguration<ApplicationDbContext>>();
                 services.AddDbContext<ApplicationDbContext>(o => o.UseInMemoryDatabase(Guid.NewGuid().ToString()));
@@ -51,7 +59,7 @@ public sealed class GooglePhotosApiTests
     }
     private static void Login(HttpClient client, int id)
     {
-        var token = new JwtSecurityToken("photos-test", "photos-test", new[] { new Claim("sub", id.ToString()) },
+        var token = new JwtSecurityToken("photos-test", "photos-test", new[] { new Claim("sub", id.ToString()), new Claim("sid", ActiveSession.ToString("N")) },
             expires: DateTime.UtcNow.AddMinutes(5), signingCredentials: new SigningCredentials(
                 new SymmetricSecurityKey(Encoding.UTF8.GetBytes(Key)), SecurityAlgorithms.HmacSha256));
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", new JwtSecurityTokenHandler().WriteToken(token));
