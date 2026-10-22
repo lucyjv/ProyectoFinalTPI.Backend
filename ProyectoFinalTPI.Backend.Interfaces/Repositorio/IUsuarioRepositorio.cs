@@ -21,6 +21,11 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Repositorio
 
         Task<bool> ExistePorEmailAsync(string email, CancellationToken cancellationToken = default);
 
+        /// <summary>
+        /// Indica si ya existe un usuario con el username indicado (sin distinción de mayúsculas).
+        /// </summary>
+        Task<bool> ExistePorUsernameAsync(string username, CancellationToken cancellationToken = default);
+
         Task AgregarAsync(Usuario usuario, CancellationToken cancellationToken = default);
 
         Task ActualizarAsync(Usuario usuario, CancellationToken cancellationToken = default);

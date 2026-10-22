@@ -142,6 +142,9 @@ public class SeguimientoServicioTests
         public Task<bool> ExistePorEmailAsync(string email, CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
+        public Task<bool> ExistePorUsernameAsync(string username, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
         public Task AgregarAsync(Usuario usuario, CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
