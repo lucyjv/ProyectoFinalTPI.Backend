@@ -49,6 +49,9 @@ public class AuthServicioTests
         _repositorioMock
             .Setup(r => r.ExistePorEmailAsync("test@example.com", default))
             .ReturnsAsync(false);
+        _repositorioMock
+            .Setup(r => r.ExistePorUsernameAsync("testuser", default))
+            .ReturnsAsync(false);
 
         Usuario? usuarioGuardado = null;
         _repositorioMock
@@ -87,10 +90,76 @@ public class AuthServicioTests
     }
 
     [Fact]
+    public async Task Registro_con_username_duplicado_lanza_excepcion()
+    {
+        _repositorioMock
+            .Setup(r => r.ExistePorEmailAsync("nuevo@example.com", default))
+            .ReturnsAsync(false);
+        _repositorioMock
+            .Setup(r => r.ExistePorUsernameAsync("duplicado", default))
+            .ReturnsAsync(true);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            CrearServicio().RegistrarAsync(new RegistroDto
+            {
+                Username = "duplicado",
+                Email = "nuevo@example.com",
+                Contraseña = "contraseña123"
+            }));
+
+        _repositorioMock.Verify(r => r.AgregarAsync(It.IsAny<Usuario>(), default), Times.Never);
+    }
+
+    [Fact]
+    public async Task Registro_con_username_duplicado_no_consulta_existencia_de_username_si_el_email_ya_existe()
+    {
+        // Si el email ya está duplicado, cortamos antes de consultar el username.
+        _repositorioMock
+            .Setup(r => r.ExistePorEmailAsync("duplicado@example.com", default))
+            .ReturnsAsync(true);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            CrearServicio().RegistrarAsync(new RegistroDto
+            {
+                Username = "cualquiera",
+                Email = "duplicado@example.com",
+                Contraseña = "contraseña123"
+            }));
+
+        _repositorioMock.Verify(
+            r => r.ExistePorUsernameAsync(It.IsAny<string>(), default),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task Registro_con_username_duplicado_mensaje_identifica_el_campo()
+    {
+        _repositorioMock
+            .Setup(r => r.ExistePorEmailAsync("nuevo@example.com", default))
+            .ReturnsAsync(false);
+        _repositorioMock
+            .Setup(r => r.ExistePorUsernameAsync("duplicado", default))
+            .ReturnsAsync(true);
+
+        var excepcion = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            CrearServicio().RegistrarAsync(new RegistroDto
+            {
+                Username = "duplicado",
+                Email = "nuevo@example.com",
+                Contraseña = "contraseña123"
+            }));
+
+        Assert.Contains("nombre de usuario", excepcion.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Registro_exitoso_devuelve_token_jwt_valido()
     {
         _repositorioMock
             .Setup(r => r.ExistePorEmailAsync(It.IsAny<string>(), default))
+            .ReturnsAsync(false);
+        _repositorioMock
+            .Setup(r => r.ExistePorUsernameAsync(It.IsAny<string>(), default))
             .ReturnsAsync(false);
         _repositorioMock
             .Setup(r => r.AgregarAsync(It.IsAny<Usuario>(), default))
@@ -303,6 +372,52 @@ public class AuthIntegracionTests
             Username = "otrouser",
             Email = "test@example.com",
             Contraseña = "otracontraseña123"
+        });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Registro_con_username_duplicado_devuelve_409()
+    {
+        await using var factory = new AuthFactory();
+        using var client = factory.CreateClient();
+
+        await client.PostAsJsonAsync("/api/auth/registro", new
+        {
+            Username = "testuser",
+            Email = "primero@example.com",
+            Contraseña = "contraseña123"
+        });
+
+        var response = await client.PostAsJsonAsync("/api/auth/registro", new
+        {
+            Username = "testuser",
+            Email = "segundo@example.com",
+            Contraseña = "contraseña456"
+        });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Registro_con_username_duplicado_en_distinto_case_devuelve_409()
+    {
+        await using var factory = new AuthFactory();
+        using var client = factory.CreateClient();
+
+        await client.PostAsJsonAsync("/api/auth/registro", new
+        {
+            Username = "TestUser",
+            Email = "primero@example.com",
+            Contraseña = "contraseña123"
+        });
+
+        var response = await client.PostAsJsonAsync("/api/auth/registro", new
+        {
+            Username = "testuser",
+            Email = "segundo@example.com",
+            Contraseña = "contraseña456"
         });
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);

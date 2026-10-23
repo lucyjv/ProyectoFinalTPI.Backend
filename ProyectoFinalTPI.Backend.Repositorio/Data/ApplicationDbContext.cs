@@ -107,6 +107,10 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
                 .HasIndex(usuario => usuario.Email)
                 .IsUnique();
 
+            modelBuilder.Entity<Usuario>()
+                .HasIndex(usuario => usuario.Username)
+                .IsUnique();
+
             modelBuilder.Entity<SesionUsuario>(entity =>
             {
                 entity.ToTable("sesiones_usuario");
