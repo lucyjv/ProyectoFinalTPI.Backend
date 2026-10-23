@@ -314,6 +314,56 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                         });
                 });
 
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Notificacion", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("EmisorId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("FechaExpiracion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("FechaLeida")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Leida")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("PublicacionId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int>("UsuarioDestinatarioId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EmisorId");
+
+                    b.HasIndex("FechaExpiracion")
+                        .HasDatabaseName("IX_notificaciones_expiracion");
+
+                    b.HasIndex("UsuarioDestinatarioId", "FechaCreacion")
+                        .HasDatabaseName("IX_notificaciones_usuario_fecha");
+
+                    b.HasIndex("UsuarioDestinatarioId", "Tipo", "PublicacionId", "Leida")
+                        .HasDatabaseName("IX_notificaciones_pendiente");
+
+                    b.ToTable("notificaciones", (string)null);
+                });
+
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Publicacion", b =>
                 {
                     b.Property<int>("Id")
@@ -775,6 +825,24 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                         .IsRequired();
 
                     b.Navigation("Momento");
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Notificacion", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario", "Emisor")
+                        .WithMany()
+                        .HasForeignKey("EmisorId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario", "UsuarioDestinatario")
+                        .WithMany()
+                        .HasForeignKey("UsuarioDestinatarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Emisor");
+
+                    b.Navigation("UsuarioDestinatario");
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Publicacion", b =>
