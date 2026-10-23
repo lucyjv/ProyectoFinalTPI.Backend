@@ -135,4 +135,13 @@ public class ComentarioRepositorio(ApplicationDbContext context) : IComentarioRe
         context.ReaccionesComentario.Remove(reaccion);
         await context.SaveChangesAsync(cancellationToken);
     }
+
+    /// <inheritdoc/>
+    public async Task<Publicacion?> ObtenerPublicacionAsync(
+    int publicacionId, CancellationToken cancellationToken = default)
+    {
+        return await context.Publicaciones
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == publicacionId, cancellationToken);
+    }
 }

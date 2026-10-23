@@ -20,9 +20,16 @@ namespace ProyectoFinalTPI.Backend.Servicio
         private readonly ISesionFypRepositorio _sesionFypRepositorio;
         private readonly ISeguimientoServicio _seguimientoServicio;
         private readonly FeedRecomendacionesOptions _opcionesFeed;
-        public PublicacionServicio(IPublicacionRepositorio publicacionRepositorio, IUsuarioRepositorio usuarioRepositorio, 
-            IMultimediaServicio multimediaServicio, ISesionFypRepositorio sesionFypRepositorio,
-            ISeguimientoServicio seguimientoServicio, IOptions<FeedRecomendacionesOptions> opcionesFeed)
+        private readonly INotificacionServicio _notificacionServicio;
+
+        public PublicacionServicio(
+            IPublicacionRepositorio publicacionRepositorio,
+            IUsuarioRepositorio usuarioRepositorio,
+            IMultimediaServicio multimediaServicio,
+            ISesionFypRepositorio sesionFypRepositorio,
+            ISeguimientoServicio seguimientoServicio,
+            IOptions<FeedRecomendacionesOptions> opcionesFeed,
+            INotificacionServicio notificacionServicio)
         {
             _publicacionRepositorio = publicacionRepositorio;
             _usuarioRepositorio = usuarioRepositorio;
@@ -30,6 +37,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
             _sesionFypRepositorio = sesionFypRepositorio;
             _seguimientoServicio = seguimientoServicio;
             _opcionesFeed = opcionesFeed.Value;
+            _notificacionServicio = notificacionServicio;
         }
 
         public async Task<MeGustaPublicacionDto> DarLike(
@@ -91,10 +99,23 @@ namespace ProyectoFinalTPI.Backend.Servicio
             }
             else
             {
-                await _publicacionRepositorio.PuntuarPublicacion(publicacionId, usuarioId, puntaje, cancellationToken);
+                await _publicacionRepositorio.PuntuarPublicacion(
+                    publicacionId, usuarioId, puntaje, cancellationToken);
+
+                // Notificar al autor si el puntuador no es el mismo autor.
+                // publicacion ya fue cargada más arriba en el método.
+                if (publicacion != null && publicacion.UsuarioId != usuarioId)
+                {
+                    await _notificacionServicio.NotificarPuntuacionEnPublicacionAsync(
+                        publicacion.UsuarioId,
+                        publicacionId,
+                        usuarioId,
+                        cancellationToken);
+                }
             }
 
-            return await _publicacionRepositorio.ObtenerEstadoPuntuacion(publicacionId, usuarioId, cancellationToken);
+            return await _publicacionRepositorio.ObtenerEstadoPuntuacion(
+                publicacionId, usuarioId, cancellationToken);
         }
 
         public async Task<PuntuacionPublicacionDto> QuitarPuntuacion(

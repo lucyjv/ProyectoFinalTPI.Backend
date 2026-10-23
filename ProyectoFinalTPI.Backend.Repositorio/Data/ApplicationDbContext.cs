@@ -29,6 +29,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
         public DbSet<MomentoAlias> MomentosAlias { get; set; }
         public DbSet<PublicacionMomento> PublicacionesMomentos { get; set; }
         public DbSet<TrabajoAnalisisRecuerdo> TrabajosAnalisisRecuerdos { get; set; }
+        public DbSet<Notificacion> Notificaciones { get; set; }
 
         public override int SaveChanges(bool acceptAllChangesOnSuccess)
         {
@@ -243,6 +244,40 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
                 entity.HasIndex(e => new { e.EmisorId, e.DestinatarioId })
                       .HasDatabaseName("IX_mensajes_chat_participantes");
             });
+            // ── Configuración de Notificacion ─────────────────────────────────────
+            modelBuilder.Entity<Notificacion>(entity =>
+            {
+                entity.ToTable("notificaciones");
+
+                entity.Property(e => e.Tipo)
+                      .HasConversion<string>()
+                      .HasMaxLength(50);
+
+                // FK al destinatario: si el usuario es eliminado, sus notificaciones también.
+                entity.HasOne(e => e.UsuarioDestinatario)
+                      .WithMany()
+                      .HasForeignKey(e => e.UsuarioDestinatarioId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                // FK al emisor: opcional. Si el emisor es eliminado, la FK queda en null.
+                entity.HasOne(e => e.Emisor)
+                      .WithMany()
+                      .HasForeignKey(e => e.EmisorId)
+                      .OnDelete(DeleteBehavior.SetNull);
+
+                // Índice principal: obtener notificaciones de un usuario ordenadas por fecha.
+                entity.HasIndex(e => new { e.UsuarioDestinatarioId, e.FechaCreacion })
+                      .HasDatabaseName("IX_notificaciones_usuario_fecha");
+
+                // Índice para la limpieza de expiradas.
+                entity.HasIndex(e => e.FechaExpiracion)
+                      .HasDatabaseName("IX_notificaciones_expiracion");
+
+                // Índice para ExisteNotificacionPendienteAsync (unicidad por tipo+publicación).
+                entity.HasIndex(e => new { e.UsuarioDestinatarioId, e.Tipo, e.PublicacionId, e.Leida })
+                      .HasDatabaseName("IX_notificaciones_pendiente");
+            });
+            // ──────────────────────────────────────────────────────────────────────
         }
     }
 }

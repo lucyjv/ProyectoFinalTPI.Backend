@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.Options;
+using Moq;
 using ProyectoFinalTPI.Backend.Dtos;
 using ProyectoFinalTPI.Backend.Dtos.Comentario;
 using ProyectoFinalTPI.Backend.Dtos.Lugar;
@@ -26,7 +27,8 @@ namespace ProyectoFinalTPI.Backend.Tests
         {
             _servicio = new PublicacionServicio(
                 _repositorio, _usuarios, _multimedia, _sesiones, _seguimiento,
-                Options.Create(new FeedRecomendacionesOptions()));
+                Options.Create(new FeedRecomendacionesOptions()),
+                Mock.Of<INotificacionServicio>());
         }
 
         [Fact]
@@ -660,7 +662,8 @@ namespace ProyectoFinalTPI.Backend.Tests
             };
             var servicio = new PublicacionServicio(
                 _repositorio, _usuarios, _multimedia, _sesiones, _seguimiento,
-                Options.Create(opciones));
+                Options.Create(opciones),
+                Mock.Of<INotificacionServicio>());
 
             await servicio.ObtenerPublicacionesParaVos(10, null, 20);
 

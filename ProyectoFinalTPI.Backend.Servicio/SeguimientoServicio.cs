@@ -39,13 +39,16 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
         private readonly IUsuarioRepositorio _usuarioRepositorio;
         private readonly IDriver _neo4jDriver;
+        private readonly INotificacionServicio _notificacionServicio;
 
         public SeguimientoServicio(
             IUsuarioRepositorio usuarioRepositorio,
-            IDriver neo4jDriver)
+            IDriver neo4jDriver,
+            INotificacionServicio notificacionServicio)
         {
             _usuarioRepositorio = usuarioRepositorio;
             _neo4jDriver = neo4jDriver;
+            _notificacionServicio = notificacionServicio;
         }
 
         public async Task<ResultadoSeguimiento> SeguirUsuario(
@@ -69,9 +72,13 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 idUsuario,
                 idUsuarioASeguir);
 
-            return relacionCreada
-                ? ResultadoSeguimiento.Aplicado
-                : ResultadoSeguimiento.SinCambios;
+            if (relacionCreada)
+            {
+                await _notificacionServicio.NotificarNuevoSeguidorAsync(
+                    idUsuarioASeguir, idUsuario, cancellationToken);
+                return ResultadoSeguimiento.Aplicado;
+            }
+            return ResultadoSeguimiento.SinCambios;
         }
 
         public async Task<ResultadoSeguimiento> DejarDeSeguirUsuario(

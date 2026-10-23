@@ -9,7 +9,8 @@ namespace ProyectoFinalTPI.Backend.Servicio;
 
 public class ComentarioServicio(
     IComentarioRepositorio comentarioRepositorio,
-    IUsuarioRepositorio usuarioRepositorio) : IComentarioServicio
+    IUsuarioRepositorio usuarioRepositorio,
+    INotificacionServicio notificacionServicio) : IComentarioServicio
 {
     private const int LimiteRespuestasIniciales = 3;
 
@@ -97,6 +98,19 @@ public class ComentarioServicio(
         comentario.ComentarioPadreId = padre?.Id;
 
         await comentarioRepositorio.Crear(comentario, cancellationToken);
+
+        // Notificar al autor de la publicación si el comentador no es el mismo autor.
+        var publicacion = await ObtenerPublicacionParaNotificacion(
+            comentario.PublicacionId, cancellationToken);
+        if (publicacion != null && publicacion.UsuarioId != comentario.UsuarioId)
+        {
+            await notificacionServicio.NotificarComentarioEnPublicacionAsync(
+                publicacion.UsuarioId,
+                comentario.PublicacionId,
+                comentario.UsuarioId,
+                cancellationToken);
+        }
+
         return comentario.ToDto(comentario.UsuarioId);
     }
 
@@ -184,4 +198,14 @@ public class ComentarioServicio(
             ? null
             : CursorCronologicoCodec.Crear(ultimoConMasResultados.FechaCreacion, ultimoConMasResultados.Id)
     };
+
+    private async Task<Publicacion?> ObtenerPublicacionParaNotificacion(
+    int publicacionId, CancellationToken cancellationToken)
+    {
+        // Necesitamos saber el UsuarioId del autor de la publicación.
+        // Usamos el repositorio de comentarios que ya existe en este servicio.
+        // Si no existe, simplemente no notificamos (no rompemos el flujo principal).
+        return await comentarioRepositorio.ObtenerPublicacionAsync(
+            publicacionId, cancellationToken);
+    }
 }

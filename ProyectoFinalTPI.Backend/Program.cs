@@ -175,6 +175,13 @@ builder.Services.AddScoped<IMensajeChatRepositorio, MensajeChatRepositorio>();
 builder.Services.AddHostedService<LimpiezaMensajesService>();
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ── Notificaciones ────────────────────────────────────────────────────
+builder.Services.AddScoped<INotificacionRepositorio, NotificacionRepositorio>();
+builder.Services.AddScoped<INotificacionPush, NotificacionPush>();        // ← AGREGAR
+builder.Services.AddScoped<INotificacionServicio, NotificacionServicio>();
+builder.Services.AddHostedService<LimpiezaNotificacionesService>();
+// ─────────────────────────────────────────────────────────────────────
+
 var claveJwt = builder.Configuration["Jwt:Clave"]
     ?? (builder.Environment.EnvironmentName == "Testing"
         ? "clave-de-testing-no-usar-en-produccion-32ch"
@@ -312,6 +319,8 @@ app.MapControllers();
 
 // ── Ruta del Hub de chat ───────────────────────────────────────────────
 app.MapHub<ChatHub>("/hubs/chat");
+// ── Ruta del Hub de notificaciones ───────────────────────────────────────────────
+app.MapHub<NotificacionHub>("/hubs/notificaciones");
 // ─────────────────────────────────────────────────────────────────────────────
 
 app.MapControllerRoute(
