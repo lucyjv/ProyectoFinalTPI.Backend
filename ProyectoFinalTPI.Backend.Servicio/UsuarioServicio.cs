@@ -2,6 +2,7 @@ using ProyectoFinalTPI.Backend.Dtos.Usuario;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
+using ProyectoFinalTPI.Backend.Repositorio;
 
 namespace ProyectoFinalTPI.Backend.Servicio
 {
@@ -12,13 +13,16 @@ namespace ProyectoFinalTPI.Backend.Servicio
     {
         private readonly IUsuarioRepositorio _repositorio;
         private readonly ISeguimientoServicio? _seguimientoServicio;
+        private readonly ILogroServicio _logroServicio;
 
         public UsuarioServicio(
             IUsuarioRepositorio repositorio,
+            ILogroServicio logroServicio,
             ISeguimientoServicio? seguimientoServicio = null)
         {
             _repositorio = repositorio;
             _seguimientoServicio = seguimientoServicio;
+            _logroServicio = logroServicio;
         }
 
         /// <inheritdoc/>
@@ -59,6 +63,51 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 throw new KeyNotFoundException($"No existe ningún usuario con el identificador '{usuarioId}'.");
 
             return await ConstruirPerfilDto(usuario, usuarioAutenticadoId, cancellationToken);
+        }
+
+        public async Task RegistrarIngresoDiarioAsync(int usuarioId)
+        {
+            var usuario = await _repositorio.ObtenerYUsuarioInteractivoPorIdAsync(usuarioId);
+            if (usuario == null) return;
+
+            var hoy = DateTime.UtcNow.Date;
+
+            if (usuario.UltimoIngresoUtc.HasValue)
+            {
+                var ultimoIngreso = usuario.UltimoIngresoUtc.Value.Date;
+
+                if (ultimoIngreso == hoy)
+                {
+                    return;
+                }
+                else if (ultimoIngreso == hoy.AddDays(-1))
+                {
+                    usuario.RachaDiasActual++;
+                }
+                else
+                {
+                    usuario.RachaDiasActual = 1;
+                }
+            }
+            else
+            {
+                usuario.RachaDiasActual = 1;
+            }
+
+            usuario.UltimoIngresoUtc = DateTime.UtcNow;
+            
+            await _repositorio.ActualizarAsync(usuario);
+
+            await ValidarLogros(usuarioId, usuario);
+        }
+
+        private async Task ValidarLogros(int usuarioId, Usuario_Interactivo usuario)
+        {
+            if (usuario.RachaDiasActual >= 3)
+                await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.RachaDeHierro);
+
+            if (usuario.RachaDiasActual >= 7)
+                await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.RachaDeOro);
         }
 
         private async Task<UsuarioPerfilDto> ConstruirPerfilDto(

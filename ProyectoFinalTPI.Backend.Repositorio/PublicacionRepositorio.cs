@@ -1,8 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Neo4j.Driver;
-using NetTopologySuite.Geometries;
 using ProyectoFinalTPI.Backend.Dtos;
-using ProyectoFinalTPI.Backend.Dtos.Comentario;
 using ProyectoFinalTPI.Backend.Dtos.Grupo;
 using ProyectoFinalTPI.Backend.Dtos.Lugar;
 using ProyectoFinalTPI.Backend.Dtos.Publicacion;
@@ -69,6 +67,10 @@ namespace ProyectoFinalTPI.Backend.Repositorio
             RETURN publicacionId,
                    puntosTotales,
                    miRating.puntaje AS miPuntuacion
+            """;
+        private const string SumarPuntosOtorgadosQuery = """
+            MATCH (:Usuario {postgresId: $usuarioId})-[r:PUNTUO]->(:Publicacion)
+            RETURN coalesce(sum(r.puntaje), 0) AS totalPuntos
             """;
 
         // consulta nos devuelve las publicaciones con alto puntaje como candidatas al feed
@@ -802,23 +804,87 @@ namespace ProyectoFinalTPI.Backend.Repositorio
             await _context.SaveChangesAsync(cancellationToken);
             return true;
         }
-        }
-        public async Task<int> ContarPosteosCercanosAlUsuario(int usuarioId, Point gpsUsuario)
+        public async Task<int> ContarPosteosCercanosAlUsuario(int usuarioId, NetTopologySuite.Geometries.Point gpsUsuario, CancellationToken cancellationToken = default)
         {
             return await _context.Publicaciones
                 .Where(p => p.UsuarioId == usuarioId &&
                             !p.EstaOculto &&
-                            p.Lugar.Coordenadas.Distance(gpsUsuario) < 0.01) //10 cuadras aprox.
-                .CountAsync();
+                            p.Lugar.Coordenadas.Distance(gpsUsuario) < 0.01) // ~10 cuadras
+                .CountAsync(cancellationToken);
         }
-        public async Task<int> ContarPosteosDeDiferentesEpocasDelUsuario(int usuarioId)
+
+        public async Task<int> ContarPosteosDeDiferentesEpocasDelUsuario(int usuarioId, CancellationToken cancellationToken = default)
         {
             return await _context.Publicaciones
-                .Where(p => p.UsuarioId == usuarioId &&
-                            !p.EstaOculto)
+                .Where(p => p.UsuarioId == usuarioId && !p.EstaOculto)
                 .Select(p => p.DecadaDelRecuerdo)
-                .Distinct()             
-                .CountAsync();
+                .Distinct()
+                .CountAsync(cancellationToken);
         }
+
+        public async Task<int> ContarPosteosConImagenDelUsuario(int usuarioId, CancellationToken cancellationToken = default)
+        {
+            return await _context.Publicaciones
+                .Where(p => p.UsuarioId == usuarioId && !p.EstaOculto && p.TipoMultimedia == MultimediaEnum.Foto)
+                .CountAsync(cancellationToken);
+        }
+
+        public async Task<int> ContarRepostsDeOtrosUsuarios(int usuarioId, CancellationToken cancellationToken = default)
+        {
+            return await _context.Publicaciones
+                .Where(p => p.UsuarioId == usuarioId && !p.EstaOculto &&
+                            p.PublicacionOriginalId.HasValue && 
+                            p.PublicacionOriginal!.UsuarioId != usuarioId)
+                .CountAsync(cancellationToken);
+        }
+
+        public async Task<int> ContarLikesOtorgados(int usuarioId, CancellationToken cancellationToken = default)
+        {
+            if (usuarioId <= 0) return 0;
+
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var session = _neo4jDriver.AsyncSession();
+
+            return await session.ExecuteReadAsync(async transaction =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var cursor = await transaction.RunAsync("""
+                    MATCH (:Usuario { postgresId: $usuarioId })-[like:LE_GUSTA]->(:Publicacion)
+                    RETURN count(like) AS totalLikes
+                    """, new { usuarioId });
+
+                 if (await cursor.FetchAsync())
+                 {
+                    return cursor.Current["totalLikes"].As<int>();
+                 }
+
+                return 0;
+            });
+        }
+        public async Task<int> SumarPuntosOtorgadosPorUsuario(int usuarioId, CancellationToken cancellationToken = default)
+        {
+            if (usuarioId <= 0) return 0;
+
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var session = _neo4jDriver.AsyncSession();
+
+            return await session.ExecuteReadAsync(async transaction =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var cursor = await transaction.RunAsync(
+                    SumarPuntosOtorgadosQuery,
+                    new { usuarioId });
+
+                if (await cursor.FetchAsync())
+                {
+                    return cursor.Current["totalPuntos"].As<int>();
+                }
+
+                return 0;
+            });
+        }
+
     }
 }

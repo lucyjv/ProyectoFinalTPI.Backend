@@ -34,9 +34,13 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Repositorio
         Task<IReadOnlyList<int>> ObtenerPublicacionesRelacionadasPorLikes(
             int usuarioId, int cantidadMaxima, CancellationToken cancellationToken = default);
         Task<Dictionary<CategoriaEnum, int>> ObtenerCantidadPorCategoriaDelUsuario(int usuarioId, DateTime desde, CancellationToken cancellationToken = default);
-        Task<int> ContarPosteosCercanosAlUsuario(int usuarioId, NetTopologySuite.Geometries.Point gpsUsuario);
-        Task<int> ContarPosteosDeDiferentesEpocasDelUsuario(int usuarioId);
+        Task<int> ContarPosteosCercanosAlUsuario(int usuarioId, NetTopologySuite.Geometries.Point gpsUsuario, CancellationToken cancellationToken = default);
+        Task<int> ContarPosteosDeDiferentesEpocasDelUsuario(int usuarioId, CancellationToken cancellationToken = default);
         Task<bool> Eliminar(int id, int? autorId = null, CancellationToken cancellationToken = default);
         Task<bool> EliminarRepost(int originalId, int? autorId = null, CancellationToken cancellationToken = default);
+        Task<int> ContarPosteosConImagenDelUsuario(int usuarioId, CancellationToken cancellationToken = default);
+        Task<int> ContarRepostsDeOtrosUsuarios(int usuarioId, CancellationToken cancellationToken = default);
+        Task<int> ContarLikesOtorgados(int usuarioId, CancellationToken cancellationToken = default);
+        Task<int> SumarPuntosOtorgadosPorUsuario(int usuarioId, CancellationToken cancellationToken = default);
     }
 }

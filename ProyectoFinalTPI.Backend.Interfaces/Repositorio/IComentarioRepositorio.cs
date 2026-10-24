@@ -19,4 +19,6 @@ public interface IComentarioRepositorio
     Task EstablecerReaccion(int comentarioId, int usuarioId, TipoReaccionComentario tipo,
         CancellationToken cancellationToken = default);
     Task QuitarReaccion(int comentarioId, int usuarioId, CancellationToken cancellationToken = default);
+    Task<int> ContarComentariosEnPosteosAjenosAsync(int usuarioId, CancellationToken cancellationToken = default);
+    Task<int> ContarComentariosTotalesAsync(int usuarioId, CancellationToken cancellationToken = default);
 }

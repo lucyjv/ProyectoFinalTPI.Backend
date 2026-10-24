@@ -1,6 +1,4 @@
 using ProyectoFinalTPI.Backend.Dtos;
-using ProyectoFinalTPI.Backend.Dtos.Comentario;
-using ProyectoFinalTPI.Backend.Dtos.Usuario;
 using ProyectoFinalTPI.Backend.Dtos.Mapa;
 using ProyectoFinalTPI.Backend.Dtos.Publicacion;
 using ProyectoFinalTPI.Backend.Entidades;
@@ -8,8 +6,7 @@ using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Servicio.ProyectoFinalTPI.Backend.Servicio;
 using NetTopologySuite.Geometries;
-using Npgsql.PostgresTypes;
-
+ 
 namespace ProyectoFinalTPI.Backend.Servicio
 {
     public class PublicacionServicio : IPublicacionServicio
@@ -38,7 +35,13 @@ namespace ProyectoFinalTPI.Backend.Servicio
         {
             await ValidarInteraccionConPublicacion(publicacionId, usuarioId, cancellationToken);
             await _publicacionRepositorio.CrearLike(publicacionId, usuarioId, cancellationToken);
-            
+
+            int totalLikesDados = await _publicacionRepositorio.ContarLikesOtorgados(usuarioId, cancellationToken);
+            if (totalLikesDados >= 1)
+            {
+                await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.Curioso);
+            }
+
             //vuelve a consultar a Neo4j para saber camo quedo esa publicacion (cantidad de likes, quien le dio MG) y arma el DTO
             return await _publicacionRepositorio.ObtenerEstadoLike(publicacionId, usuarioId, cancellationToken);
         }
@@ -72,9 +75,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
         public async Task<PuntuacionPublicacionDto> Puntuar(
             int publicacionId, int usuarioId, int puntaje, CancellationToken cancellationToken = default)
         {
-            if (puntaje < 1 || puntaje > 5)
-                throw new ArgumentOutOfRangeException(nameof(puntaje), "La puntuación debe estar entre 1 y 5.");
-
+            ValidarPuntaje(puntaje);
             await ValidarInteraccionConPublicacion(publicacionId, usuarioId, cancellationToken);
 
             var publicacion = await _publicacionRepositorio.ObtenerPorId(publicacionId, cancellationToken);
@@ -94,9 +95,11 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 await _publicacionRepositorio.PuntuarPublicacion(publicacionId, usuarioId, puntaje, cancellationToken);
             }
 
-            return await _publicacionRepositorio.ObtenerEstadoPuntuacion(publicacionId, usuarioId, cancellationToken);
-        }
+            var estadoNuevo = await _publicacionRepositorio.ObtenerEstadoPuntuacion(publicacionId, usuarioId, cancellationToken);
+            await VerificacionLogrosPuntuacion(usuarioId, publicacion, estadoNuevo, cancellationToken);
 
+            return estadoNuevo;
+        }
         public async Task<PuntuacionPublicacionDto> QuitarPuntuacion(
             int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
         {
@@ -334,7 +337,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
             int idPublicacion = await _publicacionRepositorio.Crear(publicacion);
 
-            await VerificacionLogros(publicacion, gpsUsuario);
+            await VerificacionLogrosCrearPublicacion(publicacion, gpsUsuario);
 
             return idPublicacion;
         }
@@ -369,8 +372,13 @@ namespace ProyectoFinalTPI.Backend.Servicio
             publicacion.EstaOculto = false;
             publicacion.MotivoOculto = null;
 
-            return await _publicacionRepositorio.Crear(publicacion);
+            int idRepost = await _publicacionRepositorio.Crear(publicacion);
+
+            await VerificacionLogroCompartir(publicacion, targetOriginal, cancellationToken);
+
+            return idRepost;
         }
+
         public async Task Eliminar(int id, int? autorId = null, CancellationToken cancellationToken = default)
         {
             if (id <= 0)
@@ -401,36 +409,6 @@ namespace ProyectoFinalTPI.Backend.Servicio
         #endregion
 
         #region Métodos Privados y Validaciones
-        private async Task VerificacionLogros(Publicacion publicacion, Point? gpsUsuario)
-        {
-            var usuarioId = publicacion.UsuarioId;
-
-            await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.PrimerPaso);
-
-            if (gpsUsuario != null && publicacion.Lugar?.Coordenadas != null)
-            {
-                double distancia = publicacion.Lugar.Coordenadas.Distance(gpsUsuario);
-
-                if (distancia <= 0.01)
-                {
-                    int posteosCercanos = await _publicacionRepositorio.ContarPosteosCercanosAlUsuario(usuarioId, gpsUsuario);
-
-                    if (posteosCercanos >= 5)
-                    {
-                        await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.CronistaLocal);
-                    }
-                }
-            }
-
-            int decadasDelUsuario = await _publicacionRepositorio.ContarPosteosDeDiferentesEpocasDelUsuario(usuarioId);
-            if (decadasDelUsuario >= 3)
-            {
-                await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.VozDeUnaEpoca); 
-            } if (decadasDelUsuario == 6)
-            {
-                await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.DecadaCompleta);
-            }
-        }
         private async Task VerificarAutorExistente(int autor)
         {
             var existeAutor = await _usuarioRepositorio.ExisteUsuario(autor);
@@ -556,6 +534,105 @@ namespace ProyectoFinalTPI.Backend.Servicio
             publicacion.EstaOculto = false;
             publicacion.MotivoOculto = null;
         }
+        private static void ValidarPuntaje(int puntaje)
+        {
+            if (puntaje < 1 || puntaje > 5)
+                throw new ArgumentOutOfRangeException(nameof(puntaje), "La puntuación debe estar entre 1 y 5.");
+        }
+
+        #region Verificación de Logros
+        private async Task VerificacionLogrosCrearPublicacion(Publicacion publicacion, Point? gpsUsuario)
+        {
+            var usuarioId = publicacion.UsuarioId;
+
+            await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.PrimerPaso);
+
+            if (gpsUsuario != null && publicacion.Lugar?.Coordenadas != null)
+            {
+                double distancia = publicacion.Lugar.Coordenadas.Distance(gpsUsuario);
+
+                if (distancia <= 0.01)
+                {
+                    int posteosCercanos = await _publicacionRepositorio.ContarPosteosCercanosAlUsuario(usuarioId, gpsUsuario);
+
+                    if (posteosCercanos >= 5)
+                    {
+                        await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.CronistaLocal);
+                    }
+                }
+            }
+
+            int cantidadPublicaciones = await _usuarioRepositorio.ContarPublicacionesVisiblesAsync(usuarioId);
+            if (cantidadPublicaciones >= 5)
+            {
+                await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.LinceDeLasPraderas);
+            }
+
+            if (!string.IsNullOrEmpty(publicacion.UrlMultimedia) && publicacion.TipoMultimedia == MultimediaEnum.Foto)
+            {
+                int posteosConFoto = await _publicacionRepositorio.ContarPosteosConImagenDelUsuario(usuarioId);
+
+                if (posteosConFoto >= 10)
+                {
+                    await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.FotografoDelRecuerdo);
+                }
+            }
+
+            int decadasDelUsuario = await _publicacionRepositorio.ContarPosteosDeDiferentesEpocasDelUsuario(usuarioId);
+            if (decadasDelUsuario >= 3)
+            {
+                await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.VozDeUnaEpoca);
+            }
+            if (decadasDelUsuario == 6)
+            {
+                await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.DecadaCompleta);
+            }
+        }
+        private async Task VerificacionLogrosPuntuacion(int usuarioId, Publicacion? publicacion, PuntuacionPublicacionDto estadoNuevo, CancellationToken cancellationToken)
+        {
+            int totalPuntosOtorgados = await _publicacionRepositorio.SumarPuntosOtorgadosPorUsuario(usuarioId, cancellationToken);
+            if (totalPuntosOtorgados >= 1)
+            {
+                await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.Curioso);
+            }
+            if (totalPuntosOtorgados >= 50)
+            {
+                await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.Generoso);
+            }
+
+            if (publicacion != null)
+            {
+                int autorId = publicacion.UsuarioId;
+                int puntosTotalesEnPost = estadoNuevo.PuntosTotales;
+
+                if (puntosTotalesEnPost >= 20)
+                {
+                    await _logroServicio.VerificarYDarLogro(autorId, LogroEnum.Popular);
+                }
+
+                if (puntosTotalesEnPost >= 100)
+                {
+                    await _logroServicio.VerificarYDarLogro(autorId, LogroEnum.Leyenda);
+                }
+            }
+        }
+        private async Task VerificacionLogroCompartir(Publicacion publicacion, Publicacion targetOriginal, CancellationToken cancellationToken)
+        {
+            int idUsuario = publicacion.UsuarioId;
+
+            if (targetOriginal.UsuarioId != idUsuario)
+            {
+                int totalRepostsAjenos = await _publicacionRepositorio
+                    .ContarRepostsDeOtrosUsuarios(idUsuario, cancellationToken);
+
+                if (totalRepostsAjenos >= 10)
+                {
+                    await _logroServicio.VerificarYDarLogro(idUsuario, LogroEnum.ViajeroDelTiempo);
+                }
+            }
+        }
+        #endregion
+
         #endregion
     }
 }
