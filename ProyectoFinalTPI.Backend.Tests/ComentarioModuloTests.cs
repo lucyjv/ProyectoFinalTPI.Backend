@@ -105,7 +105,7 @@ public class ComentarioModuloTests
     }
 
     private static ComentarioServicio CrearServicio(ApplicationDbContext context) =>
-        new(new ComentarioRepositorio(context), new UsuarioRepositorio(context));
+        new(new PublicacionRepositorio(context, null!), new ComentarioRepositorio(context), new UsuarioRepositorio(context), new LogroServicio(new LogrosUsuariosRepositorio(context)));
 
     private static ApplicationDbContext CrearContexto()
     {

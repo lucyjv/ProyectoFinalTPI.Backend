@@ -8,6 +8,7 @@ using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Repositorio;
+using ProyectoFinalTPI.Backend.Dtos.Usuario;
 
 namespace ProyectoFinalTPI.Backend.Servicio
 {
@@ -35,6 +36,24 @@ namespace ProyectoFinalTPI.Backend.Servicio
         public async Task<List<Logros_Usuarios>> MostrarLogrosDeUsuario(int idUsuario)
         {
             return await _logrosUsuariosRepositorio.ObtenerPorUsuario(idUsuario);
+        }
+
+        public async Task<List<LogroEstadoDto>> ObtenerCatalogoParaUsuario(int idUsuario)
+        {
+            var catalogo = await _logrosUsuariosRepositorio.ObtenerCatalogo();
+            var obtenidos = (await _logrosUsuariosRepositorio.ObtenerPorUsuario(idUsuario))
+                .ToDictionary(registro => registro.LogroId, registro => registro.FechaDesbloqueo);
+
+            return catalogo.Select(logro => new LogroEstadoDto
+            {
+                Id = logro.Id,
+                Titulo = logro.Titulo,
+                Descripcion = logro.Descripcion,
+                UrlIcono = logro.UrlIcono,
+                PuntosRecompensa = logro.PuntosRecompensa,
+                Desbloqueado = obtenidos.ContainsKey(logro.Id),
+                FechaDesbloqueo = obtenidos.TryGetValue(logro.Id, out var fecha) ? fecha : null
+            }).ToList();
         }
 
         private Logros_Usuarios CrearLogroDeUsuario(int idUsuario, int idLogro, DateTime fechaDesbloqueo)

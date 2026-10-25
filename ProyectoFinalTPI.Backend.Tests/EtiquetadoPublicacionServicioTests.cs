@@ -116,6 +116,8 @@ public class EtiquetadoPublicacionServicioTests
 
     private sealed class UsuarioRepositorioFake : IUsuarioRepositorio
     {
+            public Task<Usuario_Interactivo?> ObtenerYUsuarioInteractivoPorIdAsync(int id) => Task.FromResult<Usuario_Interactivo?>(null);
+
         private readonly HashSet<int> _idsExistentes;
 
         public UsuarioRepositorioFake(params int[] idsExistentes)

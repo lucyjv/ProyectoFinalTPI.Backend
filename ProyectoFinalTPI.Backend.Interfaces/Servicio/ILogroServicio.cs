@@ -11,6 +11,7 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Servicio
     {
         Task VerificarYDarLogro(int idUsuario, LogroEnum logro);
         Task<List<Logros_Usuarios>> MostrarLogrosDeUsuario(int idUsuario);
+        Task<List<ProyectoFinalTPI.Backend.Dtos.Usuario.LogroEstadoDto>> ObtenerCatalogoParaUsuario(int idUsuario);
 
     }
 }

@@ -38,6 +38,9 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                            .OrderByDescending(ul => ul.FechaDesbloqueo)
                            .ToListAsync();
         }
+
+        public Task<List<Logro>> ObtenerCatalogo() =>
+            _context.Logro.AsNoTracking().OrderBy(logro => logro.Id).ToListAsync();
     }
 }
 

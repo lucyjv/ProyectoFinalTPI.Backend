@@ -141,7 +141,8 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 CantidadPublicaciones = cantidadPublicaciones,
                 CantidadSeguidores = cantidadSeguidores,
                 CantidadSeguidos = cantidadSeguidos,
-                LoSigo = loSigo
+                LoSigo = loSigo,
+                Logros = await _logroServicio.ObtenerCatalogoParaUsuario(usuario.Id)
             };
 
             if (usuario is Usuario_Personal personal)

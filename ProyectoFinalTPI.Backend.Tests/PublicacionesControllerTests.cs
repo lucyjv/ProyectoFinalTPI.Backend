@@ -621,7 +621,7 @@ namespace ProyectoFinalTPI.Backend.Tests
             public string? Cursor { get; private set; }
             public int Limite { get; private set; }
 
-            public async Task<int> Crear(Publicacion publicacion, Stream? archivo = null, string? nombreArchivo = null)
+            public async Task<int> Crear(Publicacion publicacion, Stream? archivo = null, string? nombreArchivo = null, NetTopologySuite.Geometries.Point? gpsUsuario = null)
             {
                 PublicacionCreada = publicacion;
                 NombreArchivoRecibido = nombreArchivo;

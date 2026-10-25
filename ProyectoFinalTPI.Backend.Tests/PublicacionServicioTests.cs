@@ -23,7 +23,7 @@ namespace ProyectoFinalTPI.Backend.Tests
         public PublicacionServicioTests()
         {
             _servicio = new PublicacionServicio(
-                _repositorio, _usuarios, _multimedia, _sesiones, _seguimiento);
+                _repositorio, _usuarios, _multimedia, _sesiones, _seguimiento, Moq.Mock.Of<ILogroServicio>());
         }
 
         [Fact]
@@ -645,6 +645,13 @@ namespace ProyectoFinalTPI.Backend.Tests
         // Estos dobles reemplazan las dependencias externas del servicio.
         private class PublicacionRepositorioFake : IPublicacionRepositorio
         {
+            public Task<int> ContarPosteosDeDiferentesEpocasDelUsuario(int usuarioId, CancellationToken cancellationToken = default) => Task.FromResult(0);
+            public Task<int> ContarPosteosConImagenDelUsuario(int usuarioId, CancellationToken cancellationToken = default) => Task.FromResult(0);
+            public Task<int> ContarRepostsDeOtrosUsuarios(int usuarioId, CancellationToken cancellationToken = default) => Task.FromResult(0);
+            public Task<int> ContarLikesOtorgados(int usuarioId, CancellationToken cancellationToken = default) => Task.FromResult(0);
+            public Task<int> SumarPuntosOtorgadosPorUsuario(int usuarioId, CancellationToken cancellationToken = default) => Task.FromResult(0);
+            public Task<int> ContarPosteosCercanosAlUsuario(int usuarioId, NetTopologySuite.Geometries.Point gpsUsuario, CancellationToken cancellationToken = default) => Task.FromResult(0);
+
             public Task<int> CrearComentario(Comentario comentario, CancellationToken cancellationToken = default)
                 => throw new NotImplementedException();
 
@@ -827,6 +834,8 @@ namespace ProyectoFinalTPI.Backend.Tests
 
         private class UsuarioRepositorioFake : IUsuarioRepositorio
         {
+            public Task<Usuario_Interactivo?> ObtenerYUsuarioInteractivoPorIdAsync(int id) => Task.FromResult<Usuario_Interactivo?>(null);
+
             public bool Existe { get; set; }
             public int IdConsultado { get; private set; }
 
