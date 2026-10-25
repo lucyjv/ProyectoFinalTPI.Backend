@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
+using Moq;
 using NetTopologySuite.Geometries;
 using ProyectoFinalTPI.Backend.Dtos.Comentario;
 using ProyectoFinalTPI.Backend.Entidades;
+using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Repositorio;
 using ProyectoFinalTPI.Backend.Repositorio.Data;
 using ProyectoFinalTPI.Backend.Servicio;
@@ -105,7 +107,7 @@ public class ComentarioModuloTests
     }
 
     private static ComentarioServicio CrearServicio(ApplicationDbContext context) =>
-        new(new PublicacionRepositorio(context, null!), new ComentarioRepositorio(context), new UsuarioRepositorio(context), new LogroServicio(new LogrosUsuariosRepositorio(context)));
+        new(new ComentarioRepositorio(context), new UsuarioRepositorio(context), Mock.Of<INotificacionServicio>());
 
     private static ApplicationDbContext CrearContexto()
     {

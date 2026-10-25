@@ -152,6 +152,9 @@ public class EtiquetadoPublicacionServicioTests
         public Task<bool> ExistePorEmailAsync(string email, CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
+        public Task<bool> ExistePorUsernameAsync(string username, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
         public Task AgregarAsync(Usuario usuario, CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
@@ -159,6 +162,9 @@ public class EtiquetadoPublicacionServicioTests
             throw new NotImplementedException();
 
         public Task<Usuario?> ObtenerPorUsernameAsync(string username, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<List<AutorResumenDto>> BuscarPorUsernameAsync(string texto, int limite, CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
         public Task<int> ContarPublicacionesVisiblesAsync(int usuarioId, CancellationToken cancellationToken = default) =>

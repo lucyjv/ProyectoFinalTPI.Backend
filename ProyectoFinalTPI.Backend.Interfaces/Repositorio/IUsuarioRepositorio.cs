@@ -21,6 +21,11 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Repositorio
 
         Task<bool> ExistePorEmailAsync(string email, CancellationToken cancellationToken = default);
 
+        /// <summary>
+        /// Indica si ya existe un usuario con el username indicado (sin distinción de mayúsculas).
+        /// </summary>
+        Task<bool> ExistePorUsernameAsync(string username, CancellationToken cancellationToken = default);
+
         Task AgregarAsync(Usuario usuario, CancellationToken cancellationToken = default);
 
         Task ActualizarAsync(Usuario usuario, CancellationToken cancellationToken = default);
@@ -30,6 +35,14 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Repositorio
         /// Devuelve null si no existe.
         /// </summary>
         Task<Usuario?> ObtenerPorUsernameAsync(string username, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Busca usuarios cuyo username contiene el texto indicado, sin distinguir mayúsculas.
+        /// </summary>
+        Task<List<AutorResumenDto>> BuscarPorUsernameAsync(
+            string texto,
+            int limite,
+            CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Cuenta la cantidad de publicaciones visibles de un usuario.

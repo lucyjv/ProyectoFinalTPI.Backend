@@ -396,6 +396,158 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.ToTable("Moderaciones");
                 });
 
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Momento", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ClaveIdentidad")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Descripcion")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly?>("FechaFin")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("FechaInicio")
+                        .HasColumnType("date");
+
+                    b.Property<int?>("MomentoCanonicoId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MomentoPadreId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Nombre")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<long>("VersionCatalogo")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(1L);
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClaveIdentidad")
+                        .IsUnique();
+
+                    b.HasIndex("MomentoCanonicoId");
+
+                    b.HasIndex("MomentoPadreId");
+
+                    b.HasIndex("Nombre");
+
+                    b.ToTable("momentos", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_momentos_canonico_distinto", "\"MomentoCanonicoId\" IS NULL OR \"MomentoCanonicoId\" <> \"Id\"");
+
+                            t.HasCheckConstraint("CK_momentos_fechas", "\"FechaInicio\" IS NULL OR \"FechaFin\" IS NULL OR \"FechaFin\" >= \"FechaInicio\"");
+
+                            t.HasCheckConstraint("CK_momentos_identidad_activa", "\"MomentoCanonicoId\" IS NULL OR \"ClaveIdentidad\" IS NULL");
+
+                            t.HasCheckConstraint("CK_momentos_nombre", "length(btrim(\"Nombre\")) > 0");
+
+                            t.HasCheckConstraint("CK_momentos_padre_distinto", "\"MomentoPadreId\" IS NULL OR \"MomentoPadreId\" <> \"Id\"");
+                        });
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.MomentoAlias", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("MomentoId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Texto")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("TextoNormalizado")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TextoNormalizado");
+
+                    b.HasIndex("MomentoId", "TextoNormalizado")
+                        .IsUnique();
+
+                    b.ToTable("momentos_alias", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_momentos_alias_texto", "length(btrim(\"Texto\")) > 0 AND length(btrim(\"TextoNormalizado\")) > 0");
+                        });
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Notificacion", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("EmisorId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("FechaExpiracion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("FechaLeida")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Leida")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("PublicacionId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int>("UsuarioDestinatarioId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EmisorId");
+
+                    b.HasIndex("FechaExpiracion")
+                        .HasDatabaseName("IX_notificaciones_expiracion");
+
+                    b.HasIndex("UsuarioDestinatarioId", "FechaCreacion")
+                        .HasDatabaseName("IX_notificaciones_usuario_fecha");
+
+                    b.HasIndex("UsuarioDestinatarioId", "Tipo", "PublicacionId", "Leida")
+                        .HasDatabaseName("IX_notificaciones_pendiente");
+
+                    b.ToTable("notificaciones", (string)null);
+                });
+
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Publicacion", b =>
                 {
                     b.Property<int>("Id")
@@ -429,6 +581,11 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Property<string>("MotivoOculto")
                         .HasColumnType("text");
 
+                    b.Property<bool>("PermitirMomentosAutomaticos")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<int?>("PublicacionOriginalId")
                         .HasColumnType("integer");
 
@@ -446,7 +603,18 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Property<int>("UsuarioId")
                         .HasColumnType("integer");
 
+                    b.Property<long>("VersionContenido")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(1L);
+
+                    b.Property<long>("VersionRelaciones")
+                        .HasColumnType("bigint");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("Fecha");
 
                     b.HasIndex("GrupoId");
 
@@ -457,6 +625,47 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.HasIndex("UsuarioId");
 
                     b.ToTable("Publicaciones");
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.PublicacionMomento", b =>
+                {
+                    b.Property<int>("PublicacionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("MomentoId")
+                        .HasColumnType("integer");
+
+                    b.Property<double?>("Confianza")
+                        .HasColumnType("double precision");
+
+                    b.Property<int>("Estado")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("FechaActualizacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Origen")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("VersionAnalisis")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("PublicacionId", "MomentoId");
+
+                    b.HasIndex("MomentoId", "Estado", "PublicacionId");
+
+                    b.ToTable("publicaciones_momentos", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_publicaciones_momentos_confianza", "\"Confianza\" IS NULL OR (\"Confianza\" >= 0 AND \"Confianza\" <= 1)");
+
+                            t.HasCheckConstraint("CK_publicaciones_momentos_estado", "\"Estado\" IN (0, 1)");
+
+                            t.HasCheckConstraint("CK_publicaciones_momentos_origen", "\"Origen\" IN (0, 1)");
+                        });
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.ReaccionComentario", b =>
@@ -525,6 +734,68 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.ToTable("sesiones_usuario", (string)null);
                 });
 
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.TrabajoAnalisisRecuerdo", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("CodigoError")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int>("Estado")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("FechaActualizacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Intentos")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("ProximoIntento")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("PublicacionId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("ReservadoHasta")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("TokenReserva")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("VersionAnalizador")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<long>("VersionContenido")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Estado", "ProximoIntento");
+
+                    b.HasIndex("Estado", "ReservadoHasta");
+
+                    b.HasIndex("PublicacionId", "VersionContenido")
+                        .IsUnique();
+
+                    b.ToTable("trabajos_analisis_recuerdos", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_trabajos_analisis_estado", "\"Estado\" BETWEEN 0 AND 6");
+
+                            t.HasCheckConstraint("CK_trabajos_analisis_intentos", "\"Intentos\" >= 0 AND \"VersionContenido\" > 0");
+
+                            t.HasCheckConstraint("CK_trabajos_analisis_reserva", "(\"Estado\" = 1 AND \"TokenReserva\" IS NOT NULL AND \"ReservadoHasta\" IS NOT NULL) OR (\"Estado\" <> 1 AND \"TokenReserva\" IS NULL AND \"ReservadoHasta\" IS NULL)");
+                        });
+                });
+
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Usuario", b =>
                 {
                     b.Property<int>("Id")
@@ -559,6 +830,9 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("Email")
+                        .IsUnique();
+
+                    b.HasIndex("Username")
                         .IsUnique();
 
                     b.ToTable("Usuario", (string)null);
@@ -734,6 +1008,52 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Navigation("Emisor");
                 });
 
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Momento", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Momento", "MomentoCanonico")
+                        .WithMany()
+                        .HasForeignKey("MomentoCanonicoId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Momento", "MomentoPadre")
+                        .WithMany("Hijos")
+                        .HasForeignKey("MomentoPadreId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("MomentoCanonico");
+
+                    b.Navigation("MomentoPadre");
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.MomentoAlias", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Momento", "Momento")
+                        .WithMany("Alias")
+                        .HasForeignKey("MomentoId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Momento");
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Notificacion", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario", "Emisor")
+                        .WithMany()
+                        .HasForeignKey("EmisorId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario", "UsuarioDestinatario")
+                        .WithMany()
+                        .HasForeignKey("UsuarioDestinatarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Emisor");
+
+                    b.Navigation("UsuarioDestinatario");
+                });
+
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Publicacion", b =>
                 {
                     b.HasOne("ProyectoFinalTPI.Backend.Entidades.Grupo", "Grupo")
@@ -767,6 +1087,25 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Navigation("Usuario");
                 });
 
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.PublicacionMomento", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Momento", "Momento")
+                        .WithMany("Publicaciones")
+                        .HasForeignKey("MomentoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Publicacion", "Publicacion")
+                        .WithMany("Momentos")
+                        .HasForeignKey("PublicacionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Momento");
+
+                    b.Navigation("Publicacion");
+                });
+
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.ReaccionComentario", b =>
                 {
                     b.HasOne("ProyectoFinalTPI.Backend.Entidades.Comentario", "Comentario")
@@ -797,6 +1136,17 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Navigation("Usuario");
                 });
 
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.TrabajoAnalisisRecuerdo", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Publicacion", "Publicacion")
+                        .WithMany("TrabajosAnalisis")
+                        .HasForeignKey("PublicacionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Publicacion");
+                });
+
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Comentario", b =>
                 {
                     b.Navigation("Reacciones");
@@ -811,6 +1161,15 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Navigation("Recuerdos");
                 });
 
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Momento", b =>
+                {
+                    b.Navigation("Alias");
+
+                    b.Navigation("Hijos");
+
+                    b.Navigation("Publicaciones");
+                });
+
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Logro", b =>
                 {
                     b.Navigation("LogrosUsuarios");
@@ -819,6 +1178,10 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Publicacion", b =>
                 {
                     b.Navigation("Comentarios");
+
+                    b.Navigation("Momentos");
+
+                    b.Navigation("TrabajosAnalisis");
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Usuario_Interactivo", b =>

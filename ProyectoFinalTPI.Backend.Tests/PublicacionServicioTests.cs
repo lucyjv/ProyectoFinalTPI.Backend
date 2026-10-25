@@ -1,6 +1,9 @@
 using System.Text.Json;
+using Microsoft.Extensions.Options;
+using Moq;
 using ProyectoFinalTPI.Backend.Dtos;
 using ProyectoFinalTPI.Backend.Dtos.Comentario;
+using ProyectoFinalTPI.Backend.Dtos.Lugar;
 using ProyectoFinalTPI.Backend.Dtos.Publicacion;
 using ProyectoFinalTPI.Backend.Dtos.Usuario;
 using ProyectoFinalTPI.Backend.Entidades;
@@ -23,7 +26,9 @@ namespace ProyectoFinalTPI.Backend.Tests
         public PublicacionServicioTests()
         {
             _servicio = new PublicacionServicio(
-                _repositorio, _usuarios, _multimedia, _sesiones, _seguimiento, Moq.Mock.Of<ILogroServicio>());
+                _repositorio, _usuarios, _multimedia, _sesiones, _seguimiento,
+                Options.Create(new FeedRecomendacionesOptions()),
+                Mock.Of<INotificacionServicio>());
         }
 
         [Fact]
@@ -589,6 +594,223 @@ namespace ProyectoFinalTPI.Backend.Tests
             Assert.Equal(1, _repositorio.ConsultasGenerales);
         }
 
+        [Fact]
+        public async Task UnaPuntuacionAltaAportaAfinidadDeCategoriaSinLimitarLaDecada()
+        {
+            _repositorio.InteraccionesFeed = new[]
+            {
+                new InteraccionFeedDto { PublicacionId = 1, MiPuntuacion = 5 }
+            };
+            _repositorio.PublicacionesPorIds = new()
+            {
+                PublicacionFeed(1, CategoriaEnum.Cine, 1982),
+                PublicacionFeed(2, CategoriaEnum.Cine, 2005),
+                PublicacionFeed(3, CategoriaEnum.Música, 2005)
+            };
+
+            var resultado = await _servicio.ObtenerPublicacionesParaVos(10, null, 20);
+
+            Assert.Equal(new[] { 2, 3 }, resultado.Items.Select(p => p.Id));
+        }
+
+        [Fact]
+        public async Task UnLikeFavorecePublicacionesCercanasAlLugarDeLaSemilla()
+        {
+            _repositorio.InteraccionesFeed = new[]
+            {
+                new InteraccionFeedDto { PublicacionId = 1, DioLike = true }
+            };
+            _repositorio.PublicacionesPorIds = new()
+            {
+                PublicacionFeed(1, CategoriaEnum.Lugares, 1985, -34.60, -58.38),
+                PublicacionFeed(2, CategoriaEnum.Cine, 2000, -34.61, -58.38),
+                PublicacionFeed(3, CategoriaEnum.Cine, 2000, -41.13, -71.31)
+            };
+
+            var resultado = await _servicio.ObtenerPublicacionesParaVos(10, null, 20);
+
+            Assert.Equal(new[] { 2, 3 }, resultado.Items.Select(p => p.Id));
+        }
+
+        [Fact]
+        public async Task ElPuntajeColaborativoSeSumaAlRanking()
+        {
+            _repositorio.RecomendacionesConPuntaje = new[]
+            {
+                new RecomendacionPublicacionDto { PublicacionId = 2, PuntajeColaborativo = 10 },
+                new RecomendacionPublicacionDto { PublicacionId = 3, PuntajeColaborativo = 1 }
+            };
+            _repositorio.PublicacionesPorIds = new()
+            {
+                PublicacionFeed(2, CategoriaEnum.Cine, 2000),
+                PublicacionFeed(3, CategoriaEnum.Cine, 2000)
+            };
+
+            var resultado = await _servicio.ObtenerPublicacionesParaVos(10, null, 20);
+
+            Assert.Equal(new[] { 2, 3 }, resultado.Items.Select(p => p.Id));
+        }
+
+        [Fact]
+        public async Task ElRankingEnviaAlRepositorioLosPesosConfigurados()
+        {
+            var opciones = new FeedRecomendacionesOptions
+            {
+                PesoLike = 5,
+                PesoPuntuacion = 7,
+                PesoEtiqueta = 2
+            };
+            var servicio = new PublicacionServicio(
+                _repositorio, _usuarios, _multimedia, _sesiones, _seguimiento,
+                Options.Create(opciones),
+                Mock.Of<INotificacionServicio>());
+
+            await servicio.ObtenerPublicacionesParaVos(10, null, 20);
+
+            Assert.Equal(new PesosRecomendacionFeedDto(5, 7, 2),
+                _repositorio.PesosRecomendacionConsultados);
+        }
+
+        [Fact]
+        public async Task ElFeedExcluyeLikesYPuntuacionesInclusoSiSonRecomendados()
+        {
+            _repositorio.InteraccionesFeed = new[]
+            {
+                new InteraccionFeedDto { PublicacionId = 1, DioLike = true },
+                new InteraccionFeedDto { PublicacionId = 2, MiPuntuacion = 1 }
+            };
+            _repositorio.Recomendaciones = new[] { 1, 2, 3 };
+            _repositorio.PublicacionesPorIds = new()
+            {
+                PublicacionFeed(1, CategoriaEnum.Cine, 2000),
+                PublicacionFeed(2, CategoriaEnum.Cine, 2000),
+                PublicacionFeed(3, CategoriaEnum.Cine, 2000)
+            };
+
+            var resultado = await _servicio.ObtenerPublicacionesParaVos(10, null, 20);
+
+            Assert.Equal(3, Assert.Single(resultado.Items).Id);
+        }
+
+        [Fact]
+        public async Task ElFallbackPriorizaNuncaVistasLuegoVistasAntiguasYLuegoRecientes()
+        {
+            var ahora = DateTimeOffset.UtcNow;
+            _repositorio.InteraccionesFeed = new[]
+            {
+                new InteraccionFeedDto { PublicacionId = 2, UltimaImpresionUnixMs = ahora.AddDays(-15).ToUnixTimeMilliseconds() },
+                new InteraccionFeedDto { PublicacionId = 3, UltimaImpresionUnixMs = ahora.AddDays(-1).ToUnixTimeMilliseconds() }
+            };
+            _repositorio.PublicacionesPorIds = new()
+            {
+                PublicacionFeed(1, CategoriaEnum.Cine, 2000),
+                PublicacionFeed(2, CategoriaEnum.Cine, 2000),
+                PublicacionFeed(3, CategoriaEnum.Cine, 2000)
+            };
+
+            var resultado = await _servicio.ObtenerPublicacionesParaVos(10, null, 20);
+
+            Assert.Equal(new[] { 1, 2, 3 }, resultado.Items.Select(p => p.Id));
+        }
+
+        [Fact]
+        public async Task UnaVistaRecienteCompletaLaPaginaSiNoHayContenidoNuevo()
+        {
+            _repositorio.InteraccionesFeed = new[]
+            {
+                new InteraccionFeedDto
+                {
+                    PublicacionId = 2,
+                    UltimaImpresionUnixMs = DateTimeOffset.UtcNow.AddHours(-1).ToUnixTimeMilliseconds()
+                }
+            };
+            _repositorio.PublicacionesPorIds = new()
+            {
+                PublicacionFeed(1, CategoriaEnum.Cine, 2000),
+                PublicacionFeed(2, CategoriaEnum.Cine, 2000)
+            };
+
+            var resultado = await _servicio.ObtenerPublicacionesParaVos(10, null, 2);
+
+            Assert.Equal(new[] { 1, 2 }, resultado.Items.Select(p => p.Id));
+        }
+
+        [Fact]
+        public async Task ElCorteDeVistasRecientesSeEnviaAneo4jConCatorceDias()
+        {
+            var antes = DateTimeOffset.UtcNow.AddDays(-14).ToUnixTimeMilliseconds();
+
+            await _servicio.ObtenerPublicacionesParaVos(10, null, 20);
+
+            var despues = DateTimeOffset.UtcNow.AddDays(-14).ToUnixTimeMilliseconds();
+            Assert.InRange(_repositorio.VistasDesdeConsultadas, antes, despues);
+        }
+
+        [Fact]
+        public async Task RegistrarImpresionesEliminaDuplicadosYDescartaPublicacionesNoVisibles()
+        {
+            _usuarios.Existe = true;
+            _repositorio.PublicacionesPorIds = new() { PublicacionFeed(2, CategoriaEnum.Cine, 2000) };
+
+            await _servicio.RegistrarImpresionesFeed(10, new[] { 2, 2, 99 });
+
+            Assert.Equal(10, _repositorio.UsuarioImpresionesRegistradas);
+            Assert.Equal(new[] { 2 }, _repositorio.IdsImpresionesRegistradas);
+            Assert.Equal(new[] { 2, 99 }, _repositorio.LotesConsultados.Single());
+        }
+
+        [Theory]
+        [InlineData(0, new[] { 1 })]
+        [InlineData(10, new int[] { })]
+        [InlineData(10, new[] { 0 })]
+        public async Task RegistrarImpresionesRechazaDatosInvalidos(int usuarioId, int[] ids)
+        {
+            await Assert.ThrowsAsync<ArgumentException>(() =>
+                _servicio.RegistrarImpresionesFeed(usuarioId, ids));
+
+            Assert.Null(_repositorio.IdsImpresionesRegistradas);
+        }
+
+        [Fact]
+        public async Task RegistrarImpresionesRechazaUsuarioInexistente()
+        {
+            _usuarios.Existe = false;
+
+            await Assert.ThrowsAsync<KeyNotFoundException>(() =>
+                _servicio.RegistrarImpresionesFeed(10, new[] { 1 }));
+
+            Assert.Null(_repositorio.IdsImpresionesRegistradas);
+        }
+
+        [Fact]
+        public async Task RegistrarImpresionesRechazaMasDeCincuentaIds()
+        {
+            await Assert.ThrowsAsync<ArgumentException>(() =>
+                _servicio.RegistrarImpresionesFeed(10, Enumerable.Range(1, 51).ToArray()));
+
+            Assert.Null(_repositorio.IdsImpresionesRegistradas);
+        }
+
+        [Fact]
+        public async Task RegistrarImpresionesNoEscribeSiNingunaPublicacionEsVisible()
+        {
+            _usuarios.Existe = true;
+
+            await _servicio.RegistrarImpresionesFeed(10, new[] { 99 });
+
+            Assert.Null(_repositorio.IdsImpresionesRegistradas);
+        }
+
+        private static PublicacionDetalleDto PublicacionFeed(int id, CategoriaEnum categoria, int anio,
+            double latitud = 0, double longitud = 0) => new()
+        {
+            Id = id,
+            Categoria = categoria,
+            Fecha = new DateTime(anio, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            Lugar = new LugarDetalleDto { Latitud = latitud, Longitud = longitud }
+        };
+
         [Theory]
         [InlineData(0)]
         [InlineData(6)]
@@ -681,9 +903,15 @@ namespace ProyectoFinalTPI.Backend.Tests
             public List<PublicacionDetalleDto> PublicacionesPorIds { get; set; } = new();
             public List<int[]> LotesConsultados { get; } = new();
             public IReadOnlyList<int> Recomendaciones { get; set; } = Array.Empty<int>();
+            public IReadOnlyList<RecomendacionPublicacionDto>? RecomendacionesConPuntaje { get; set; }
+            public IReadOnlyList<InteraccionFeedDto> InteraccionesFeed { get; set; } = Array.Empty<InteraccionFeedDto>();
+            public int? UsuarioImpresionesRegistradas { get; private set; }
+            public IReadOnlyCollection<int>? IdsImpresionesRegistradas { get; private set; }
             public int ConsultasRecomendaciones { get; private set; }
             public int UsuarioRecomendacionesConsultado { get; private set; }
             public int LimiteRecomendaciones { get; private set; }
+            public long VistasDesdeConsultadas { get; private set; }
+            public PesosRecomendacionFeedDto? PesosRecomendacionConsultados { get; private set; }
 
             public Task<int> Crear(Publicacion publicacion)
             {
@@ -794,23 +1022,48 @@ namespace ProyectoFinalTPI.Backend.Tests
                 return Task.FromResult(PublicacionesPorIds.Where(p => p.Autor.Id == usuarioId).ToList());
             }
 
-            public Task<IReadOnlyList<int>> ObtenerPublicacionesRelacionadasPorLikes(
-                int usuarioId, int cantidadMaxima, CancellationToken cancellationToken = default)
+            public Task<IReadOnlyList<RecomendacionPublicacionDto>> ObtenerRecomendacionesFeed(
+                int usuarioId, int cantidadMaxima, long vistasDesdeUnixMs,
+                PesosRecomendacionFeedDto pesos, CancellationToken cancellationToken = default)
             {
                 ConsultasRecomendaciones++;
                 UsuarioRecomendacionesConsultado = usuarioId;
                 LimiteRecomendaciones = cantidadMaxima;
-                return Task.FromResult(Recomendaciones);
+                VistasDesdeConsultadas = vistasDesdeUnixMs;
+                PesosRecomendacionConsultados = pesos;
+                if (RecomendacionesConPuntaje is not null)
+                    return Task.FromResult(RecomendacionesConPuntaje);
+                var resultado = Recomendaciones.Select((id, indice) => new RecomendacionPublicacionDto
+                {
+                    PublicacionId = id,
+                    PuntajeColaborativo = Recomendaciones.Count - indice
+                }).ToArray();
+                return Task.FromResult<IReadOnlyList<RecomendacionPublicacionDto>>(resultado);
+            }
+
+            public Task<IReadOnlyList<InteraccionFeedDto>> ObtenerInteraccionesFeed(
+                int usuarioId, CancellationToken cancellationToken = default)
+                => Task.FromResult(InteraccionesFeed);
+
+            public Task RegistrarImpresionesFeed(int usuarioId, IReadOnlyCollection<int> publicacionesIds,
+                CancellationToken cancellationToken = default)
+            {
+                UsuarioImpresionesRegistradas = usuarioId;
+                IdsImpresionesRegistradas = publicacionesIds.ToArray();
+                return Task.CompletedTask;
             }
 
             public List<Publicacion> ObtenerTodasPublicaciones() => throw new NotImplementedException();
             public List<Publicacion> ObtenerPublicacionPorCategoria(CategoriaEnum categoria) => throw new NotImplementedException();
             public int ConsultasGenerales { get; private set; }
             public Task<List<PublicacionDetalleDto>> ObtenerPublicacionesParaVos(IReadOnlyCollection<CategoriaEnum> categorias, DateTime fechaCorte, CursorCronologicoDto? cursor, int limite, CancellationToken cancellationToken = default)
+                => ObtenerPublicacionesParaVos(categorias, fechaCorte, cursor, limite, Array.Empty<int>(), cancellationToken);
+
+            public Task<List<PublicacionDetalleDto>> ObtenerPublicacionesParaVos(IReadOnlyCollection<CategoriaEnum> categorias, DateTime fechaCorte, CursorCronologicoDto? cursor, int limite, IReadOnlyCollection<int> excluirIds, CancellationToken cancellationToken = default)
             {
                 ConsultasGenerales++;
                 Assert.Empty(categorias);
-                return Task.FromResult(PublicacionesPorIds.Where(p => p.FechaCreacion <= fechaCorte)
+                return Task.FromResult(PublicacionesPorIds.Where(p => p.FechaCreacion <= fechaCorte && !excluirIds.Contains(p.Id))
                     .OrderByDescending(p => p.FechaCreacion).ThenByDescending(p => p.Id)
                     .Take(limite + 1).ToList());
             }
@@ -850,9 +1103,11 @@ namespace ProyectoFinalTPI.Backend.Tests
             public Task<List<int>> ObtenerIdsExistentesAsync(IReadOnlyCollection<int> ids, CancellationToken cancellationToken = default) => throw new NotImplementedException();
             public Task<Usuario?> ObtenerPorEmailAsync(string email, CancellationToken cancellationToken = default) => throw new NotImplementedException();
             public Task<bool> ExistePorEmailAsync(string email, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+            public Task<bool> ExistePorUsernameAsync(string username, CancellationToken cancellationToken = default) => throw new NotImplementedException();
             public Task AgregarAsync(Usuario usuario, CancellationToken cancellationToken = default) => throw new NotImplementedException();
             public Task ActualizarAsync(Usuario usuario, CancellationToken cancellationToken = default) => throw new NotImplementedException();
             public Task<Usuario?> ObtenerPorUsernameAsync(string username, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+            public Task<List<AutorResumenDto>> BuscarPorUsernameAsync(string texto, int limite, CancellationToken cancellationToken = default) => throw new NotImplementedException();
             public Task<int> ContarPublicacionesVisiblesAsync(int usuarioId, CancellationToken cancellationToken = default) => Task.FromResult(0);
         }
 

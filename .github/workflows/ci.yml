@@ -1,29 +1,67 @@
+
 name: Backend CI
 
 on:
   push:
-    branches: [main, feature/ci-be]
+    branches: [develop, main]
   pull_request:
-    branches: [main]
+    branches: [develop, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-and-test:
+    name: Build and test
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
-      - name: Descargar repositorio
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Instalar .NET
+      - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 9.0.x
 
-      - name: Restaurar dependencias
+      - name: Restore dependencies
         run: dotnet restore ProyectoFinalTPI.Backend.sln
 
-      - name: Compilar solución
-        run: dotnet build ProyectoFinalTPI.Backend.sln --no-restore --configuration Release
+      - name: Build
+        run: >
+          dotnet build ProyectoFinalTPI.Backend.sln
+          --configuration Release
+          --no-restore
 
-      - name: Ejecutar pruebas
-        run: dotnet test ProyectoFinalTPI.Backend.sln --no-build --no-restore --configuration Release
+      - name: Run tests and collect coverage
+        run: >
+          dotnet test ProyectoFinalTPI.Backend.sln
+          --configuration Release
+          --no-build
+          --logger "trx;LogFileName=backend-tests.trx"
+          --collect:"XPlat Code Coverage"
+          --results-directory ./TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: TestResults/**/*.trx
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload coverage results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: TestResults/**/coverage.cobertura.xml
+          if-no-files-found: ignore
+          retention-days: 14

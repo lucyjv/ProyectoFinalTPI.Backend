@@ -5,7 +5,8 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Servicio
     public interface IAuthServicio
     {
         /// <summary>
-        /// Registra un nuevo usuario. Lanza InvalidOperationException si el email ya existe.
+        /// Registra un nuevo usuario.
+        /// Lanza <see cref="InvalidOperationException"/> si el email o el username ya están en uso.
         /// </summary>
         Task<ResultadoAutenticacionDto> RegistrarAsync(RegistroDto dto, string? userAgent = null, CancellationToken cancellationToken = default);
 

@@ -697,6 +697,8 @@ namespace ProyectoFinalTPI.Backend.Tests
             public List<Publicacion> ObtenerPublicacionPorCategoria(CategoriaEnum categoria) => throw new NotImplementedException();
             public Task<ResultadoPaginadoDto<PublicacionDetalleDto>> ObtenerFeedSeguidos(int usuarioId, string? cursor, int limite, CancellationToken cancellationToken = default) => throw new NotImplementedException();
             public Task<ResultadoPaginadoDto<PublicacionDetalleDto>> ObtenerPublicacionesParaVos(int usuarioId, string? cursor, int limite, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+            public Task RegistrarImpresionesFeed(int usuarioId, IReadOnlyCollection<int> publicacionesIds,
+                CancellationToken cancellationToken = default) => Task.CompletedTask;
 
             public int? IdEliminado { get; private set; }
             public int? AutorEliminado { get; private set; }

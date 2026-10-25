@@ -1,3 +1,4 @@
+using Moq;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Dtos.Usuario;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
@@ -13,7 +14,7 @@ public class SeguimientoServicioTests
     public async Task Seguirse_a_si_mismo_devuelve_auto_seguimiento_sin_consultar_usuarios()
     {
         var repositorio = new UsuarioRepositorioFake(10);
-        var servicio = new SeguimientoServicio(repositorio, null!, Moq.Mock.Of<ILogroServicio>());
+        var servicio = new SeguimientoServicio(repositorio, null!, Mock.Of<INotificacionServicio>());
 
         var resultado = await servicio.SeguirUsuario(10, 10);
 
@@ -29,7 +30,7 @@ public class SeguimientoServicioTests
         int idUsuarioInexistente)
     {
         var repositorio = new UsuarioRepositorioFake(idUsuarioExistente);
-        var servicio = new SeguimientoServicio(repositorio, null!, Moq.Mock.Of<ILogroServicio>());
+        var servicio = new SeguimientoServicio(repositorio, null!, Mock.Of<INotificacionServicio>());
 
         var resultado = await servicio.SeguirUsuario(10, 20);
 
@@ -42,7 +43,7 @@ public class SeguimientoServicioTests
     public async Task Dejar_de_seguirse_a_si_mismo_devuelve_auto_seguimiento_sin_consultar_usuarios()
     {
         var repositorio = new UsuarioRepositorioFake(10);
-        var servicio = new SeguimientoServicio(repositorio, null!, Moq.Mock.Of<ILogroServicio>());
+        var servicio = new SeguimientoServicio(repositorio, null!, Mock.Of<INotificacionServicio>());
 
         var resultado = await servicio.DejarDeSeguirUsuario(10, 10);
 
@@ -58,7 +59,7 @@ public class SeguimientoServicioTests
         int idUsuarioInexistente)
     {
         var repositorio = new UsuarioRepositorioFake(idUsuarioExistente);
-        var servicio = new SeguimientoServicio(repositorio, null!, Moq.Mock.Of<ILogroServicio>());
+        var servicio = new SeguimientoServicio(repositorio, null!, Mock.Of<INotificacionServicio>());
 
         var resultado = await servicio.DejarDeSeguirUsuario(10, 20);
 
@@ -71,7 +72,7 @@ public class SeguimientoServicioTests
     public async Task Listar_seguidos_devuelve_null_si_el_usuario_no_existe_sin_acceder_a_Neo4j()
     {
         var repositorio = new UsuarioRepositorioFake();
-        var servicio = new SeguimientoServicio(repositorio, null!, Moq.Mock.Of<ILogroServicio>());
+        var servicio = new SeguimientoServicio(repositorio, null!, Mock.Of<INotificacionServicio>());
 
         var resultado = await servicio.ListarSeguidos(99);
 
@@ -83,7 +84,7 @@ public class SeguimientoServicioTests
     public async Task Listar_seguidores_devuelve_null_si_el_usuario_no_existe_sin_acceder_a_Neo4j()
     {
         var repositorio = new UsuarioRepositorioFake();
-        var servicio = new SeguimientoServicio(repositorio, null!, Moq.Mock.Of<ILogroServicio>());
+        var servicio = new SeguimientoServicio(repositorio, null!, Mock.Of<INotificacionServicio>());
 
         var resultado = await servicio.ListarSeguidores(99);
 
@@ -144,6 +145,9 @@ public class SeguimientoServicioTests
         public Task<bool> ExistePorEmailAsync(string email, CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
+        public Task<bool> ExistePorUsernameAsync(string username, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
         public Task AgregarAsync(Usuario usuario, CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
@@ -151,6 +155,9 @@ public class SeguimientoServicioTests
             throw new NotImplementedException();
 
         public Task<Usuario?> ObtenerPorUsernameAsync(string username, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<List<AutorResumenDto>> BuscarPorUsernameAsync(string texto, int limite, CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
         public Task<int> ContarPublicacionesVisiblesAsync(int usuarioId, CancellationToken cancellationToken = default) =>

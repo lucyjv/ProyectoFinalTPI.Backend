@@ -149,4 +149,13 @@ public class ComentarioRepositorio(ApplicationDbContext context) : IComentarioRe
         .Where(c => c.UsuarioId == usuarioId && !c.EstaOculto)
         .CountAsync(cancellationToken);
     }
+
+    /// <inheritdoc/>
+    public async Task<Publicacion?> ObtenerPublicacionAsync(
+    int publicacionId, CancellationToken cancellationToken = default)
+    {
+        return await context.Publicaciones
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == publicacionId, cancellationToken);
+    }
 }

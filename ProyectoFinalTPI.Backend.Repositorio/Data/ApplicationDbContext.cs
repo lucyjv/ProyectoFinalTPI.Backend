@@ -25,8 +25,61 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
         public DbSet<ReaccionComentario> ReaccionesComentario { get; set; }
         public DbSet<Grupo> Grupos { get; set; }
         public DbSet<GrupoIntegrante> GruposIntegrantes { get; set; }
+        public DbSet<Momento> Momentos { get; set; }
+        public DbSet<MomentoAlias> MomentosAlias { get; set; }
+        public DbSet<PublicacionMomento> PublicacionesMomentos { get; set; }
+        public DbSet<TrabajoAnalisisRecuerdo> TrabajosAnalisisRecuerdos { get; set; }
+        public DbSet<Notificacion> Notificaciones { get; set; }
+
+        public override int SaveChanges(bool acceptAllChangesOnSuccess)
+        {
+            PrepararIdentidadesMomentos();
+            PrepararTrabajosAnalisis();
+            return base.SaveChanges(acceptAllChangesOnSuccess);
+        }
+
+        public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+        {
+            PrepararIdentidadesMomentos();
+            PrepararTrabajosAnalisis();
+            return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        }
+
+        private void PrepararIdentidadesMomentos()
+        {
+            ChangeTracker.DetectChanges();
+            foreach (var entry in ChangeTracker.Entries<Momento>().Where(e => e.State is EntityState.Added or EntityState.Modified).ToList())
+            {
+                var m = entry.Entity;
+                m.ClaveIdentidad = m.MomentoCanonicoId == null ? IdentidadMomento.Clave(m.Nombre, m.FechaInicio, m.FechaFin) : null;
+                m.VersionCatalogo = entry.State == EntityState.Added ? 1 : checked(entry.Property(x => x.VersionCatalogo).OriginalValue + 1);
+            }
+        }
         public DbSet<Logro> Logro { get; set; }
         public DbSet<Logros_Usuarios> Logros_Usuarios { get; set; }
+
+        private void PrepararTrabajosAnalisis()
+        {
+            ChangeTracker.DetectChanges();
+            foreach (var entry in ChangeTracker.Entries<Publicacion>().ToList())
+            {
+                var p = entry.Entity;
+                if (p.PublicacionOriginalId != null || p.EstaOculto || entry.State is EntityState.Deleted or EntityState.Detached) continue;
+                var nuevo = entry.State == EntityState.Added;
+                var contenidoCambio = new[] { nameof(Publicacion.Titulo), nameof(Publicacion.Descripcion), nameof(Publicacion.Fecha) }
+                    .Any(n => entry.Property(n).IsModified && !Equals(entry.Property(n).OriginalValue, entry.Property(n).CurrentValue));
+                if (!nuevo && !contenidoCambio) continue;
+                // Una repetición de SaveChanges tras un fallo conserva el trabajo pendiente del contexto.
+                if (ChangeTracker.Entries<TrabajoAnalisisRecuerdo>().Any(t => t.State == EntityState.Added && ReferenceEquals(t.Entity.Publicacion, p))) continue;
+                p.VersionContenido = nuevo ? 1 : checked(entry.Property(x => x.VersionContenido).OriginalValue + 1);
+                var ahora = DateTime.UtcNow;
+                TrabajosAnalisisRecuerdos.Add(new TrabajoAnalisisRecuerdo
+                {
+                    Publicacion = p, VersionContenido = p.VersionContenido,
+                    FechaCreacion = ahora, FechaActualizacion = ahora, ProximoIntento = ahora
+                });
+            }
+        }
 
 
         // ── Chat ──────────────────────────────────────────────────────────────
@@ -38,6 +91,14 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
 
             modelBuilder.HasPostgresExtension("postgis");
 
+            modelBuilder.Entity<Publicacion>().HasIndex(p => p.Fecha);
+            modelBuilder.Entity<Publicacion>().Property(p => p.PermitirMomentosAutomaticos).HasDefaultValue(true);
+            modelBuilder.Entity<Publicacion>().Property(p => p.VersionContenido).HasDefaultValue(1L).IsConcurrencyToken();
+            modelBuilder.ApplyConfiguration(new ConfiguracionTrabajoAnalisis());
+            modelBuilder.ApplyConfiguration(new ConfiguracionMomento());
+            modelBuilder.ApplyConfiguration(new ConfiguracionMomentoAlias());
+            modelBuilder.ApplyConfiguration(new ConfiguracionPublicacionMomento());
+
             modelBuilder.Entity<Usuario>()
                 .ToTable("Usuario")
                 .HasDiscriminator<string>("tipo_usuario")
@@ -48,6 +109,10 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
 
             modelBuilder.Entity<Usuario>()
                 .HasIndex(usuario => usuario.Email)
+                .IsUnique();
+
+            modelBuilder.Entity<Usuario>()
+                .HasIndex(usuario => usuario.Username)
                 .IsUnique();
 
             modelBuilder.Entity<SesionUsuario>(entity =>
@@ -182,6 +247,40 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
                 entity.HasIndex(e => new { e.EmisorId, e.DestinatarioId })
                       .HasDatabaseName("IX_mensajes_chat_participantes");
             });
+            // ── Configuración de Notificacion ─────────────────────────────────────
+            modelBuilder.Entity<Notificacion>(entity =>
+            {
+                entity.ToTable("notificaciones");
+
+                entity.Property(e => e.Tipo)
+                      .HasConversion<string>()
+                      .HasMaxLength(50);
+
+                // FK al destinatario: si el usuario es eliminado, sus notificaciones también.
+                entity.HasOne(e => e.UsuarioDestinatario)
+                      .WithMany()
+                      .HasForeignKey(e => e.UsuarioDestinatarioId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                // FK al emisor: opcional. Si el emisor es eliminado, la FK queda en null.
+                entity.HasOne(e => e.Emisor)
+                      .WithMany()
+                      .HasForeignKey(e => e.EmisorId)
+                      .OnDelete(DeleteBehavior.SetNull);
+
+                // Índice principal: obtener notificaciones de un usuario ordenadas por fecha.
+                entity.HasIndex(e => new { e.UsuarioDestinatarioId, e.FechaCreacion })
+                      .HasDatabaseName("IX_notificaciones_usuario_fecha");
+
+                // Índice para la limpieza de expiradas.
+                entity.HasIndex(e => e.FechaExpiracion)
+                      .HasDatabaseName("IX_notificaciones_expiracion");
+
+                // Índice para ExisteNotificacionPendienteAsync (unicidad por tipo+publicación).
+                entity.HasIndex(e => new { e.UsuarioDestinatarioId, e.Tipo, e.PublicacionId, e.Leida })
+                      .HasDatabaseName("IX_notificaciones_pendiente");
+            });
+            // ──────────────────────────────────────────────────────────────────────
             modelBuilder.Entity<Logro>()
                 .ToTable("logros");
 

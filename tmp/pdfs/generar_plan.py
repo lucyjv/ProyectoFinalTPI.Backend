@@ -1,0 +1,115 @@
+from pathlib import Path
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_LEFT
+from reportlab.lib.pagesizes import A4
+from xml.sax.saxutils import escape
+
+ROOT = Path(__file__).resolve().parents[2]
+OUT = ROOT / 'output/pdf/nostalgiar-plan-red-de-recuerdos.pdf'
+styles = getSampleStyleSheet()
+styles.add(ParagraphStyle(name='TitleCustom', fontName='Helvetica-Bold', fontSize=29, leading=33, textColor=colors.HexColor('#143D45'), spaceAfter=20))
+styles.add(ParagraphStyle(name='SectionCustom', fontName='Helvetica-Bold', fontSize=20, leading=24, textColor=colors.HexColor('#143D45'), spaceAfter=16))
+styles.add(ParagraphStyle(name='SubCustom', fontName='Helvetica-Bold', fontSize=11.5, leading=15, textColor=colors.HexColor('#143D45'), spaceBefore=12, spaceAfter=6))
+styles.add(ParagraphStyle(name='BodyCustom', fontName='Helvetica', fontSize=10, leading=14.5, spaceAfter=9))
+styles.add(ParagraphStyle(name='SmallCustom', fontName='Helvetica', fontSize=8.3, leading=11, spaceAfter=4))
+story=[]
+def p(text): story.append(Paragraph(text, styles['BodyCustom']))
+def h(text): story.append(Paragraph(text, styles['SubCustom']))
+def title(n,text):
+    if story: story.append(PageBreak())
+    story.append(Paragraph(f'{n:02d} / {text}', styles['SectionCustom']))
+def table(rows,widths):
+    data=[[Paragraph(escape(str(c)),styles['SmallCustom']) for c in row] for row in rows]
+    t=Table(data,colWidths=widths,hAlign='LEFT',repeatRows=1)
+    t.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),colors.HexColor('#DDEDEA')),('VALIGN',(0,0),(-1,-1),'TOP'),('LEFTPADDING',(0,0),(-1,-1),8),('RIGHTPADDING',(0,0),(-1,-1),8),('TOPPADDING',(0,0),(-1,-1),8),('BOTTOMPADDING',(0,0),(-1,-1),8),('LINEBELOW',(0,0),(-1,-1),0.4,colors.HexColor('#CEDBD8'))]))
+    story.append(t);story.append(Spacer(1,10))
+def footer(c,d):
+    c.setStrokeColor(colors.HexColor('#CEDBD8'));c.line(44,43,A4[0]-44,43)
+    c.setFont('Helvetica',8);c.setFillColor(colors.HexColor('#53676B'))
+    c.drawString(44,29,'NOSTALGIAR  |  Propuesta técnica  |  20 de octubre de 2026')
+    c.drawRightString(A4[0]-44,29,str(d.page))
+
+story.append(Spacer(1,42))
+story.append(Paragraph('NOSTALGIAR',styles['SubCustom']))
+story.append(Paragraph('Una red de recuerdos',styles['TitleCustom']))
+p('<b>Un día. Un momento. Un lugar.</b>')
+p('Plan de datos, procesamiento y endpoints para que cada recuerdo permita descubrir otras historias relacionadas.')
+story.append(Spacer(1,20))
+table([['Conexión','Qué une','Experiencia'],['Un lugar','Recuerdos a 200 metros o menos, de cualquier fecha.','Más historias de este lugar'],['Un día','Mismo día, mes y año, a 200 metros o menos.','Ese día, por acá'],['Un momento','El mismo acontecimiento colectivo, aunque cambien fecha y ubicación.','Parte de este momento']],[85,235,187])
+h('Decisiones acordadas')
+p('La persona publica sin pasos adicionales. El recuerdo aparece inmediatamente y el análisis del título y la descripción se ejecuta en segundo plano. Las asociaciones automáticas pueden corregirse después.')
+p('Los momentos se construyen con el contenido de las personas; no requieren cargar previamente un catálogo exhaustivo. Pueden organizarse de lo específico a lo general.')
+h('Alcance de este documento')
+p('Propuesta de implementación sobre el backend existente. No implica cambios ya aplicados, migraciones ejecutadas ni un proveedor de IA contratado. Los nombres de entidades y contratos son propuestos.')
+p('<b>Lectura:</b> arquitectura y reglas (p. 2), datos (p. 3), análisis (p. 4), API (p. 5), ejecución y validación (p. 6).')
+
+title(2,'Arquitectura y reglas del producto')
+h('Encaje con el backend actual')
+p('Publicacion ya contiene Titulo, Descripcion, Fecha, LugarId y PublicacionOriginalId. Lugar guarda coordenadas. ApplicationDbContext configura PostgreSQL, PostGIS y geometry(Point, 4326). Neo4j participa actualmente en likes, etiquetas de usuarios y recomendaciones. El proyecto ya registra un servicio alojado para limpieza de mensajes.')
+p('<b>Propuesta:</b> PostgreSQL será la fuente de verdad de momentos, asociaciones y trabajos. Las conexiones geográficas y temporales se consultan sin almacenar cada pareja de recuerdos. Neo4j puede incorporar una proyección más adelante si una necesidad concreta lo justifica; no es requisito para esta entrega.')
+h('Distancia y fecha')
+p('El radio de 200 m se mide desde el recuerdo abierto, incluyendo el límite. No se forman grupos transitivos: si A está cerca de B y B de C, C podría quedar fuera del radio de A. Es posible encadenar la navegación sin afirmar que todos comparten el mismo lugar.')
+p('Consultar la distancia en metros mediante ST_DWithin sobre coordenadas convertidas a geography. Crear un índice GiST compatible con esa expresión y verificar el plan de ejecución. No comparar 200 contra coordenadas expresadas en grados.')
+p('Separar la fecha calendario del recuerdo de la fecha de creación. Se propone DateOnly con columna date para la primera, y conservar el instante UTC de creación. Antes de migrar, revisar la representación y las convenciones actuales para no desplazar fechas existentes.')
+h('Visibilidad, orden y duplicados')
+p('Excluir publicaciones ocultas, el propio recuerdo y reposts de las listas de descubrimiento. Usar la publicación original como referencia; el comentario de un repost no se trata inicialmente como un nuevo recuerdo histórico.')
+p('Orden inicial: distancia ascendente e Id como desempate para lugar y día; fecha del recuerdo e Id para las publicaciones de un momento. Los listados usan cursores que respetan ese orden.')
+h('Presentación')
+p('En el detalle: primero "Ese día, por acá", luego "Parte de este momento" y después "Más historias de este lugar". Cada tarjeta explica sus coincidencias. El frontend evita repetir tarjetas en los bloques iniciales; las páginas completas conservan todos los resultados de su criterio.')
+p('Mientras se analiza, los bloques de lugar y día funcionan. Si no hay momento o el análisis falla, no se presenta un error de publicación. No hace falta un gráfico de nodos para que la navegación se sienta como una red.')
+
+title(3,'Datos y consistencia')
+table([['Entidad propuesta','Campos y reglas principales'],['Momento','Id; Nombre; Descripcion; FechaInicio/Fin opcionales; MomentoPadreId opcional; Estado activo/fusionado; MomentoCanonicoId opcional.'],['MomentoAlias','Id; MomentoId; Texto; TextoNormalizado. Unicidad por momento y alias; el mismo texto puede ser ambiguo entre acontecimientos.'],['PublicacionMomento','Clave única PublicacionId + MomentoId; Origen automático/autor; Estado activo/rechazado; Confianza opcional; VersionAnalisis; fechas de auditoría.'],['EtiquetaTematica / PublicacionEtiquetaTematica','Nombre normalizado único; unión única publicación + etiqueta. Separadas de las etiquetas de usuarios ya existentes.'],['TrabajoAnalisisRecuerdo','Id; PublicacionId; VersionContenido; Estado; Intentos; ProximoIntento; ReservadoHasta; TokenReserva; Error resumido; VersionAnalizador. Unicidad por publicación y versión.'],['Cambios en Publicacion','Fecha calendario; VersionContenido; PermitirMomentosAutomaticos. Estado de análisis expuesto a través de un DTO.']],[145,362])
+h('Jerarquía de momentos')
+p('Ejemplo: Mundial de México 1986 &gt; Argentina vs. Inglaterra &gt; Gol de Maradona a los ingleses. "Argentina campeón del mundo 1986" puede ser otro hijo del Mundial. La primera versión admite un padre por momento, sin ciclos.')
+p('Guardar el vínculo específico. Al consultar un padre, incluir opcionalmente sus descendientes, eliminando duplicados de publicaciones. Una publicación puede pertenecer a varios momentos cuando el texto lo justifique.')
+h('Correcciones que sobreviven al análisis')
+p('Un vínculo quitado queda como rechazado; no se borra su decisión. Las selecciones explícitas del autor prevalecen sobre la automatización. Si el autor indica que no corresponde ningún momento colectivo, desactivar PermitirMomentosAutomaticos hasta que lo reactive.')
+h('Fusiones e índices')
+p('Una fusión redirige al momento canónico, unifica alias y asociaciones y conserva rechazos. No permitir ciclos de redirección ni jerarquías circulares. Un alias igual no basta para fusionar dos acontecimientos.')
+p('Índices: fecha del recuerdo; claves de ambas direcciones en publicaciones-momentos; padre de momento; alias normalizado; estado y próximo intento de trabajos; índice espacial. Agregar restricciones de claves foráneas y definir explícitamente el borrado de trabajos y asociaciones al eliminar publicaciones.')
+
+title(4,'Procesamiento sin bloquear la publicación')
+h('1. Guardar y responder')
+p('Dentro de una transacción de PostgreSQL, guardar la publicación y un TrabajoAnalisisRecuerdo pendiente para su versión. Confirmar y responder 201 con Id y Location. Si la transacción falla no queda ni publicación ni trabajo parcial. No llamar al proveedor de IA dentro de esa transacción.')
+h('2. Reservar un trabajo')
+p('Un BackgroundService toma un lote pequeño mediante una reserva atómica. Puede implementarse con bloqueo de filas y SKIP LOCKED. La reserva tiene vencimiento: si el proceso se cae, otro puede recuperar el trabajo. Cada ejecución usa un alcance de dependencias y su propio DbContext.')
+h('3. Extraer pistas y resolver candidatos')
+p('IAnalizadorRecuerdo recibe título, descripción y fecha como contexto. Devuelve una estructura validada con etiquetas, acontecimientos propuestos, referencias temporales y fragmentos que respaldan cada propuesta. El contenido del recuerdo se trata como datos, no como instrucciones para el analizador.')
+p('MomentoServicio busca alias y nombres compatibles y compara candidatos antes de crear. Puede usar una segunda evaluación semántica o búsqueda por similitud si los ejemplos reales lo requieren. La fecha del recuerdo ayuda, pero no obliga a que el acontecimiento ocurriera ese día.')
+p('Vincular solo cuando la evidencia sea suficiente. Ante ambigüedad, finalizar sin momento. La confianza es una señal interna que debe calibrarse; no un porcentaje garantizado. Los momentos nuevos y sus padres también necesitan evidencia: no inventar jerarquías para completar campos.')
+h('4. Aplicar de forma segura')
+p('Antes de guardar, comprobar que la versión del contenido sigue vigente, que la reserva pertenece a este proceso y que no hubo una corrección incompatible. Aplicar solo asociaciones automáticas permitidas. Si el resultado está desactualizado, descartarlo y dejar que se procese la versión nueva.')
+p('Procesar de forma idempotente: reintentar un trabajo no duplica etiquetas, vínculos o momentos. Resolver creaciones concurrentes mediante restricciones, coordinación y una segunda búsqueda dentro del guardado; la similitud semántica puede requerir una fusión posterior.')
+h('5. Fallos y operación')
+p('Reintentos con espera creciente y variación aleatoria; un límite configurable y estado de fallo definitivo. Registrar métricas de pendientes, antigüedad de cola, fallos, latencia y consumo. No registrar textos completos ni secretos de forma indiscriminada.')
+p('Definir límites de entrada y salida, tiempo máximo y presupuesto por análisis. Para recuerdos existentes, generar trabajos por lotes, con pausa y deduplicación. Un problema del proveedor nunca revierte una publicación ya creada.')
+
+title(5,'Contratos de API y experiencia')
+table([['Método y ruta propuesta','Comportamiento'],['POST /api/publicaciones','Mantener creación inmediata: 201 con Id y Location. Encola análisis en la misma transacción.'],['GET /api/publicaciones/{id}/relaciones','Resumen con hasta 6 tarjetas por bloque, hayMas y estado del análisis. Incluye momentos asociados.'],['GET /api/publicaciones/{id}/relacionadas?tipo=dia|lugar&cursor=...','Listado paginado; radio fijo inicial de 200 m. Tamaño por defecto 20, máximo 50. Devuelve siguienteCursor.'],['GET /api/momentos/{id}','Nombre, descripción, padre e hijos. Resolver el canónico cuando fue fusionado.'],['GET /api/momentos/{id}/publicaciones?incluirDescendientes=true&cursor=...','Recuerdos visibles del momento; descendientes opcionales y resultados únicos.'],['GET /api/momentos?busqueda=...','Búsqueda paginada para explorar o corregir asociaciones.'],['PUT /api/publicaciones/{id}/momentos','Corrección completa e idempotente de la selección por el autor autenticado.']],[278,229])
+h('Contrato de corrección')
+p('Cuerpo propuesto: <b>momentoIds</b> (selección completa), <b>permitirMomentosAutomaticos</b> y <b>versionRelaciones</b>. Los vínculos existentes omitidos se rechazan; los seleccionados quedan explícitos. Selección vacía más automatización desactivada significa "ningún momento".')
+p('La versión permite detectar ediciones simultáneas. Un conflicto devuelve 409 para recargar la selección. Las decisiones se interpretan sobre momentos canónicos para que una fusión no reactive un rechazo anterior.')
+h('Respuesta del resumen')
+p('Campos: publicacionId; analisis.estado; dia.items/hayMas; lugar.items/hayMas; momentos. Cada tarjeta puede incluir distanciaMetros y motivos (mismoDia, mismoLugar). Cada momento incluye Id, nombre, origen y padre opcional.')
+p('Estados públicos de análisis: pendiente, procesando, completado, sinMomento y fallido. No exponer errores técnicos. El cliente puede refrescar con consultas espaciadas mientras el detalle está abierto; no es necesario incorporar WebSockets inicialmente.')
+h('Acceso y errores')
+p('Lecturas sujetas a visibilidad. Si el recuerdo de origen no existe o no es visible, responder 404. Para correcciones: 401 sin sesión, 403 si no es el autor, 400 para datos inválidos y 409 ante conflicto. Usar ProblemDetails como en el controlador actual. No aceptar un AutorId del cuerpo como autorización para estas nuevas operaciones.')
+
+title(6,'Cómo llevarlo a cabo')
+table([['Entrega','Trabajo concreto','Criterio de finalización'],['1. Lugar y día','Revisar fechas existentes; migración de fecha e índice espacial; repositorio, servicio y DTO de relaciones; endpoints y bloques del detalle.','Misma fecha completa; distancia real en metros; resultados visibles, paginados y sin reposts.'],['2. Momentos y correcciones','Migraciones de momentos, alias y vínculos; jerarquía y fusiones; exploración y corrección autenticada.','Navegar padre/hijos; corregir y rechazar vínculos; mantener decisiones tras fusiones.'],['3. Automatización','Tabla de trabajos y versión del contenido; worker; adaptador IA; resolución de candidatos; métricas y reintentos.','Crear sin esperar IA; recuperar trabajos interrumpidos; no aplicar resultados viejos.'],['4. Activación gradual','Evaluar textos reales; ajustar umbrales; habilitar análisis nuevo y luego recuerdos existentes por lotes.','Calidad revisada, costo medido y cola controlada antes de ampliar el volumen.']],[63,233,211])
+h('Ubicación de las piezas')
+p('<b>Entidades:</b> nuevos modelos y estados. <b>Repositorio:</b> DbSets, configuraciones, migraciones, consultas espaciales y reserva de trabajos. <b>Interfaces:</b> contratos de análisis, momentos y relaciones. <b>Servicio:</b> reglas de negocio y resolución. <b>API:</b> controladores, requests, mappings y registro del worker en Program.cs.')
+h('Pruebas que verifican el comportamiento')
+p('Geografía: puntos dentro, fuera y en el límite de 200 m con PostGIS real; recordar que la cercanía no es transitiva. Fechas: mismo día de distinto año, fechas históricas y migración sin desplazamiento. API: visibilidad, autorización, cursores y exclusión de reposts.')
+p('Procesamiento: caída tras reservar; reintento sin duplicados; dos workers simultáneos; edición durante el análisis; rechazo del autor durante el análisis; publicación eliminada antes de completar. Momentos: sinónimos del mismo evento, eventos distintos con palabras iguales, ambigüedad y navegación sin ciclos.')
+h('Decisiones antes de activar la IA')
+p('Elegir proveedor y modelo después de comparar un conjunto de recuerdos representativos, incluyendo casos ambiguos y acontecimientos locales. Acordar tratamiento de textos enviados al proveedor, retención, presupuesto mensual, límites y umbrales. Medir asociaciones incorrectas y cobertura por separado; no optimizar solo cuántos recuerdos reciben un momento.')
+h('Resultado esperado')
+p('La primera entrega ya conecta historias por lugar y día. Las siguientes incorporan acontecimientos colectivos sin cambiar la creación del recuerdo. La navegación permite pasar de una experiencia individual a otras miradas y después a una historia compartida.')
+
+doc=SimpleDocTemplate(str(OUT),pagesize=A4,rightMargin=44,leftMargin=44,topMargin=44,bottomMargin=57,title='Nostalgiar - Plan de red de recuerdos',author='Nostalgiar',subject='Datos, procesamiento y endpoints')
+doc.build(story,onFirstPage=footer,onLaterPages=footer)
+print(OUT)

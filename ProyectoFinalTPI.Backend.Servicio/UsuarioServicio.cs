@@ -43,6 +43,18 @@ namespace ProyectoFinalTPI.Backend.Servicio
             };
         }
 
+        public async Task<IReadOnlyList<AutorResumenDto>> BuscarAsync(
+            string texto, int limite = 10, CancellationToken cancellationToken = default)
+        {
+            var busqueda = texto?.Trim() ?? string.Empty;
+            if (busqueda.Length < 2 || busqueda.Length > 50)
+                throw new ArgumentException("El texto de búsqueda debe tener entre 2 y 50 caracteres.", nameof(texto));
+            if (limite < 1 || limite > 20)
+                throw new ArgumentOutOfRangeException(nameof(limite), "El límite debe estar entre 1 y 20.");
+
+            return await _repositorio.BuscarPorUsernameAsync(busqueda, limite, cancellationToken);
+        }
+
         /// <inheritdoc/>
         public async Task<UsuarioPerfilDto> ObtenerPerfilPorUsernameAsync(
             string username, int? usuarioAutenticadoId, CancellationToken cancellationToken = default)
@@ -156,7 +168,12 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 dto.TipoUsuario = "Usuario_Personal";
                 dto.Nombre = personal.Nombre;
                 dto.Apellido = personal.Apellido;
-                dto.Reputacion = FormatearReputacion(personal.Reputacion);
+                var reputacion = personal.Reputacion;
+                if (reputacion == ReputacionEnum.Errante && cantidadPublicaciones > 0)
+                {
+                    reputacion = ReputacionEnum.Nostalgico;
+                }
+                dto.Reputacion = FormatearReputacion(reputacion);
                 dto.PuntosNostalgia = personal.PuntosNostalgia;
             }
             else if (usuario is Usuario_Marca marca)

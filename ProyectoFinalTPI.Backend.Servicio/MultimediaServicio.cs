@@ -13,27 +13,28 @@ namespace ProyectoFinalTPI.Backend.Servicio
 {
     public class MultimediaServicio : IMultimediaServicio
     {
-        private readonly Lazy<Cloudinary> _cloudinary;
+        private readonly Cloudinary _cloudinary;
 
         public MultimediaServicio(IConfiguration configuration)
         {
-            _cloudinary = new Lazy<Cloudinary>(() =>
-            {
-                var cloudName = configuration["Cloudinary:CloudName"];
-                var apiKey = configuration["Cloudinary:ApiKey"];
-                var apiSecret = configuration["Cloudinary:ApiSecret"];
-                if (string.IsNullOrWhiteSpace(cloudName)
-                    || string.IsNullOrWhiteSpace(apiKey)
-                    || string.IsNullOrWhiteSpace(apiSecret))
-                    throw new InvalidOperationException(
-                        "Para subir archivos configurá Cloudinary:CloudName, Cloudinary:ApiKey y Cloudinary:ApiSecret.");
+            var account = new Account(
+                configuration["Cloudinary:CloudName"],
+                configuration["Cloudinary:ApiKey"],
+                configuration["Cloudinary:ApiSecret"]);
 
-                return new Cloudinary(new Account(cloudName, apiKey, apiSecret));
-            });
+            _cloudinary = new Cloudinary(account);
         }
         public async Task<string> SubirAsync(Stream? archivo, string? nombreArchivo, string? urlExterna, MultimediaEnum tipo)
         {
-            var cloudinary = _cloudinary.Value;
+            // YouTube entrega una página HTML, no un archivo que Cloudinary pueda subir.
+            // Conservamos el enlace para reproducirlo con el reproductor de YouTube.
+            if (archivo == null && tipo == MultimediaEnum.Video &&
+                Uri.TryCreate(urlExterna, UriKind.Absolute, out var uri) &&
+                uri.Scheme == Uri.UriSchemeHttps && EsHostYouTube(uri.Host))
+            {
+                return urlExterna!;
+            }
+
             var file = archivo != null
             ? new FileDescription(nombreArchivo, archivo)
             : new FileDescription(urlExterna);
@@ -53,7 +54,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 return resultado.SecureUrl.ToString();
             }
 
-            var resultadoImagen = await cloudinary.UploadAsync(
+            var resultadoImagen = await _cloudinary.UploadAsync(
                 new ImageUploadParams
                 {
                     File = file,
@@ -65,5 +66,12 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
             return resultadoImagen.SecureUrl.ToString();
         }
+
+        private static bool EsHostYouTube(string host) =>
+            host.Equals("youtu.be", StringComparison.OrdinalIgnoreCase) ||
+            host.Equals("youtube.com", StringComparison.OrdinalIgnoreCase) ||
+            host.EndsWith(".youtube.com", StringComparison.OrdinalIgnoreCase) ||
+            host.Equals("youtube-nocookie.com", StringComparison.OrdinalIgnoreCase) ||
+            host.EndsWith(".youtube-nocookie.com", StringComparison.OrdinalIgnoreCase);
     }
 }

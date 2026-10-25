@@ -8,9 +8,10 @@ using ProyectoFinalTPI.Backend.Servicio.Mappings;
 namespace ProyectoFinalTPI.Backend.Servicio;
 
 public class ComentarioServicio(
-    IPublicacionRepositorio _publicacionRepositorio,
     IComentarioRepositorio _comentarioRepositorio,
-    IUsuarioRepositorio _usuarioRepositorio, ILogroServicio _logroServicio) : IComentarioServicio
+    IUsuarioRepositorio _usuarioRepositorio,
+    INotificacionServicio _notificacionServicio,
+    ILogroServicio _logroServicio) : IComentarioServicio
 {
     private const int LimiteRespuestasIniciales = 3;
 
@@ -100,7 +101,20 @@ public class ComentarioServicio(
         comentario.ComentarioPadreId = padre?.Id;
 
         await _comentarioRepositorio.Crear(comentario, cancellationToken);
+
+        // Notificar al autor de la publicación si el comentador no es el mismo autor.
+        var publicacion = await ObtenerPublicacionParaNotificacion(
+            comentario.PublicacionId, cancellationToken);
+        if (publicacion != null && publicacion.UsuarioId != comentario.UsuarioId)
+        {
+            await _notificacionServicio.NotificarComentarioEnPublicacionAsync(
+                publicacion.UsuarioId,
+                comentario.PublicacionId,
+                comentario.UsuarioId,
+                cancellationToken);
+        }
         await VerificarLogrosComentario(comentario.UsuarioId, comentario.PublicacionId, cancellationToken);
+
         return comentario.ToDto(comentario.UsuarioId);
     }
 
@@ -209,5 +223,16 @@ public class ComentarioServicio(
         {
             await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.Conversador);
         }
+    }
+    };
+
+    private async Task<Publicacion?> ObtenerPublicacionParaNotificacion(
+    int publicacionId, CancellationToken cancellationToken)
+    {
+        // Necesitamos saber el UsuarioId del autor de la publicación.
+        // Usamos el repositorio de comentarios que ya existe en este servicio.
+        // Si no existe, simplemente no notificamos (no rompemos el flujo principal).
+        return await comentarioRepositorio.ObtenerPublicacionAsync(
+            publicacionId, cancellationToken);
     }
 }

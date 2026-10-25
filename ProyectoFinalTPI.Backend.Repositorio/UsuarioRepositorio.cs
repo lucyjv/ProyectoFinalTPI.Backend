@@ -79,6 +79,14 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                 .AnyAsync(u => u.Email.ToLower() == emailNormalizado, cancellationToken);
         }
 
+        /// <inheritdoc/>
+        public async Task<bool> ExistePorUsernameAsync(string username, CancellationToken cancellationToken = default)
+        {
+            var usernameNormalizado = username.Trim().ToLower();
+            return await _context.Usuarios
+                .AnyAsync(u => u.Username.ToLower() == usernameNormalizado, cancellationToken);
+        }
+
         public async Task AgregarAsync(Usuario usuario, CancellationToken cancellationToken = default)
         {
             await _context.Usuarios.AddAsync(usuario, cancellationToken);
@@ -101,6 +109,25 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                 .FirstOrDefaultAsync(
                     u => u.Username.ToLower() == usernameNormalizado,
                     cancellationToken);
+        }
+
+        public async Task<List<AutorResumenDto>> BuscarPorUsernameAsync(
+            string texto, int limite, CancellationToken cancellationToken = default)
+        {
+            var textoNormalizado = texto.Trim().ToLower();
+
+            return await _context.Usuarios
+                .AsNoTracking()
+                .Where(usuario => usuario.Username.ToLower().Contains(textoNormalizado))
+                .OrderByDescending(usuario => usuario.Username.ToLower().StartsWith(textoNormalizado))
+                .ThenBy(usuario => usuario.Username)
+                .Take(limite)
+                .Select(usuario => new AutorResumenDto
+                {
+                    Id = usuario.Id,
+                    Username = usuario.Username
+                })
+                .ToListAsync(cancellationToken);
         }
 
         /// <inheritdoc/>

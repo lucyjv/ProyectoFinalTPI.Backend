@@ -36,6 +36,23 @@ public class UsuarioController : ControllerBase
         return Ok(resultado);
     }
 
+    [HttpGet("buscar")]
+    [SwaggerOperation(
+        Summary = "Busca usuarios por username.",
+        Description = "Requiere autenticación. Devuelve hasta 20 coincidencias parciales, sin distinguir mayúsculas."
+    )]
+    [SwaggerResponse(StatusCodes.Status200OK, "Usuarios encontrados.", typeof(IReadOnlyList<AutorResumenDto>))]
+    [SwaggerResponse(StatusCodes.Status400BadRequest, "Los parámetros de búsqueda no son válidos.", typeof(ProblemDetails))]
+    [SwaggerResponse(StatusCodes.Status401Unauthorized, "Se requiere una autenticación válida.")]
+    public async Task<IActionResult> Buscar(
+        [FromQuery] string texto,
+        [FromQuery] int limite = 10,
+        CancellationToken cancellationToken = default)
+    {
+        var resultado = await _usuarioServicio.BuscarAsync(texto, limite, cancellationToken);
+        return Ok(resultado);
+    }
+
     [HttpGet("perfil/{username}")]
     [SwaggerOperation(
         Summary = "Obtiene el perfil completo de un usuario por su username.",
