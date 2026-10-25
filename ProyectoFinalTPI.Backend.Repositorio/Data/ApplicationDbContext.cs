@@ -205,8 +205,6 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
                 new Logro { Id = 1, Titulo = "Primer Paso", Descripcion = "Crear tu primer recuerdo en el mapa.", PuntosRecompensa = 0, UrlIcono = "." },
                 new Logro { Id = 2, Titulo = "Primera Palabra", Descripcion = "Escribir tu primer comentario en el recuerdo de otra persona.", PuntosRecompensa = 0, UrlIcono = "." },
                 new Logro { Id = 3, Titulo = "Con Amigos", Descripcion = "Seguir a tus primeros 5 usuarios en la red social.", PuntosRecompensa = 0, UrlIcono = "." },
-                new Logro { Id = 4, Titulo = "Melómano", Descripcion = "Sintonizar tu primera canción en el reproductor web retro.", PuntosRecompensa = 0, UrlIcono = "." },
-                new Logro { Id = 5, Titulo = "Turista del Pasado", Descripcion = "Abrir tu primer Dato Curioso Aleatorio en el mapa.", PuntosRecompensa = 0, UrlIcono = "." },
                 new Logro { Id = 6, Titulo = "Curioso", Descripcion = "Dar tu primer punto de nostalgia a una publicación.", PuntosRecompensa = 0, UrlIcono = "." },
                 new Logro { Id = 7, Titulo = "Cronista Local", Descripcion = "Publicar 5 recuerdos cerca de tu ubicación física.", PuntosRecompensa = 0, UrlIcono = "." },
                 new Logro { Id = 8, Titulo = "Voz de una Época", Descripcion = "Tener recuerdos publicados en 3 décadas distintas.", PuntosRecompensa = 0, UrlIcono = "." },
@@ -218,7 +216,6 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
                 new Logro { Id = 14, Titulo = "Racha de Hierro", Descripcion = "Ingresar a la aplicación durante 3 días seguidos.", PuntosRecompensa = 0, UrlIcono = "." },
                 new Logro { Id = 15, Titulo = "Década Completa", Descripcion = "Tener al menos un recuerdo publicado en cada una de las 6 décadas.", PuntosRecompensa = 0, UrlIcono = "." },
                 new Logro { Id = 16, Titulo = "Leyenda", Descripcion = "Lograr que uno de tus recuerdos llegue a 100 puntos de nostalgia.", PuntosRecompensa = 0, UrlIcono = "." },
-                new Logro { Id = 17, Titulo = "Mecenas", Descripcion = "Otorgar 500 puntos de nostalgia en total a la comunidad.", PuntosRecompensa = 0, UrlIcono = "." },
                 new Logro { Id = 18, Titulo = "Influencer", Descripcion = "Conseguir 50 seguidores en tu red.", PuntosRecompensa = 0, UrlIcono = "." },
                 new Logro { Id = 19, Titulo = "Racha de Oro", Descripcion = "Ingresar a la aplicación durante 7 días seguidos.", PuntosRecompensa = 0, UrlIcono = "." },
                 new Logro { Id = 20, Titulo = "Viajero del Tiempo", Descripcion = "Republicar 10 publicaciones de otros usuarios en tu feed.", PuntosRecompensa = 0, UrlIcono = "." }

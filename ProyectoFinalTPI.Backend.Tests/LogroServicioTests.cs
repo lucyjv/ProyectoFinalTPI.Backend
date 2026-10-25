@@ -10,12 +10,12 @@ namespace ProyectoFinalTPI.Backend.Tests;
 public class LogroServicioTests
 {
     [Fact]
-    public async Task CatalogoNuevoTieneVeinteLogrosBloqueados()
+    public async Task CatalogoNuevoTieneDiecisieteLogrosBloqueados()
     {
         await using var db = await CrearContexto();
         var servicio = new LogroServicio(new LogrosUsuariosRepositorio(db));
         var catalogo = await servicio.ObtenerCatalogoParaUsuario(1);
-        Assert.Equal(Enumerable.Range(1, 20), catalogo.Select(logro => logro.Id));
+        Assert.Equal(Enumerable.Range(1, 20).Except(new[] { 4, 5, 17 }), catalogo.Select(logro => logro.Id));
         Assert.All(catalogo, logro => { Assert.False(logro.Desbloqueado); Assert.Null(logro.FechaDesbloqueo); });
         Assert.Equal("Primera Palabra", catalogo.Single(logro => logro.Id == 2).Titulo);
     }
@@ -31,7 +31,7 @@ public class LogroServicioTests
         var perfiles = new UsuarioServicio(usuarios, servicio);
         var propio = await perfiles.ObtenerPerfilPorIdAsync(1, 1);
         var otro = await perfiles.ObtenerPerfilPorIdAsync(2, 1);
-        var logro = Assert.Single(propio.Logros.Where(logro => logro.Desbloqueado));
+        var logro = Assert.Single(propio.Logros, logro => logro.Desbloqueado);
         Assert.Equal(2, logro.Id);
         Assert.NotNull(logro.FechaDesbloqueo);
         Assert.All(otro.Logros, logro => Assert.False(logro.Desbloqueado));

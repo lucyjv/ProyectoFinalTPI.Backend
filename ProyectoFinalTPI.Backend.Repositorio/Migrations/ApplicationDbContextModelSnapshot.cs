@@ -174,22 +174,6 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                         },
                         new
                         {
-                            Id = 4,
-                            Descripcion = "Sintonizar tu primera canción en el reproductor web retro.",
-                            PuntosRecompensa = 0,
-                            Titulo = "Melómano",
-                            UrlIcono = "."
-                        },
-                        new
-                        {
-                            Id = 5,
-                            Descripcion = "Abrir tu primer Dato Curioso Aleatorio en el mapa.",
-                            PuntosRecompensa = 0,
-                            Titulo = "Turista del Pasado",
-                            UrlIcono = "."
-                        },
-                        new
-                        {
                             Id = 6,
                             Descripcion = "Dar tu primer punto de nostalgia a una publicación.",
                             PuntosRecompensa = 0,
@@ -274,14 +258,6 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                             Descripcion = "Lograr que uno de tus recuerdos llegue a 100 puntos de nostalgia.",
                             PuntosRecompensa = 0,
                             Titulo = "Leyenda",
-                            UrlIcono = "."
-                        },
-                        new
-                        {
-                            Id = 17,
-                            Descripcion = "Otorgar 500 puntos de nostalgia en total a la comunidad.",
-                            PuntosRecompensa = 0,
-                            Titulo = "Mecenas",
                             UrlIcono = "."
                         },
                         new

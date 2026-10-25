@@ -21,8 +21,6 @@ namespace ProyectoFinalTPI.Backend.Entidades
         PrimerPaso = 1,
         PrimeraPalabra = 2,
         ConAmigos = 3,
-        Melomano = 4,
-        TuristaDelPasado = 5,
         Curioso = 6,
         CronistaLocal = 7,
         VozDeUnaEpoca = 8,
@@ -34,7 +32,6 @@ namespace ProyectoFinalTPI.Backend.Entidades
         RachaDeHierro = 14,
         DecadaCompleta = 15,
         Leyenda = 16,
-        Mecenas = 17,
         Influencer = 18,
         RachaDeOro = 19,
         ViajeroDelTiempo = 20

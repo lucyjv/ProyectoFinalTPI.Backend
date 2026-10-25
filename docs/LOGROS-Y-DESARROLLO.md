@@ -4,6 +4,8 @@ El frontend consulta `GET /api/usuario/{id}/perfil` (o `perfil/{username}`), con
 
 La rama `logros` necesitaba registrar `ILogroServicio`, quitar el registro del servicio de recomendaciones inexistente y agregar la migración `CompletarConfiguracionLogros`. Esta migración incorpora las columnas de racha, inicializa la racha de usuarios existentes e inserta los 20 logros del modelo. No requiere borrar la base. Si ya creaste manualmente esas columnas o esos 20 registros, revisá la diferencia con tu esquema antes de aplicar la migración; la prueba local se hizo con el historial de migraciones del repositorio.
 
+La migración posterior `RetirarLogrosSinImplementacion` elimina «Melómano» (ID 4), «Turista del Pasado» (ID 5) y «Mecenas» (ID 17), junto con sus desbloqueos si existían. Conserva los usuarios, los otros desbloqueos y los IDs restantes; el catálogo queda en 17 logros. No se deben editar las migraciones anteriores ni borrar la base: aplicá las migraciones pendientes con el comando siguiente.
+
 Desde la raíz del backend, con PostgreSQL/PostGIS, Neo4j y la configuración local del README preparados:
 
 ```sh
