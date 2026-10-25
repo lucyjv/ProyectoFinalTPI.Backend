@@ -77,6 +77,25 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 }
         }
 
+        public async Task CompletarResumenesReposts(
+            IReadOnlyCollection<PublicacionDetalleDto> publicaciones, int usuarioId,
+            CancellationToken cancellationToken = default)
+        {
+            if (publicaciones.Count == 0) return;
+
+            var resumenes = await _publicacionRepositorio.ObtenerResumenReposts(
+                publicaciones.Select(publicacion => publicacion.Id).Distinct().ToArray(),
+                usuarioId,
+                cancellationToken);
+
+            foreach (var publicacion in publicaciones)
+                if (resumenes.TryGetValue(publicacion.Id, out var resumen))
+                {
+                    publicacion.CantidadReposts = resumen.Cantidad;
+                    publicacion.DioRepost = resumen.DioRepost;
+                }
+        }
+
         public async Task<PuntuacionPublicacionDto> Puntuar(
             int publicacionId, int usuarioId, int puntaje, CancellationToken cancellationToken = default)
         {
@@ -186,40 +205,89 @@ namespace ProyectoFinalTPI.Backend.Servicio
             return await _publicacionRepositorio.Crear(publicacion);
         }
 
-        public async Task<int> Compartir(Publicacion publicacion, CancellationToken cancellationToken = default)
+        public async Task<RepostPublicacionDto> Repostear(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
         {
-            var existeAutor = await _usuarioRepositorio.ExisteUsuario(publicacion.UsuarioId);
+            if (publicacionId <= 0)
+                throw new ArgumentException("El ID de la publicación debe ser mayor que cero.");
+            if (usuarioId <= 0)
+                throw new ArgumentException("El ID de usuario debe ser mayor que cero.");
+
+            var existeAutor = await _usuarioRepositorio.ExisteUsuario(usuarioId);
             if (!existeAutor)
                 throw new KeyNotFoundException("El usuario indicado no existe.");
 
-            var original = await _publicacionRepositorio.ObtenerPorId(publicacion.PublicacionOriginalId.GetValueOrDefault(), cancellationToken);
+            var original = await _publicacionRepositorio.ObtenerPorId(publicacionId, cancellationToken);
             if (original == null)
-                throw new KeyNotFoundException("La publicacion original no existe o no esta disponible.");
+                throw new KeyNotFoundException("La publicación original no existe o no está disponible.");
 
-            // Si la publicación a compartir es un repost SIMPLE (sin comentario propio),
-            // enlazamos con la publicación que fue reposteada para evitar cadenas de retweets simples.
-            // Pero si es una publicación con contenido propio (un quote tweet con su propia descripción),
-            // se enlaza directamente a ella para permitir repostearla o hacer un quote al quote.
-            var targetOriginal = original;
-            while (targetOriginal.PublicacionOriginalId.HasValue && string.IsNullOrEmpty(targetOriginal.Descripcion))
+            var targetId = original.PublicacionOriginalId ?? original.Id;
+            await _publicacionRepositorio.CrearRepost(targetId, usuarioId, cancellationToken);
+            return await _publicacionRepositorio.ObtenerEstadoRepost(targetId, usuarioId, cancellationToken);
+        }
+
+        public async Task<RepostPublicacionDto> QuitarRepost(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
+        {
+            if (publicacionId <= 0)
+                throw new ArgumentException("El ID de la publicación debe ser mayor que cero.");
+            if (usuarioId <= 0)
+                throw new ArgumentException("El ID de usuario debe ser mayor que cero.");
+
+            await _publicacionRepositorio.QuitarRepost(publicacionId, usuarioId, cancellationToken);
+            return await _publicacionRepositorio.ObtenerEstadoRepost(publicacionId, usuarioId, cancellationToken);
+        }
+
+        public async Task<int> Citar(int publicacionId, int usuarioId, string descripcion, CancellationToken cancellationToken = default)
+        {
+            if (publicacionId <= 0)
+                throw new ArgumentException("El ID de la publicación debe ser mayor que cero.");
+            if (usuarioId <= 0)
+                throw new ArgumentException("El ID de usuario debe ser mayor que cero.");
+            if (string.IsNullOrWhiteSpace(descripcion))
+                throw new ArgumentException("La descripción de la cita no puede estar vacía.");
+
+            var existeAutor = await _usuarioRepositorio.ExisteUsuario(usuarioId);
+            if (!existeAutor)
+                throw new KeyNotFoundException("El usuario indicado no existe.");
+
+            var original = await _publicacionRepositorio.ObtenerPorId(publicacionId, cancellationToken);
+            if (original == null)
+                throw new KeyNotFoundException("La publicación original no existe o no está disponible.");
+
+            var targetOriginal = original.PublicacionOriginalId.HasValue
+                ? await _publicacionRepositorio.ObtenerPorId(original.PublicacionOriginalId.Value, cancellationToken) ?? original
+                : original;
+
+            var cita = new Publicacion
             {
-                var padre = await _publicacionRepositorio.ObtenerPorId(targetOriginal.PublicacionOriginalId.Value, cancellationToken);
-                if (padre == null) break;
-                targetOriginal = padre;
+                Titulo = targetOriginal.Titulo,
+                Descripcion = descripcion.Trim(),
+                Fecha = targetOriginal.Fecha,
+                Categoria = targetOriginal.Categoria,
+                UrlMultimedia = targetOriginal.UrlMultimedia,
+                TipoMultimedia = targetOriginal.TipoMultimedia,
+                LugarId = targetOriginal.LugarId,
+                PublicacionOriginalId = targetOriginal.Id,
+                UsuarioId = usuarioId,
+                FechaCreación = DateTime.UtcNow,
+                EstaOculto = false,
+                MotivoOculto = null
+            };
+
+            return await _publicacionRepositorio.Crear(cita);
+        }
+
+        public async Task<int> Compartir(Publicacion publicacion, CancellationToken cancellationToken = default)
+        {
+            var targetId = publicacion.PublicacionOriginalId.GetValueOrDefault();
+            if (string.IsNullOrWhiteSpace(publicacion.Descripcion))
+            {
+                await Repostear(targetId, publicacion.UsuarioId, cancellationToken);
+                return targetId;
             }
-
-            publicacion.Titulo = targetOriginal.Titulo;
-            publicacion.Fecha = targetOriginal.Fecha;
-            publicacion.Categoria = targetOriginal.Categoria;
-            publicacion.UrlMultimedia = targetOriginal.UrlMultimedia;
-            publicacion.TipoMultimedia = targetOriginal.TipoMultimedia;
-            publicacion.LugarId = targetOriginal.LugarId;
-            publicacion.PublicacionOriginalId = targetOriginal.Id;
-            publicacion.FechaCreación = DateTime.UtcNow;
-            publicacion.EstaOculto = false;
-            publicacion.MotivoOculto = null;
-
-            return await _publicacionRepositorio.Crear(publicacion);
+            else
+            {
+                return await Citar(targetId, publicacion.UsuarioId, publicacion.Descripcion, cancellationToken);
+            }
         }
 
         public async Task<ResultadoMapaDto> ObtenerPines(PublicacionFiltroDto filtro, CancellationToken cancellationToken = default)
@@ -340,8 +408,57 @@ namespace ProyectoFinalTPI.Backend.Servicio
             }
 
             var publicaciones = await _publicacionRepositorio.ObtenerPorUsuarioId(usuarioId, cancellationToken);
+
+            var reposts = await _publicacionRepositorio.ObtenerRepostsDeSeguidos(new[] { usuarioId }, cancellationToken);
+            if (reposts.Count > 0)
+            {
+                var usuario = await _usuarioRepositorio.ObtenerPorIdAsync(usuarioId);
+                var usernameFallback = usuario?.Username ?? "";
+
+                var idsPublicacionesReposteadas = reposts.Select(r => r.PublicacionId).Distinct().ToList();
+                var publicacionesReposteadas = await _publicacionRepositorio.ObtenerPublicacionesPorIds(
+                    idsPublicacionesReposteadas, cancellationToken);
+                var mapaPubs = publicacionesReposteadas.ToDictionary(p => p.Id);
+
+                var itemsRepost = new List<PublicacionDetalleDto>();
+                foreach (var r in reposts)
+                {
+                    if (mapaPubs.TryGetValue(r.PublicacionId, out var orig))
+                    {
+                        var nombreUsuario = !string.IsNullOrEmpty(r.ReposteadorUsername) ? r.ReposteadorUsername : usernameFallback;
+                        itemsRepost.Add(new PublicacionDetalleDto
+                        {
+                            Id = orig.Id,
+                            Titulo = orig.Titulo,
+                            Descripcion = orig.Descripcion,
+                            Fecha = orig.Fecha,
+                            FechaCreacion = r.Fecha,
+                            Categoria = orig.Categoria,
+                            UrlMultimedia = orig.UrlMultimedia,
+                            TipoMultimedia = orig.TipoMultimedia,
+                            Autor = orig.Autor,
+                            Lugar = orig.Lugar,
+                            Grupo = orig.Grupo,
+                            PublicacionOriginal = orig.PublicacionOriginal,
+                            ReposteadoPor = new RepostInfoEmergenteDto
+                            {
+                                UsuarioId = r.ReposteadorId,
+                                Username = nombreUsuario,
+                                Fecha = r.Fecha
+                            }
+                        });
+                    }
+                }
+
+                publicaciones = publicaciones.Concat(itemsRepost)
+                    .OrderByDescending(p => p.FechaCreacion)
+                    .ThenByDescending(p => p.Id)
+                    .ToList();
+            }
+
             await CompletarResumenesLikes(publicaciones, usuarioAutenticadoId ?? 0, cancellationToken);
             await CompletarResumenesPuntuaciones(publicaciones, usuarioAutenticadoId, cancellationToken);
+            await CompletarResumenesReposts(publicaciones, usuarioAutenticadoId ?? 0, cancellationToken);
             return publicaciones;
         }
 
@@ -378,6 +495,65 @@ namespace ProyectoFinalTPI.Backend.Servicio
                     limite,
                     cancellationToken);
 
+            var reposts = await _publicacionRepositorio.ObtenerRepostsDeSeguidos(autoresIds, cancellationToken);
+            if (reposts.Count > 0)
+            {
+                if (cursorDecodificado != null)
+                {
+                    reposts = reposts.Where(r =>
+                        r.Fecha < cursorDecodificado.FechaCreacion ||
+                        (r.Fecha == cursorDecodificado.FechaCreacion && r.PublicacionId < cursorDecodificado.Id))
+                        .ToList();
+                }
+
+                var idsPublicacionesReposteadas = reposts.Select(r => r.PublicacionId).Distinct().ToList();
+                var publicacionesReposteadas = await _publicacionRepositorio.ObtenerPublicacionesPorIds(
+                    idsPublicacionesReposteadas, cancellationToken);
+                var mapaPubs = publicacionesReposteadas.ToDictionary(p => p.Id);
+
+                var reposteadoresIds = reposts.Select(r => r.ReposteadorId).Distinct().ToList();
+                var usuariosReposteadores = await _usuarioRepositorio.ObtenerUsuariosPorIdsAsync(reposteadoresIds, cancellationToken);
+                var mapaUsuarios = usuariosReposteadores.ToDictionary(u => u.Id, u => u.Username);
+
+                var itemsRepost = new List<PublicacionDetalleDto>();
+                foreach (var r in reposts)
+                {
+                    if (mapaPubs.TryGetValue(r.PublicacionId, out var orig))
+                    {
+                        var nombreUsuario = !string.IsNullOrWhiteSpace(r.ReposteadorUsername)
+                            ? r.ReposteadorUsername
+                            : (mapaUsuarios.TryGetValue(r.ReposteadorId, out var uName) ? uName : "");
+
+                        itemsRepost.Add(new PublicacionDetalleDto
+                        {
+                            Id = orig.Id,
+                            Titulo = orig.Titulo,
+                            Descripcion = orig.Descripcion,
+                            Fecha = orig.Fecha,
+                            FechaCreacion = r.Fecha,
+                            Categoria = orig.Categoria,
+                            UrlMultimedia = orig.UrlMultimedia,
+                            TipoMultimedia = orig.TipoMultimedia,
+                            Autor = orig.Autor,
+                            Lugar = orig.Lugar,
+                            Grupo = orig.Grupo,
+                            PublicacionOriginal = orig.PublicacionOriginal,
+                            ReposteadoPor = new RepostInfoEmergenteDto
+                            {
+                                UsuarioId = r.ReposteadorId,
+                                Username = nombreUsuario,
+                                Fecha = r.Fecha
+                            }
+                        });
+                    }
+                }
+
+                publicaciones = publicaciones.Concat(itemsRepost)
+                    .OrderByDescending(p => p.FechaCreacion)
+                    .ThenByDescending(p => p.Id)
+                    .ToList();
+            }
+
             var hayMas = publicaciones.Count > limite;
 
             var items = publicaciones
@@ -386,6 +562,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
             await CompletarResumenesLikes(items, usuarioId, cancellationToken);
             await CompletarResumenesPuntuaciones(items, usuarioId, cancellationToken);
+            await CompletarResumenesReposts(items, usuarioId, cancellationToken);
 
             string? siguienteCursor = null;
 
@@ -499,6 +676,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
             await CompletarResumenesLikes(items, usuarioId, cancellationToken);
             await CompletarResumenesPuntuaciones(items, usuarioId, cancellationToken);
+            await CompletarResumenesReposts(items, usuarioId, cancellationToken);
 
             return new ResultadoPaginadoDto<PublicacionDetalleDto>
             {

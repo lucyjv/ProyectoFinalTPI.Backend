@@ -34,6 +34,29 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                    count(CASE WHEN usuario.postgresId = $usuarioId THEN 1 END) > 0 AS dioLike
             """;
 
+        private const string CrearRepostQuery = """
+            MERGE (usuario:Usuario {postgresId: $usuarioId})
+            MERGE (publicacion:Publicacion {postgresId: $publicacionId})
+            MERGE (usuario)-[r:REPOSTEO]->(publicacion)
+            ON CREATE SET r.creadaEn = datetime(),
+                          r.creadaEnUnixMs = timestamp()
+            """;
+
+        private const string QuitarRepostQuery = """
+            OPTIONAL MATCH (:Usuario {postgresId: $usuarioId})-[r:REPOSTEO]->
+                           (:Publicacion {postgresId: $publicacionId})
+            DELETE r
+            RETURN count(r) AS cantidad
+            """;
+
+        private const string ObtenerEstadoRepostQuery = """
+            OPTIONAL MATCH (publicacion:Publicacion {postgresId: $publicacionId})
+            OPTIONAL MATCH (usuario:Usuario)-[r:REPOSTEO]->(publicacion)
+            RETURN count(r) AS cantidadReposts,
+                   count(CASE WHEN usuario.postgresId = $usuarioId THEN 1 END) > 0 AS dioRepost
+            """;
+
+
         private const string PuntuarPublicacionQuery = """
             MERGE (usuario:Usuario {postgresId: $usuarioId})
             MERGE (publicacion:Publicacion {postgresId: $publicacionId})
@@ -219,7 +242,115 @@ namespace ProyectoFinalTPI.Backend.Repositorio
             });
         }
 
+        public async Task CrearRepost(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
+            await session.ExecuteWriteAsync(async transaction =>
+            {
+                await transaction.RunAsync(CrearRepostQuery, new { publicacionId, usuarioId });
+            });
+        }
+
+        public async Task<bool> QuitarRepost(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
+            return await session.ExecuteWriteAsync(async transaction =>
+            {
+                var cursor = await transaction.RunAsync(QuitarRepostQuery, new { publicacionId, usuarioId });
+                var registro = await cursor.SingleAsync();
+                return registro["cantidad"].As<int>() > 0;
+            });
+        }
+
+        public async Task<RepostPublicacionDto> ObtenerEstadoRepost(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
+            return await session.ExecuteReadAsync(async transaction =>
+            {
+                var cursor = await transaction.RunAsync(ObtenerEstadoRepostQuery, new { publicacionId, usuarioId });
+                var registro = await cursor.SingleAsync();
+
+                return new RepostPublicacionDto
+                {
+                    PublicacionId = publicacionId,
+                    CantidadReposts = registro["cantidadReposts"].As<int>(),
+                    DioRepost = registro["dioRepost"].As<bool>()
+                };
+            });
+        }
+
+        public async Task<IReadOnlyDictionary<int, (int Cantidad, bool DioRepost)>> ObtenerResumenReposts(
+            IReadOnlyCollection<int> publicacionesIds, int usuarioId, CancellationToken cancellationToken = default)
+        {
+            if (publicacionesIds.Count == 0)
+                return new Dictionary<int, (int Cantidad, bool DioRepost)>();
+
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
+            return await session.ExecuteReadAsync(async transaction =>
+            {
+                var cursor = await transaction.RunAsync("""
+                    UNWIND $publicacionesIds AS publicacionId
+                    OPTIONAL MATCH (usuario:Usuario)-[r:REPOSTEO]->
+                                  (:Publicacion {postgresId: publicacionId})
+                    RETURN publicacionId,
+                           count(r) AS cantidadReposts,
+                           count(CASE WHEN usuario.postgresId = $usuarioId THEN 1 END) > 0 AS dioRepost
+                    """, new { publicacionesIds = publicacionesIds.Distinct().ToArray(), usuarioId });
+
+                var resumenes = new Dictionary<int, (int Cantidad, bool DioRepost)>();
+                await foreach (var registro in cursor)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    resumenes[registro["publicacionId"].As<int>()] =
+                        (registro["cantidadReposts"].As<int>(), registro["dioRepost"].As<bool>());
+                }
+                return (IReadOnlyDictionary<int, (int Cantidad, bool DioRepost)>)resumenes;
+            });
+        }
+
+        public async Task<IReadOnlyList<(int PublicacionId, int ReposteadorId, string ReposteadorUsername, DateTime Fecha)>> ObtenerRepostsDeSeguidos(
+            IReadOnlyCollection<int> autoresIds, CancellationToken cancellationToken = default)
+        {
+            if (autoresIds.Count == 0)
+                return Array.Empty<(int, int, string, DateTime)>();
+
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
+            return await session.ExecuteReadAsync(async transaction =>
+            {
+                var cursor = await transaction.RunAsync("""
+                    MATCH (reposteador:Usuario)-[r:REPOSTEO]->(publicacion:Publicacion)
+                    WHERE reposteador.postgresId IN $autoresIds
+                    RETURN publicacion.postgresId AS publicacionId,
+                           reposteador.postgresId AS reposteadorId,
+                           coalesce(reposteador.username, '') AS reposteadorUsername,
+                           coalesce(r.creadaEnUnixMs, 0) AS fechaUnixMs
+                    """, new { autoresIds = autoresIds.ToArray() });
+
+                var lista = new List<(int PublicacionId, int ReposteadorId, string ReposteadorUsername, DateTime Fecha)>();
+                await foreach (var reg in cursor)
+                {
+                    var pubId = reg["publicacionId"].As<int>();
+                    var repId = reg["reposteadorId"].As<int>();
+                    var username = reg["reposteadorUsername"].As<string>();
+                    var unixMs = reg["fechaUnixMs"].As<long>();
+
+                    DateTime fecha = unixMs > 0
+                        ? DateTimeOffset.FromUnixTimeMilliseconds(unixMs).UtcDateTime
+                        : DateTime.UtcNow;
+
+                    lista.Add((pubId, repId, username, fecha));
+                }
+                return (IReadOnlyList<(int PublicacionId, int ReposteadorId, string ReposteadorUsername, DateTime Fecha)>)lista;
+            });
+        }
+
         public async Task PuntuarPublicacion(int publicacionId, int usuarioId, int puntaje, CancellationToken cancellationToken = default)
+
         {
             cancellationToken.ThrowIfCancellationRequested();
             await using var session = ObtenerNeo4jDriver().AsyncSession();
@@ -421,7 +552,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio
         {
             var consulta = _context.Publicaciones
                 .AsNoTracking()
-                .Where(p => !p.EstaOculto)
+                .Where(p => !p.EstaOculto && p.PublicacionOriginalId == null)
                 .Where(p =>
                 p.Lugar.Coordenadas.Y >= filtro.MinLatitud &&
                 p.Lugar.Coordenadas.Y <= filtro.MaxLatitud &&
@@ -541,6 +672,23 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                             Username = p.Grupo.Creador.Username
                         },
                         CantidadIntegrantes = p.Grupo.Integrantes.Count
+                    } : null,
+                    PublicacionOriginal = p.PublicacionOriginal != null ? new PublicacionResumenDto
+                    {
+                        Id = p.PublicacionOriginal.Id,
+                        Titulo = p.PublicacionOriginal.Titulo,
+                        DescripcionBreve = p.PublicacionOriginal.Descripcion.Length > 180
+                            ? p.PublicacionOriginal.Descripcion.Substring(0, 180) + "..."
+                            : p.PublicacionOriginal.Descripcion,
+                        Fecha = p.PublicacionOriginal.Fecha,
+                        Categoria = p.PublicacionOriginal.Categoria,
+                        UrlMultimedia = p.PublicacionOriginal.UrlMultimedia,
+                        TipoMultimedia = p.PublicacionOriginal.TipoMultimedia,
+                        Autor = new AutorResumenDto
+                        {
+                            Id = p.PublicacionOriginal.UsuarioId,
+                            Username = p.PublicacionOriginal.Usuario.Username
+                        }
                     } : null
                 })
                 .SingleOrDefaultAsync(cancellationToken);
@@ -621,6 +769,23 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                             Username = p.Grupo.Creador.Username
                         },
                         CantidadIntegrantes = p.Grupo.Integrantes.Count
+                    } : null,
+                    PublicacionOriginal = p.PublicacionOriginal != null ? new PublicacionResumenDto
+                    {
+                        Id = p.PublicacionOriginal.Id,
+                        Titulo = p.PublicacionOriginal.Titulo,
+                        DescripcionBreve = p.PublicacionOriginal.Descripcion.Length > 180
+                            ? p.PublicacionOriginal.Descripcion.Substring(0, 180) + "..."
+                            : p.PublicacionOriginal.Descripcion,
+                        Fecha = p.PublicacionOriginal.Fecha,
+                        Categoria = p.PublicacionOriginal.Categoria,
+                        UrlMultimedia = p.PublicacionOriginal.UrlMultimedia,
+                        TipoMultimedia = p.PublicacionOriginal.TipoMultimedia,
+                        Autor = new AutorResumenDto
+                        {
+                            Id = p.PublicacionOriginal.UsuarioId,
+                            Username = p.PublicacionOriginal.Usuario.Username
+                        }
                     } : null
                 })
                 .Take(limite + 1)
@@ -722,6 +887,23 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                             Username = p.Grupo.Creador.Username
                         },
                         CantidadIntegrantes = p.Grupo.Integrantes.Count
+                    } : null,
+                    PublicacionOriginal = p.PublicacionOriginal != null ? new PublicacionResumenDto
+                    {
+                        Id = p.PublicacionOriginal.Id,
+                        Titulo = p.PublicacionOriginal.Titulo,
+                        DescripcionBreve = p.PublicacionOriginal.Descripcion.Length > 180
+                            ? p.PublicacionOriginal.Descripcion.Substring(0, 180) + "..."
+                            : p.PublicacionOriginal.Descripcion,
+                        Fecha = p.PublicacionOriginal.Fecha,
+                        Categoria = p.PublicacionOriginal.Categoria,
+                        UrlMultimedia = p.PublicacionOriginal.UrlMultimedia,
+                        TipoMultimedia = p.PublicacionOriginal.TipoMultimedia,
+                        Autor = new AutorResumenDto
+                        {
+                            Id = p.PublicacionOriginal.UsuarioId,
+                            Username = p.PublicacionOriginal.Usuario.Username
+                        }
                     } : null
                 })
                 .Take(limite + 1)
@@ -786,6 +968,23 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                             Username = p.Grupo.Creador.Username
                         },
                         CantidadIntegrantes = p.Grupo.Integrantes.Count
+                    } : null,
+                    PublicacionOriginal = p.PublicacionOriginal != null ? new PublicacionResumenDto
+                    {
+                        Id = p.PublicacionOriginal.Id,
+                        Titulo = p.PublicacionOriginal.Titulo,
+                        DescripcionBreve = p.PublicacionOriginal.Descripcion.Length > 180
+                            ? p.PublicacionOriginal.Descripcion.Substring(0, 180) + "..."
+                            : p.PublicacionOriginal.Descripcion,
+                        Fecha = p.PublicacionOriginal.Fecha,
+                        Categoria = p.PublicacionOriginal.Categoria,
+                        UrlMultimedia = p.PublicacionOriginal.UrlMultimedia,
+                        TipoMultimedia = p.PublicacionOriginal.TipoMultimedia,
+                        Autor = new AutorResumenDto
+                        {
+                            Id = p.PublicacionOriginal.UsuarioId,
+                            Username = p.PublicacionOriginal.Usuario.Username
+                        }
                     } : null
                 })
                 .ToListAsync(cancellationToken);
@@ -837,6 +1036,23 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                             Username = p.Grupo.Creador.Username
                         },
                         CantidadIntegrantes = p.Grupo.Integrantes.Count
+                    } : null,
+                    PublicacionOriginal = p.PublicacionOriginal != null ? new PublicacionResumenDto
+                    {
+                        Id = p.PublicacionOriginal.Id,
+                        Titulo = p.PublicacionOriginal.Titulo,
+                        DescripcionBreve = p.PublicacionOriginal.Descripcion.Length > 180
+                            ? p.PublicacionOriginal.Descripcion.Substring(0, 180) + "..."
+                            : p.PublicacionOriginal.Descripcion,
+                        Fecha = p.PublicacionOriginal.Fecha,
+                        Categoria = p.PublicacionOriginal.Categoria,
+                        UrlMultimedia = p.PublicacionOriginal.UrlMultimedia,
+                        TipoMultimedia = p.PublicacionOriginal.TipoMultimedia,
+                        Autor = new AutorResumenDto
+                        {
+                            Id = p.PublicacionOriginal.UsuarioId,
+                            Username = p.PublicacionOriginal.Usuario.Username
+                        }
                     } : null
                 })
                 .ToListAsync(cancellationToken);
@@ -881,26 +1097,27 @@ namespace ProyectoFinalTPI.Backend.Repositorio
 
         public async Task<bool> EliminarRepost(int originalId, int? autorId = null, CancellationToken cancellationToken = default)
         {
+            bool eliminado = false;
+            if (autorId.HasValue && autorId.Value > 0)
+            {
+                eliminado = await QuitarRepost(originalId, autorId.Value, cancellationToken);
+            }
+
             var query = _context.Publicaciones.Where(p => p.PublicacionOriginalId == originalId);
             if (autorId.HasValue && autorId.Value > 0)
             {
                 query = query.Where(p => p.UsuarioId == autorId.Value);
             }
 
-            var repost = await query.OrderByDescending(p => p.FechaCreación).FirstOrDefaultAsync(cancellationToken);
-            if (repost == null)
+            var repostLegado = await query.OrderByDescending(p => p.FechaCreación).FirstOrDefaultAsync(cancellationToken);
+            if (repostLegado != null)
             {
-                // Por si se envió directamente el Id de la fila de repost
-                repost = await _context.Publicaciones.FirstOrDefaultAsync(
-                    p => p.Id == originalId && (autorId == null || p.UsuarioId == autorId.Value),
-                    cancellationToken);
+                _context.Publicaciones.Remove(repostLegado);
+                await _context.SaveChangesAsync(cancellationToken);
+                eliminado = true;
             }
 
-            if (repost == null) return false;
-
-            _context.Publicaciones.Remove(repost);
-            await _context.SaveChangesAsync(cancellationToken);
-            return true;
+            return eliminado;
         }
     }
 }

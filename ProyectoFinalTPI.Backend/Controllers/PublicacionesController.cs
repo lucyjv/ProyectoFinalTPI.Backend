@@ -170,6 +170,88 @@ namespace ProyectoFinalTPI.Backend.Controllers
             return Ok(new { mensaje = "Repost eliminado con éxito.", id = originalId });
         }
 
+        [HttpPost("{id:int}/repost")]
+        [SwaggerOperation(
+            Summary = "Reposteá una publicación.",
+            Description = "Crea la relación de repost en Neo4j. Utiliza el usuario autenticado cuando está disponible."
+        )]
+        [SwaggerResponse(StatusCodes.Status200OK, "Publicación reposteada.", typeof(RepostPublicacionDto))]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "El identificador no es válido.", typeof(ProblemDetails))]
+        [SwaggerResponse(StatusCodes.Status401Unauthorized, "No se pudo identificar al usuario.", typeof(ProblemDetails))]
+        [SwaggerResponse(StatusCodes.Status404NotFound, "La publicación o el usuario no existen.", typeof(ProblemDetails))]
+        public async Task<IActionResult> Repostear(
+            int id,
+            [FromQuery] int? usuarioId = null,
+            CancellationToken cancellationToken = default)
+        {
+            var autorIdAutenticado = User.ObtenerUsuarioId();
+            var autorIdFinal = (autorIdAutenticado.HasValue && autorIdAutenticado.Value > 0)
+                ? autorIdAutenticado.Value
+                : usuarioId;
+
+            if (!autorIdFinal.HasValue || autorIdFinal.Value <= 0)
+                return Unauthorized(new { mensaje = "Debés iniciar sesión para repostear." });
+
+            var resultado = await _publicacionServicio.Repostear(id, autorIdFinal.Value, cancellationToken);
+            return Ok(resultado);
+        }
+
+        [HttpDelete("{id:int}/repost")]
+        [SwaggerOperation(
+            Summary = "Elimina un repost.",
+            Description = "Elimina la relación de repost en Neo4j."
+        )]
+        [SwaggerResponse(StatusCodes.Status200OK, "Repost eliminado.", typeof(RepostPublicacionDto))]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "El identificador no es válido.", typeof(ProblemDetails))]
+        [SwaggerResponse(StatusCodes.Status401Unauthorized, "No se pudo identificar al usuario.", typeof(ProblemDetails))]
+        [SwaggerResponse(StatusCodes.Status404NotFound, "La publicación o el usuario no existen.", typeof(ProblemDetails))]
+        public async Task<IActionResult> QuitarRepost(
+            int id,
+            [FromQuery] int? usuarioId = null,
+            CancellationToken cancellationToken = default)
+        {
+            var autorIdAutenticado = User.ObtenerUsuarioId();
+            var autorIdFinal = (autorIdAutenticado.HasValue && autorIdAutenticado.Value > 0)
+                ? autorIdAutenticado.Value
+                : usuarioId;
+
+            if (!autorIdFinal.HasValue || autorIdFinal.Value <= 0)
+                return Unauthorized(new { mensaje = "Debés iniciar sesión para quitar el repost." });
+
+            var resultado = await _publicacionServicio.QuitarRepost(id, autorIdFinal.Value, cancellationToken);
+            return Ok(resultado);
+        }
+
+        [HttpPost("{id:int}/citar")]
+        [SwaggerOperation(
+            Summary = "Cita una publicación con comentario propio.",
+            Description = "Crea una nueva publicación vinculada a la original en PostgreSQL con la descripción provista."
+        )]
+        [SwaggerResponse(StatusCodes.Status201Created, "Cita creada. Devuelve su ID y la cabecera Location.")]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "Los datos enviados no son válidos.", typeof(ProblemDetails))]
+        [SwaggerResponse(StatusCodes.Status401Unauthorized, "No se pudo identificar al usuario.", typeof(ProblemDetails))]
+        [SwaggerResponse(StatusCodes.Status404NotFound, "La publicación original o el usuario no existen.", typeof(ProblemDetails))]
+        public async Task<IActionResult> Citar(
+            int id,
+            [FromBody] CitarPublicacionRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.Descripcion))
+                return BadRequest(new { mensaje = "La descripción de la cita es obligatoria." });
+
+            var autorIdAutenticado = User.ObtenerUsuarioId();
+            var autorIdFinal = (autorIdAutenticado.HasValue && autorIdAutenticado.Value > 0)
+                ? autorIdAutenticado.Value
+                : request.AutorId;
+
+            if (!autorIdFinal.HasValue || autorIdFinal.Value <= 0)
+                return Unauthorized(new { mensaje = "Debés iniciar sesión para citar." });
+
+            var nuevoId = await _publicacionServicio.Citar(id, autorIdFinal.Value, request.Descripcion, cancellationToken);
+            return Created($"/api/publicaciones/{nuevoId}", new { id = nuevoId });
+        }
+
+
         [HttpDelete("{id:int}")]
         [SwaggerOperation(
             Summary = "Elimina una publicación.",
