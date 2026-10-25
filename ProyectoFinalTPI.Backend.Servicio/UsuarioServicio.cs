@@ -112,7 +112,12 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 dto.TipoUsuario = "Usuario_Personal";
                 dto.Nombre = personal.Nombre;
                 dto.Apellido = personal.Apellido;
-                dto.Reputacion = FormatearReputacion(personal.Reputacion);
+                var reputacion = personal.Reputacion;
+                if (reputacion == ReputacionEnum.Errante && cantidadPublicaciones > 0)
+                {
+                    reputacion = ReputacionEnum.Nostalgico;
+                }
+                dto.Reputacion = FormatearReputacion(reputacion);
                 dto.PuntosNostalgia = personal.PuntosNostalgia;
             }
             else if (usuario is Usuario_Marca marca)
