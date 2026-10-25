@@ -21,17 +21,18 @@ namespace ProyectoFinalTPI.Backend.Servicio
             _logrosUsuariosRepositorio = logrosUsuariosRepositorio;
         }
 
-        public async Task VerificarYDarLogro(int idUsuario, LogroEnum logro)
+        public async Task<bool> VerificarYDarLogro(int idUsuario, LogroEnum logro)
         {
             int idLogro = (int)logro;
             bool ya_logrado = await _logrosUsuariosRepositorio.ExisteRegistro(idUsuario, idLogro);
             if (ya_logrado)
             {
-                return;
+                return false;
             }
             var nuevoLogroDesbloqueado = CrearLogroDeUsuario(idUsuario, idLogro, DateTime.UtcNow);
 
             await _logrosUsuariosRepositorio.Guardar(nuevoLogroDesbloqueado);
+            return true;
         }
         public async Task<List<Logros_Usuarios>> MostrarLogrosDeUsuario(int idUsuario)
         {

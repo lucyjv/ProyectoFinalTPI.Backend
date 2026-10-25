@@ -817,7 +817,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio
         {
             return await _context.Publicaciones
                 .Where(p => p.UsuarioId == usuarioId && !p.EstaOculto)
-                .Select(p => p.DecadaDelRecuerdo)
+                .Select(p => p.Fecha.Year / 10 * 10)
                 .Distinct()
                 .CountAsync(cancellationToken);
         }

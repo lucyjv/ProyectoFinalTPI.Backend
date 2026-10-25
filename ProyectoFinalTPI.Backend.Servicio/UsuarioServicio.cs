@@ -14,15 +14,17 @@ namespace ProyectoFinalTPI.Backend.Servicio
         private readonly IUsuarioRepositorio _repositorio;
         private readonly ISeguimientoServicio? _seguimientoServicio;
         private readonly ILogroServicio _logroServicio;
+        private readonly TimeProvider _timeProvider;
 
         public UsuarioServicio(
             IUsuarioRepositorio repositorio,
             ILogroServicio logroServicio,
-            ISeguimientoServicio? seguimientoServicio = null)
+            ISeguimientoServicio? seguimientoServicio = null, TimeProvider? timeProvider = null)
         {
             _repositorio = repositorio;
             _seguimientoServicio = seguimientoServicio;
             _logroServicio = logroServicio;
+            _timeProvider = timeProvider ?? TimeProvider.System;
         }
 
         /// <inheritdoc/>
@@ -65,12 +67,13 @@ namespace ProyectoFinalTPI.Backend.Servicio
             return await ConstruirPerfilDto(usuario, usuarioAutenticadoId, cancellationToken);
         }
 
-        public async Task RegistrarIngresoDiarioAsync(int usuarioId)
+        public async Task<List<LogroEstadoDto>> RegistrarIngresoDiarioAsync(int usuarioId, CancellationToken cancellationToken = default)
         {
             var usuario = await _repositorio.ObtenerYUsuarioInteractivoPorIdAsync(usuarioId);
-            if (usuario == null) return;
+            if (usuario == null) return new();
 
-            var hoy = DateTime.UtcNow.Date;
+            var ahora = _timeProvider.GetUtcNow().UtcDateTime;
+            var hoy = ahora.Date;
 
             if (usuario.UltimoIngresoUtc.HasValue)
             {
@@ -78,7 +81,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
                 if (ultimoIngreso == hoy)
                 {
-                    return;
+                    return await ValidarLogros(usuarioId, usuario);
                 }
                 else if (ultimoIngreso == hoy.AddDays(-1))
                 {
@@ -94,20 +97,23 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 usuario.RachaDiasActual = 1;
             }
 
-            usuario.UltimoIngresoUtc = DateTime.UtcNow;
+            usuario.UltimoIngresoUtc = ahora;
             
-            await _repositorio.ActualizarAsync(usuario);
+            await _repositorio.ActualizarAsync(usuario, cancellationToken);
 
-            await ValidarLogros(usuarioId, usuario);
+            return await ValidarLogros(usuarioId, usuario);
         }
 
-        private async Task ValidarLogros(int usuarioId, Usuario_Interactivo usuario)
+        private async Task<List<LogroEstadoDto>> ValidarLogros(int usuarioId, Usuario_Interactivo usuario)
         {
-            if (usuario.RachaDiasActual >= 3)
-                await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.RachaDeHierro);
+            var nuevos = new List<int>();
+            if (usuario.RachaDiasActual >= 3 && await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.RachaDeHierro))
+                nuevos.Add((int)LogroEnum.RachaDeHierro);
 
-            if (usuario.RachaDiasActual >= 7)
-                await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.RachaDeOro);
+            if (usuario.RachaDiasActual >= 7 && await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.RachaDeOro))
+                nuevos.Add((int)LogroEnum.RachaDeOro);
+            return nuevos.Count == 0 ? new() : (await _logroServicio.ObtenerCatalogoParaUsuario(usuarioId))
+                .Where(logro => nuevos.Contains(logro.Id)).ToList();
         }
 
         private async Task<UsuarioPerfilDto> ConstruirPerfilDto(

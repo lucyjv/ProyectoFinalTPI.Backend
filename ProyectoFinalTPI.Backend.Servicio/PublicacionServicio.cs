@@ -563,7 +563,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
             }
 
             int cantidadPublicaciones = await _usuarioRepositorio.ContarPublicacionesVisiblesAsync(usuarioId);
-            if (cantidadPublicaciones >= 5)
+            if (cantidadPublicaciones >= 15)
             {
                 await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.LinceDeLasPraderas);
             }

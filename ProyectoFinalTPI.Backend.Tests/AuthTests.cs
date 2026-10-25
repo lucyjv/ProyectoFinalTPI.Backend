@@ -41,7 +41,8 @@ public class AuthServicioTests
             .Returns(Task.CompletedTask);
     }
 
-    private AuthServicio CrearServicio() => new(_repositorioMock.Object, _sesionesMock.Object, _configuracion);
+    private AuthServicio CrearServicio() => new(_repositorioMock.Object, _sesionesMock.Object, _configuracion,
+        Mock.Of<ProyectoFinalTPI.Backend.Interfaces.Servicio.IUsuarioServicio>());
 
     [Fact]
     public async Task Registro_hashea_la_contraseña_antes_de_persistir()

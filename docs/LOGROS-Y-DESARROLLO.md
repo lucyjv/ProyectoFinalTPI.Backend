@@ -2,6 +2,15 @@
 
 El frontend consulta `GET /api/usuario/{id}/perfil` (o `perfil/{username}`), con el JWT en `Authorization: Bearer …`. La respuesta incluye el catálogo real en `logros`: identificador, título, descripción, icono, puntos, `desbloqueado` y `fechaDesbloqueo`. Nunca se serializan las entidades de EF ni sus referencias circulares. El perfil de un usuario solo marca los logros guardados para ese usuario.
 
+## Reglas conectadas
+
+- **Rachas:** registro, login válido y renovación de sesión registran el ingreso. Cuenta una vez por día calendario UTC, suma si el último ingreso fue ayer y reinicia en 1 si hubo días intermedios. Los umbrales son 3 y 7 días. Un login fallido no cuenta. La respuesta de autenticación incluye `logrosNuevos` para poder anunciar una racha que se acaba de conseguir sin repetir logros históricos.
+- **Cronista Local:** el POST de publicaciones admite `GpsLatitud` y `GpsLongitud` opcionales, siempre como par. Se trata de la ubicación actual del usuario, distinta de las coordenadas del recuerdo. El controlador la envía al servicio para verificar los 5 recuerdos cercanos. Sin GPS se permite publicar, pero no se comprueba ese logro. Se conserva el criterio de cercanía existente de 0,01 grados.
+- **Lince de las Praderas:** se otorga al alcanzar 15 publicaciones visibles, conforme a su descripción.
+- **Puntuaciones:** `PUT /api/publicaciones/{id}/puntuacion`, autenticado y con `{ "puntaje": 1..5 }`, devuelve `miPuntuacion` y `puntosTotales`. Repetir la misma puntuación la quita. Generoso requiere 50 puntos otorgados; Popular y Leyenda requieren 20 y 100 puntos recibidos por una publicación. El autor recibe esos logros, no la persona que puntúa. No se permite puntuar la publicación propia.
+
+Estos cambios utilizan las columnas existentes y no agregan una migración nueva. La prueba `LogrosReglasIntegracionTests` comprueba días repetidos y salteados, los límites 14/15 publicaciones, GPS incompleto o ausente, y los límites 19/20, 99/100 y 49/50 puntos. Usa PostgreSQL/PostGIS y Neo4j temporales reales; solo reemplaza la subida multimedia a Cloudinary por el adaptador de prueba existente.
+
 La rama `logros` necesitaba registrar `ILogroServicio`, quitar el registro del servicio de recomendaciones inexistente y agregar la migración `CompletarConfiguracionLogros`. Esta migración incorpora las columnas de racha, inicializa la racha de usuarios existentes e inserta los 20 logros del modelo. No requiere borrar la base. Si ya creaste manualmente esas columnas o esos 20 registros, revisá la diferencia con tu esquema antes de aplicar la migración; la prueba local se hizo con el historial de migraciones del repositorio.
 
 La migración posterior `RetirarLogrosSinImplementacion` elimina «Melómano» (ID 4), «Turista del Pasado» (ID 5) y «Mecenas» (ID 17), junto con sus desbloqueos si existían. Conserva los usuarios, los otros desbloqueos y los IDs restantes; el catálogo queda en 17 logros. No se deben editar las migraciones anteriores ni borrar la base: aplicá las migraciones pendientes con el comando siguiente.
