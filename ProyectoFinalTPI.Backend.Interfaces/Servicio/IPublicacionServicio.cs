@@ -32,5 +32,11 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Servicio
             CancellationToken cancellationToken = default);
         Task Eliminar(int id, int? autorId = null, CancellationToken cancellationToken = default);
         Task EliminarRepost(int originalId, int? autorId = null, CancellationToken cancellationToken = default);
+        Task<RepostPublicacionDto> Repostear(int publicacionId, int usuarioId, CancellationToken cancellationToken = default);
+        Task<RepostPublicacionDto> QuitarRepost(int publicacionId, int usuarioId, CancellationToken cancellationToken = default);
+        Task<int> Citar(int publicacionId, int usuarioId, string descripcion, CancellationToken cancellationToken = default);
+        Task CompletarResumenesReposts(IReadOnlyCollection<PublicacionDetalleDto> publicaciones, int usuarioId,
+            CancellationToken cancellationToken = default);
     }
 }
+
