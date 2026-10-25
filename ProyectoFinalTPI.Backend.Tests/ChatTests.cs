@@ -83,20 +83,34 @@ public class ChatTests
     }
 
     [Fact]
-    public async Task Enviar_mensaje_a_usuario_offline_lanza_hub_exception()
+    public async Task Enviar_mensaje_a_usuario_offline_persiste_en_bd()
     {
         await using var factory = new ChatFactory();
 
-        var (tokenA, _) = await RegistrarYObtenerToken(factory, "usuarioA", "a@test.com");
-        var (_, idB)    = await RegistrarYObtenerToken(factory, "usuarioB", "b@test.com");
+        var (tokenA, idA) = await RegistrarYObtenerToken(factory, "usuarioA", "a@test.com");
+        var (_, idB) = await RegistrarYObtenerToken(factory, "usuarioB", "b@test.com");
 
-        // Solo A se conecta; B nunca se conecta al hub
+        // Solo A se conecta; B nunca se conecta al hub (está offline)
         await using var connA = CrearConexion(factory, tokenA);
         await connA.StartAsync();
 
-        // Intentar enviar a B (que está offline) debe lanzar excepción
-        await Assert.ThrowsAsync<HubException>(
-            () => connA.InvokeAsync("EnviarMensaje", idB, "Mensaje a nadie"));
+        var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        connA.On<object>("MensajeEnviado", _ => tcs.TrySetResult(true));
+
+        // Enviar a B offline ya no lanza excepción, sino que se procesa correctamente
+        await connA.InvokeAsync("EnviarMensaje", idB, "Mensaje para usuario offline");
+
+        await Task.WhenAny(tcs.Task, Task.Delay(5000));
+
+        // Verificar que el mensaje quedó guardado en la base de datos
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var mensajes = await db.MensajesChat
+            .Where(m => m.EmisorId == idA && m.DestinatarioId == idB)
+            .ToListAsync();
+
+        Assert.Single(mensajes);
+        Assert.Equal("Mensaje para usuario offline", mensajes[0].Contenido);
     }
 
     [Fact]
@@ -222,7 +236,7 @@ public class ChatTests
     }
 
     [Fact]
-    public async Task Desconectarse_permite_que_mensajes_posteriores_fallen()
+    public async Task Desconectarse_permite_que_mensajes_posteriores_se_persistan()
     {
         await using var factory = new ChatFactory();
 
@@ -240,9 +254,23 @@ public class ChatTests
         // Pequeña espera para que el servidor procese la desconexión
         await Task.Delay(200);
 
-        // A ya no puede enviarle a B
-        await Assert.ThrowsAsync<HubException>(
-            () => connA.InvokeAsync("EnviarMensaje", idB, "B ya no está"));
+        var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        connA.On<object>("MensajeEnviado", _ => tcs.TrySetResult(true));
+
+        // A le envía un mensaje a B, que ahora está offline. Debe tener éxito y guardarse.
+        await connA.InvokeAsync("EnviarMensaje", idB, "B ya no está pero el mensaje se guarda");
+
+        await Task.WhenAny(tcs.Task, Task.Delay(5000));
+
+        // Verificar que se persistió en BD a pesar de estar offline
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var mensajes = await db.MensajesChat
+            .Where(m => m.EmisorId == idA && m.DestinatarioId == idB)
+            .ToListAsync();
+
+        Assert.Single(mensajes);
+        Assert.Equal("B ya no está pero el mensaje se guarda", mensajes[0].Contenido);
     }
 
     // ──────────────────────────────────────────────
