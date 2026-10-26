@@ -1149,11 +1149,22 @@ namespace ProyectoFinalTPI.Backend.Repositorio
 
         public async Task<int> ContarRepostsDeOtrosUsuarios(int usuarioId, CancellationToken cancellationToken = default)
         {
-            return await _context.Publicaciones
+            var totalEnPostgres = await _context.Publicaciones
                 .Where(p => p.UsuarioId == usuarioId && !p.EstaOculto &&
                             p.PublicacionOriginalId.HasValue && 
                             p.PublicacionOriginal!.UsuarioId != usuarioId)
                 .CountAsync(cancellationToken);
+
+            // develop guarda los reposts simples como relaciones REPOSTEO, sin crear una publicación.
+            // Conservamos también el conteo de citas y reposts anteriores guardados en PostgreSQL.
+            var reposts = await ObtenerRepostsDeSeguidos(new[] { usuarioId }, cancellationToken);
+            var ids = reposts.Select(repost => repost.PublicacionId).Distinct().ToArray();
+            if (ids.Length == 0) return totalEnPostgres;
+
+            var totalEnNeo4j = await _context.Publicaciones.CountAsync(
+                p => ids.Contains(p.Id) && !p.EstaOculto && p.UsuarioId != usuarioId,
+                cancellationToken);
+            return totalEnPostgres + totalEnNeo4j;
         }
 
         public async Task<int> ContarLikesOtorgados(int usuarioId, CancellationToken cancellationToken = default)

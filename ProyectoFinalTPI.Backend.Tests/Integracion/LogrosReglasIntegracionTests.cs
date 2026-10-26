@@ -182,6 +182,70 @@ public class LogrosReglasIntegracionTests(PostgisFixture postgres, Neo4jLogrosFi
         Assert.Equal(HttpStatusCode.BadRequest, (await client.PutAsJsonAsync($"/api/publicaciones/{target}/puntuacion", new { puntaje = 5 })).StatusCode);
     }
 
+    [Theory]
+    [InlineData("repost")]
+    [InlineData("compartir")]
+    [InlineData("citar")]
+    public async Task ViajeroCuentaRepostsDeNeo4jYCitasSinContarRepetidosPropiosNiDeOtrosUsuarios(string accionFinal)
+    {
+        // El grafo pertenece exclusivamente al contenedor temporal de esta clase.
+        await using (var session = neo4j.Driver.AsyncSession())
+            await (await session.RunAsync("MATCH (n) DETACH DELETE n")).ConsumeAsync();
+
+        await using var factory = new PublicacionesApiFactory(postgres, neo4j.Driver);
+        using var client = factory.CreateClient();
+        var author = await CrearUsuario(client, "autor_viajero");
+        var user = await CrearUsuario(client, "viajero");
+        List<int> ajenas;
+        int propia;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var place = new Lugar
+            {
+                Nombre = "Buenos Aires", Coordenadas = new NetTopologySuite.Geometries.Point(-58.4, -34.6) { SRID = 4326 }
+            };
+            var publicaciones = Enumerable.Range(0, 11).Select(i => new Publicacion
+            {
+                UsuarioId = i == 10 ? user.UsuarioId : author.UsuarioId,
+                Titulo = $"Recuerdo {i}", Descripcion = "Una historia", Lugar = place,
+                Fecha = new DateTime(1995, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+            }).ToList();
+            db.Publicaciones.AddRange(publicaciones);
+            await db.SaveChangesAsync();
+            ajenas = publicaciones.Take(10).Select(publicacion => publicacion.Id).ToList();
+            propia = publicaciones.Last().Id;
+        }
+
+        for (var i = 0; i < 10; i++)
+            Assert.Equal(HttpStatusCode.OK, (await client.PostAsync($"/api/publicaciones/{ajenas[0]}/repost", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsync($"/api/publicaciones/{propia}/repost", null)).StatusCode);
+        foreach (var id in ajenas.Skip(1).Take(8))
+            Assert.Equal(HttpStatusCode.OK, (await client.PostAsync($"/api/publicaciones/{id}/repost", null)).StatusCode);
+
+        var other = await CrearUsuario(client, "otro_viajero");
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsync($"/api/publicaciones/{ajenas[9]}/repost", null)).StatusCode);
+        await Login(client, "viajero");
+        Assert.False((await Perfil(client, user.UsuarioId)).Logros.Single(logro => logro.Id == 20).Desbloqueado);
+
+        var response = accionFinal switch
+        {
+            "compartir" => await client.PostAsJsonAsync("/api/publicaciones/compartir",
+                new { publicacionOriginalId = ajenas[9], autorId = user.UsuarioId, descripcion = "" }),
+            "citar" => await client.PostAsJsonAsync($"/api/publicaciones/{ajenas[9]}/citar",
+                new { descripcion = "Mi cita del recuerdo" }),
+            _ => await client.PostAsync($"/api/publicaciones/{ajenas[9]}/repost", null)
+        };
+        Assert.Equal(accionFinal == "repost" ? HttpStatusCode.OK : HttpStatusCode.Created, response.StatusCode);
+        Assert.True((await Perfil(client, user.UsuarioId)).Logros.Single(logro => logro.Id == 20).Desbloqueado);
+        Assert.False((await Perfil(client, other.UsuarioId)).Logros.Single(logro => logro.Id == 20).Desbloqueado);
+
+        using var verificacion = factory.Services.CreateScope();
+        var contexto = verificacion.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Assert.Equal(accionFinal == "citar" ? 12 : 11, await contexto.Publicaciones.CountAsync());
+        Assert.Equal(1, await contexto.Logros_Usuarios.CountAsync(logro => logro.UsuarioId == user.UsuarioId && logro.LogroId == 20));
+    }
+
     private async Task SembrarPuntos(IEnumerable<int> users, int post)
     {
         await using var session = neo4j.Driver.AsyncSession();

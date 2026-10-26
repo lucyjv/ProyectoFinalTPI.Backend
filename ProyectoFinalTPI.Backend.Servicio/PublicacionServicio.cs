@@ -185,25 +185,6 @@ namespace ProyectoFinalTPI.Backend.Servicio
             return _publicacionRepositorio.ObtenerPublicacionPorCategoria(categoria);
         }
 
-        public async Task<int> Crear(Publicacion publicacion, Stream? archivo = null, string? nombreArchivo = null)
-        {
-            var existeAutor = await _usuarioRepositorio.ExisteUsuario(publicacion.UsuarioId);
-            if (!existeAutor)
-                throw new KeyNotFoundException("El usuario indicado no existe.");
-
-            publicacion.UrlMultimedia = await _multimediaServicio.SubirAsync(
-                archivo,
-                nombreArchivo,
-                string.IsNullOrEmpty(publicacion.UrlMultimedia) ? null : publicacion.UrlMultimedia,
-                publicacion.TipoMultimedia);
-
-            publicacion.FechaCreación = DateTime.UtcNow;
-            publicacion.EstaOculto = false;
-            publicacion.MotivoOculto = null;
-
-            return await _publicacionRepositorio.Crear(publicacion);
-        }
-
         public async Task<RepostPublicacionDto> Repostear(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
         {
             if (publicacionId <= 0)
@@ -221,6 +202,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
             var targetId = original.PublicacionOriginalId ?? original.Id;
             await _publicacionRepositorio.CrearRepost(targetId, usuarioId, cancellationToken);
+            await VerificacionLogroCompartir(usuarioId, cancellationToken);
             return await _publicacionRepositorio.ObtenerEstadoRepost(targetId, usuarioId, cancellationToken);
         }
 
@@ -272,7 +254,9 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 MotivoOculto = null
             };
 
-            return await _publicacionRepositorio.Crear(cita);
+            var idCita = await _publicacionRepositorio.Crear(cita);
+            await VerificacionLogroCompartir(usuarioId, cancellationToken);
+            return idCita;
         }
 
         public async Task<int> Compartir(Publicacion publicacion, CancellationToken cancellationToken = default)
@@ -591,44 +575,6 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
             return idPublicacion;
         }
-        public async Task<int> Compartir(Publicacion publicacion, CancellationToken cancellationToken = default)
-        {
-            await VerificarAutorExistente(publicacion.UsuarioId);
-
-            var original = await _publicacionRepositorio.ObtenerPorId(publicacion.PublicacionOriginalId.GetValueOrDefault(), cancellationToken);
-            if (original == null)
-                throw new KeyNotFoundException("La publicacion original no existe o no esta disponible.");
-
-            // Si la publicación a compartir es un repost SIMPLE (sin comentario propio),
-            // enlazamos con la publicación que fue reposteada para evitar cadenas de retweets simples.
-            // Pero si es una publicación con contenido propio (un quote tweet con su propia descripción),
-            // se enlaza directamente a ella para permitir repostearla o hacer un quote al quote.
-            var targetOriginal = original;
-            while (targetOriginal.PublicacionOriginalId.HasValue && string.IsNullOrEmpty(targetOriginal.Descripcion))
-            {
-                var padre = await _publicacionRepositorio.ObtenerPorId(targetOriginal.PublicacionOriginalId.Value, cancellationToken);
-                if (padre == null) break;
-                targetOriginal = padre;
-            }
-
-            publicacion.Titulo = targetOriginal.Titulo;
-            publicacion.Fecha = targetOriginal.Fecha;
-            publicacion.Categoria = targetOriginal.Categoria;
-            publicacion.UrlMultimedia = targetOriginal.UrlMultimedia;
-            publicacion.TipoMultimedia = targetOriginal.TipoMultimedia;
-            publicacion.LugarId = targetOriginal.LugarId;
-            publicacion.PublicacionOriginalId = targetOriginal.Id;
-            publicacion.FechaCreación = DateTime.UtcNow;
-            publicacion.EstaOculto = false;
-            publicacion.MotivoOculto = null;
-
-            int idRepost = await _publicacionRepositorio.Crear(publicacion);
-
-            await VerificacionLogroCompartir(publicacion, targetOriginal, cancellationToken);
-
-            return idRepost;
-        }
-
         public async Task Eliminar(int id, int? autorId = null, CancellationToken cancellationToken = default)
         {
             if (id <= 0)
@@ -1060,19 +1006,14 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 }
             }
         }
-        private async Task VerificacionLogroCompartir(Publicacion publicacion, Publicacion targetOriginal, CancellationToken cancellationToken)
+        private async Task VerificacionLogroCompartir(int usuarioId, CancellationToken cancellationToken)
         {
-            int idUsuario = publicacion.UsuarioId;
+            int totalRepostsAjenos = await _publicacionRepositorio
+                .ContarRepostsDeOtrosUsuarios(usuarioId, cancellationToken);
 
-            if (targetOriginal.UsuarioId != idUsuario)
+            if (totalRepostsAjenos >= 10)
             {
-                int totalRepostsAjenos = await _publicacionRepositorio
-                    .ContarRepostsDeOtrosUsuarios(idUsuario, cancellationToken);
-
-                if (totalRepostsAjenos >= 10)
-                {
-                    await _logroServicio.VerificarYDarLogro(idUsuario, LogroEnum.ViajeroDelTiempo);
-                }
+                await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.ViajeroDelTiempo);
             }
         }
         #endregion

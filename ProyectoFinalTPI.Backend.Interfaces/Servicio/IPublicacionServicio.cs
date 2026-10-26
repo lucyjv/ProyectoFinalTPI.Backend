@@ -40,4 +40,3 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Servicio
             CancellationToken cancellationToken = default);
     }
 }
-

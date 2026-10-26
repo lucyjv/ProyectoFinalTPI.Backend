@@ -59,4 +59,3 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Repositorio
         Task<int> SumarPuntosOtorgadosPorUsuario(int usuarioId, CancellationToken cancellationToken = default);
     }
 }
-
