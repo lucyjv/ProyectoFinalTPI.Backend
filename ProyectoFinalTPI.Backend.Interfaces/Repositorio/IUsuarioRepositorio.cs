@@ -48,5 +48,6 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Repositorio
         /// Cuenta la cantidad de publicaciones visibles de un usuario.
         /// </summary>
         Task<int> ContarPublicacionesVisiblesAsync(int usuarioId, CancellationToken cancellationToken = default);
+        Task<Usuario_Interactivo?> ObtenerYUsuarioInteractivoPorIdAsync(int id);
     }
 }

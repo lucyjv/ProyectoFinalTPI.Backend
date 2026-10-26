@@ -231,7 +231,7 @@ public class UsuarioServicioTests
     public UsuarioServicioTests()
     {
         _repositorioMock = new Mock<IUsuarioRepositorio>();
-        _servicio = new UsuarioServicio(_repositorioMock.Object);
+        _servicio = new UsuarioServicio(_repositorioMock.Object, Mock.Of<ILogroServicio>());
     }
 
     [Fact]

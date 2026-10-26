@@ -42,4 +42,3 @@ namespace ProyectoFinalTPI.Backend.Dtos.Publicacion
         public RepostInfoEmergenteDto? ReposteadoPor { get; set; }
     }
 }
-

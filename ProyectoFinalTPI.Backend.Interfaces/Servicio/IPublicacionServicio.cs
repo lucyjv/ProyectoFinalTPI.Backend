@@ -1,3 +1,4 @@
+using NetTopologySuite.Geometries;
 using ProyectoFinalTPI.Backend.Dtos;
 using ProyectoFinalTPI.Backend.Dtos.Mapa;
 using ProyectoFinalTPI.Backend.Dtos.Publicacion;
@@ -9,7 +10,7 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Servicio
         List<Publicacion> ObtenerPublicaciones();
         List<Publicacion> ObtenerPublicacionPorCategoria(CategoriaEnum categoria);
 
-        Task<int> Crear(Publicacion publicacion, Stream? archivo = null, string? nombreArchivo = null);
+        Task<int> Crear(Publicacion publicacion, Stream? archivo = null, string? nombreArchivo = null, Point? gpsUsuario = null);
         Task<int> Compartir(Publicacion publicacion, CancellationToken cancellationToken = default);
         Task<ResultadoMapaDto> ObtenerPines(PublicacionFiltroDto filtro, CancellationToken cancellationToken = default);
         Task<PublicacionResumenDto> ObtenerResumenPorId(int id, CancellationToken cancellationToken = default);
@@ -39,4 +40,3 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Servicio
             CancellationToken cancellationToken = default);
     }
 }
-

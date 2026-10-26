@@ -17,15 +17,17 @@ public class AuthServicio : IAuthServicio
     private readonly IUsuarioRepositorio _usuarioRepositorio;
     private readonly ISesionUsuarioRepositorio _sesionRepositorio;
     private readonly IConfiguration _configuration;
+    private readonly IUsuarioServicio _usuarioServicio;
 
     public AuthServicio(
         IUsuarioRepositorio usuarioRepositorio,
         ISesionUsuarioRepositorio sesionRepositorio,
-        IConfiguration configuration)
+        IConfiguration configuration, IUsuarioServicio usuarioServicio)
     {
         _usuarioRepositorio = usuarioRepositorio;
         _sesionRepositorio = sesionRepositorio;
         _configuration = configuration;
+        _usuarioServicio = usuarioServicio;
     }
 
     public async Task<ResultadoAutenticacionDto> RegistrarAsync(
@@ -108,7 +110,10 @@ public class AuthServicio : IAuthServicio
         if (!rotada)
             throw new UnauthorizedAccessException("La sesión ya fue renovada por otra solicitud.");
 
-        return CrearResultado(sesion.Usuario, sesion.Id, nuevoRefreshToken, nuevaExpiracion);
+        var nuevos = await _usuarioServicio.RegistrarIngresoDiarioAsync(sesion.UsuarioId, cancellationToken);
+        var resultado = CrearResultado(sesion.Usuario, sesion.Id, nuevoRefreshToken, nuevaExpiracion);
+        resultado.Respuesta.LogrosNuevos = nuevos ?? new();
+        return resultado;
     }
 
     public async Task CerrarSesionAsync(string? refreshToken, CancellationToken cancellationToken = default)
@@ -131,6 +136,7 @@ public class AuthServicio : IAuthServicio
         string? userAgent,
         CancellationToken cancellationToken)
     {
+        var nuevos = await _usuarioServicio.RegistrarIngresoDiarioAsync(usuario.Id, cancellationToken);
         var expiracion = DateTime.UtcNow.AddDays(ObtenerRefreshTokenDias());
         var sesion = new SesionUsuario
         {
@@ -142,7 +148,9 @@ public class AuthServicio : IAuthServicio
         var refreshToken = GenerarRefreshToken(sesion.Id);
         sesion.RefreshTokenHash = HashearToken(refreshToken);
         await _sesionRepositorio.AgregarAsync(sesion, cancellationToken);
-        return CrearResultado(usuario, sesion.Id, refreshToken, expiracion);
+        var resultado = CrearResultado(usuario, sesion.Id, refreshToken, expiracion);
+        resultado.Respuesta.LogrosNuevos = nuevos ?? new();
+        return resultado;
     }
 
     private ResultadoAutenticacionDto CrearResultado(Usuario usuario, Guid sesionId, string refreshToken, DateTime expiracion) =>

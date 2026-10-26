@@ -1,5 +1,6 @@
 using Neo4j.Driver;
 using ProyectoFinalTPI.Backend.Dtos.Usuario;
+using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 
@@ -36,18 +37,29 @@ namespace ProyectoFinalTPI.Backend.Servicio
             RETURN seguidor.postgresId AS idUsuario
             ORDER BY idUsuario";
 
+        private const string ContarSeguidosQuery = @"
+            MATCH (:Usuario { postgresId: $idUsuario })-[:SIGUE_A]->(:Usuario)
+            RETURN count(*) AS total";
+
+        private const string ContarSeguidoresQuery = @"
+            MATCH (:Usuario)-[:SIGUE_A]->(:Usuario { postgresId: $idUsuario })
+            RETURN count(*) AS total";
+
 
         private readonly IUsuarioRepositorio _usuarioRepositorio;
         private readonly IDriver _neo4jDriver;
         private readonly INotificacionServicio _notificacionServicio;
+        private readonly ILogroServicio _logroServicio;
 
         public SeguimientoServicio(
             IUsuarioRepositorio usuarioRepositorio,
             IDriver neo4jDriver,
+            ILogroServicio logroServicio,
             INotificacionServicio notificacionServicio)
         {
             _usuarioRepositorio = usuarioRepositorio;
             _neo4jDriver = neo4jDriver;
+            _logroServicio = logroServicio;
             _notificacionServicio = notificacionServicio;
         }
 
@@ -76,6 +88,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
             {
                 await _notificacionServicio.NotificarNuevoSeguidorAsync(
                     idUsuarioASeguir, idUsuario, cancellationToken);
+                await VerificarLogros(idUsuario, idUsuarioASeguir);
                 return ResultadoSeguimiento.Aplicado;
             }
             return ResultadoSeguimiento.SinCambios;
@@ -284,6 +297,47 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 return idsSeguidores;
             });
 
+        }
+        private async Task VerificarLogros(int seguidorId, int seguidoId)
+        {
+            int totalSeguidos = await ContarSeguidos(seguidorId);
+            if (totalSeguidos >= 5)
+            {
+                await _logroServicio.VerificarYDarLogro(seguidorId, LogroEnum.ConAmigos);
+            }
+
+            int totalSeguidores = await ContarSeguidores(seguidoId);
+            if (totalSeguidores >= 50)
+            {
+                await _logroServicio.VerificarYDarLogro(seguidoId, LogroEnum.Influencer);
+            }
+        }
+        private async Task<int> ContarSeguidos(int idUsuario)
+        {
+            await using var session = _neo4jDriver.AsyncSession();
+            return await session.ExecuteReadAsync(async transaction =>
+            {
+                var cursor = await transaction.RunAsync(ContarSeguidosQuery, new { idUsuario });
+                if (await cursor.FetchAsync())
+                {
+                    return cursor.Current["total"].As<int>();
+                }
+                return 0;
+            });
+        }
+
+        private async Task<int> ContarSeguidores(int idUsuario)
+        {
+            await using var session = _neo4jDriver.AsyncSession();
+            return await session.ExecuteReadAsync(async transaction =>
+            {
+                var cursor = await transaction.RunAsync(ContarSeguidoresQuery, new { idUsuario });
+                if (await cursor.FetchAsync())
+                {
+                    return cursor.Current["total"].As<int>();
+                }
+                return 0;
+            });
         }
     }
 }
