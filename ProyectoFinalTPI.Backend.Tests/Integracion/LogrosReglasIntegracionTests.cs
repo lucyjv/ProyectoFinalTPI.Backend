@@ -20,6 +20,42 @@ public class LogrosReglasIntegracionTests(PostgisFixture postgres, Neo4jLogrosFi
     : IClassFixture<PostgisFixture>, IClassFixture<Neo4jLogrosFixture>
 {
     [Fact]
+    public async Task CuentaNuevaNoDesbloqueaLogrosNiHeredaLosDeOtraCuentaAlRegistrarseOIngresar()
+    {
+        await using var factory = new PublicacionesApiFactory(postgres);
+        using var client = factory.CreateClient();
+        var anterior = await CrearUsuario(client, "anterior");
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            db.Logros_Usuarios.Add(new Logros_Usuarios
+            {
+                UsuarioId = anterior.UsuarioId, LogroId = 2, FechaDesbloqueo = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+        Assert.True((await Perfil(client, anterior.UsuarioId)).Logros.Single(logro => logro.Id == 2).Desbloqueado);
+
+        var nueva = await CrearUsuario(client, "nueva");
+        Assert.Empty(nueva.LogrosNuevos);
+        var perfil = await Perfil(client, nueva.UsuarioId);
+        Assert.Equal(nueva.UsuarioId, perfil.Id);
+        Assert.Equal(17, perfil.Logros.Count);
+        Assert.All(perfil.Logros, logro =>
+        {
+            Assert.False(logro.Desbloqueado);
+            Assert.Null(logro.FechaDesbloqueo);
+        });
+        Assert.DoesNotContain(perfil.Logros, logro => logro.Titulo == "Corazón abierto");
+        Assert.Empty((await Login(client, "nueva")).LogrosNuevos);
+        Assert.All((await Perfil(client, nueva.UsuarioId)).Logros, logro => Assert.False(logro.Desbloqueado));
+        using var verificacion = factory.Services.CreateScope();
+        var contexto = verificacion.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Assert.False(await contexto.Logros_Usuarios.AnyAsync(logro => logro.UsuarioId == nueva.UsuarioId));
+        Assert.Equal(1, await contexto.Logros_Usuarios.CountAsync(logro => logro.UsuarioId == anterior.UsuarioId));
+    }
+
+    [Fact]
     public async Task LoginCuentaUnIngresoPorDiaDesbloqueaTresYSieteYNoCuentaClavesInvalidas()
     {
         var clock = new Reloj { Ahora = new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.Zero) };
