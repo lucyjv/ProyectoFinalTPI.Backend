@@ -1,0 +1,56 @@
+name: Deploy backend to Azure
+
+on:
+  workflow_run:
+    workflows: ["Backend CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: nostalgiar-api-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout tested commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          persist-credentials: false
+
+      - name: Set up .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Publish API for Linux
+        run: dotnet publish ProyectoFinalTPI.Backend/ProyectoFinalTPI.Backend.csproj --configuration Release --output ./publish
+
+      - name: Sign in to Azure with OpenID Connect
+        uses: azure/login@v2
+        with:
+          client-id: 8c018787-dc4b-463c-a163-4bc89267535d
+          tenant-id: 659e1dba-b3cc-4dcc-8730-d23877e7ab7b
+          subscription-id: 7375da79-0269-45a2-acfc-b60690edb2cd
+
+      - name: Deploy to nostalgiar-api
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: nostalgiar-api
+          package: ./publish
+
+      - name: Check API startup
+        run: curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 6 https://nostalgiar-api-cpf0fhaqgnbrdpb3.brazilsouth-01.azurewebsites.net/swagger/v1/swagger.json --output /dev/null
