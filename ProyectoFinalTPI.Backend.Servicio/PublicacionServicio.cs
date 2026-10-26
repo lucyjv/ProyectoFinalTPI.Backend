@@ -21,12 +21,6 @@ namespace ProyectoFinalTPI.Backend.Servicio
         private readonly INotificacionServicio _notificacionServicio;
         private readonly ILogroServicio _logroServicio;
 
-<<<<<<< HEAD
-        public PublicacionServicio(IPublicacionRepositorio publicacionRepositorio, IUsuarioRepositorio usuarioRepositorio, 
-            IMultimediaServicio multimediaServicio, ISesionFypRepositorio sesionFypRepositorio,
-            ISeguimientoServicio seguimientoServicio, ILogroServicio logroServicio, IOptions<FeedRecomendacionesOptions> opcionesFeed,
-            INotificacionServicio notificacionServicio)
-=======
         public PublicacionServicio(
             IPublicacionRepositorio publicacionRepositorio,
             IUsuarioRepositorio usuarioRepositorio,
@@ -36,7 +30,6 @@ namespace ProyectoFinalTPI.Backend.Servicio
             IOptions<FeedRecomendacionesOptions> opcionesFeed,
             INotificacionServicio notificacionServicio,
             ILogroServicio logroServicio)
->>>>>>> 1fe2afa66dffbb99cfc6336db0ed6c3404aec95d
         {
             _publicacionRepositorio = publicacionRepositorio;
             _usuarioRepositorio = usuarioRepositorio;
@@ -124,20 +117,12 @@ namespace ProyectoFinalTPI.Backend.Servicio
                         usuarioId,
                         cancellationToken);
                 }
-<<<<<<< HEAD
-
-                var estadoNuevo = await _publicacionRepositorio.ObtenerEstadoPuntuacion(publicacionId, usuarioId, cancellationToken);
-                await VerificacionLogrosPuntuacion(usuarioId, publicacion, estadoNuevo, cancellationToken);
-            }
-            return await _publicacionRepositorio.ObtenerEstadoPuntuacion(publicacionId, usuarioId, cancellationToken);
-=======
             }
 
             var estadoNuevo = await _publicacionRepositorio.ObtenerEstadoPuntuacion(publicacionId, usuarioId, cancellationToken);
             await VerificacionLogrosPuntuacion(usuarioId, publicacion, estadoNuevo, cancellationToken);
 
             return estadoNuevo;
->>>>>>> 1fe2afa66dffbb99cfc6336db0ed6c3404aec95d
         }
 
         public async Task<PuntuacionPublicacionDto> QuitarPuntuacion(

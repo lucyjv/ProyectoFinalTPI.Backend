@@ -44,7 +44,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
             if (tipo == MultimediaEnum.Video)
             {
-                var resultado = await _cloudinary.UploadAsync(
+                var resultado = await cloudinary.UploadAsync(
                     new VideoUploadParams
                     {
                         File = file,

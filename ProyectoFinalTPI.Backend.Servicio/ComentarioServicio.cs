@@ -11,8 +11,7 @@ public class ComentarioServicio(
     IComentarioRepositorio _comentarioRepositorio,
     IUsuarioRepositorio _usuarioRepositorio,
     INotificacionServicio _notificacionServicio,
-    ILogroServicio _logroServicio,
-    IPublicacionRepositorio _publicacionRepositorio) : IComentarioServicio
+    ILogroServicio _logroServicio) : IComentarioServicio
 {
     private const int LimiteRespuestasIniciales = 3;
 
