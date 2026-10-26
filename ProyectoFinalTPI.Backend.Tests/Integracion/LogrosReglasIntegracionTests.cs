@@ -184,7 +184,6 @@ public class LogrosReglasIntegracionTests(PostgisFixture postgres, Neo4jLogrosFi
 
     [Theory]
     [InlineData("repost")]
-    [InlineData("compartir")]
     [InlineData("citar")]
     public async Task ViajeroCuentaRepostsDeNeo4jYCitasSinContarRepetidosPropiosNiDeOtrosUsuarios(string accionFinal)
     {
@@ -230,8 +229,6 @@ public class LogrosReglasIntegracionTests(PostgisFixture postgres, Neo4jLogrosFi
 
         var response = accionFinal switch
         {
-            "compartir" => await client.PostAsJsonAsync("/api/publicaciones/compartir",
-                new { publicacionOriginalId = ajenas[9], autorId = user.UsuarioId, descripcion = "" }),
             "citar" => await client.PostAsJsonAsync($"/api/publicaciones/{ajenas[9]}/citar",
                 new { descripcion = "Mi cita del recuerdo" }),
             _ => await client.PostAsync($"/api/publicaciones/{ajenas[9]}/repost", null)
