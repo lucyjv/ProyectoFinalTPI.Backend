@@ -4,6 +4,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Neo4j.Driver;
+using ProyectoFinalTPI.Backend.Dtos.Publicacion;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Repositorio.Data;
@@ -57,7 +59,7 @@ namespace ProyectoFinalTPI.Backend.Tests
         }
 
         [Fact]
-        public async Task Compartir_SinComentario_CreaNuevaPublicacion()
+        public async Task Compartir_SinComentario_CreaRepostEnNeo4j_YNoDuplicaEnPostgres()
         {
             await using var factory = new ApiFactory();
             using var client = factory.CreateClient();
@@ -75,12 +77,75 @@ namespace ProyectoFinalTPI.Backend.Tests
             Assert.True(response.StatusCode == HttpStatusCode.Created, await response.Content.ReadAsStringAsync());
 
             var body = await response.Content.ReadFromJsonAsync<Resultado>();
+            Assert.NotNull(body);
+            Assert.Equal(1, body.id);
+
             using var scope = factory.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            var p = await db.Publicaciones.Include(x => x.Lugar).SingleAsync(x => x.Id == body!.id);
+            var compartidasEnPostgres = await db.Publicaciones.CountAsync(x => x.PublicacionOriginalId == 1);
 
-            Assert.Equal(1, p.PublicacionOriginalId);
-            Assert.Equal("", p.Descripcion);
+            Assert.Equal(0, compartidasEnPostgres);
+        }
+
+        [Fact]
+        public async Task Repostear_Endpoint_RetornaOk()
+        {
+            await using var factory = new ApiFactory();
+            using var client = factory.CreateClient();
+            await factory.Seed();
+
+            using var response = await client.PostAsync("/api/publicaciones/1/repost?usuarioId=2", null);
+
+            Assert.True(response.StatusCode == HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+            var dto = await response.Content.ReadFromJsonAsync<RepostPublicacionDto>();
+            Assert.NotNull(dto);
+            Assert.Equal(1, dto.PublicacionId);
+            Assert.True(dto.DioRepost);
+        }
+
+        [Fact]
+        public async Task QuitarRepost_Endpoint_RetornaOk()
+        {
+            await using var factory = new ApiFactory();
+            using var client = factory.CreateClient();
+            await factory.Seed();
+
+            using var response = await client.DeleteAsync("/api/publicaciones/1/repost?usuarioId=2");
+
+            Assert.True(response.StatusCode == HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+            var dto = await response.Content.ReadFromJsonAsync<RepostPublicacionDto>();
+            Assert.NotNull(dto);
+            Assert.Equal(1, dto.PublicacionId);
+            Assert.False(dto.DioRepost);
+        }
+
+        [Fact]
+        public async Task Citar_Endpoint_CreaNuevaPublicacionEnPostgres()
+        {
+            await using var factory = new ApiFactory();
+            using var client = factory.CreateClient();
+            await factory.Seed();
+
+            var requestPayload = new
+            {
+                AutorId = 2,
+                Descripcion = "Comentario de cita"
+            };
+
+            using var response = await client.PostAsJsonAsync("/api/publicaciones/1/citar", requestPayload);
+
+            Assert.True(response.StatusCode == HttpStatusCode.Created, await response.Content.ReadAsStringAsync());
+
+            var body = await response.Content.ReadFromJsonAsync<Resultado>();
+            Assert.NotNull(body);
+
+            using var scope = factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var cita = await db.Publicaciones.SingleAsync(x => x.Id == body.id);
+
+            Assert.Equal(1, cita.PublicacionOriginalId);
+            Assert.Equal("Comentario de cita", cita.Descripcion);
+            Assert.Equal(2, cita.UsuarioId);
         }
 
         [Fact]
@@ -91,7 +156,6 @@ namespace ProyectoFinalTPI.Backend.Tests
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             await factory.Seed();
 
-            
             db.Publicaciones.Add(new Publicacion
             {
                 Id = 2,
@@ -108,12 +172,10 @@ namespace ProyectoFinalTPI.Backend.Tests
 
             Assert.Equal(2, await db.Publicaciones.CountAsync());
 
-            
             var original = await db.Publicaciones.FindAsync(1);
             db.Publicaciones.Remove(original!);
             await db.SaveChangesAsync();
 
-          
             Assert.Empty(await db.Publicaciones.ToListAsync());
         }
 
@@ -134,6 +196,8 @@ namespace ProyectoFinalTPI.Backend.Tests
                     services.AddDbContext<ApplicationDbContext>(o => o.UseInMemoryDatabase(nombre));
                     services.RemoveAll<IMultimediaServicio>();
                     services.AddSingleton<IMultimediaServicio>(Media);
+                    services.RemoveAll<IDriver>();
+                    services.AddSingleton<IDriver>(CrearNeo4jDriverFake());
                 });
             }
 
@@ -160,6 +224,93 @@ namespace ProyectoFinalTPI.Backend.Tests
                 });
 
                 await db.SaveChangesAsync();
+            }
+
+            private static IDriver CrearNeo4jDriverFake()
+            {
+                var dioRepost = false;
+
+                var transaccion = TestDispatchProxy<IAsyncQueryRunner>.Create((metodo, argumentos) =>
+                {
+                    if (metodo.Name != nameof(IAsyncQueryRunner.RunAsync))
+                        throw new NotSupportedException(metodo.Name);
+
+                    var query = (string)argumentos![0]!;
+                    var registros = new List<IRecord>();
+
+                    if (query.Contains("MERGE (usuario)-[r:REPOSTEO]->(publicacion)"))
+                    {
+                        dioRepost = true;
+                    }
+                    else if (query.Contains("DELETE r"))
+                    {
+                        dioRepost = false;
+                        var rec = TestDispatchProxy<IRecord>.Create((m, args) =>
+                        {
+                            if (m.Name != "get_Item") throw new NotSupportedException(m.Name);
+                            return ((string)args![0]!) switch
+                            {
+                                "cantidad" => 1,
+                                _ => throw new KeyNotFoundException()
+                            };
+                        });
+                        registros.Add(rec);
+                    }
+                    else if (query.Contains("dioRepost"))
+                    {
+                        var rec = TestDispatchProxy<IRecord>.Create((m, args) =>
+                        {
+                            if (m.Name != "get_Item") throw new NotSupportedException(m.Name);
+                            return ((string)args![0]!) switch
+                            {
+                                "cantidadReposts" => dioRepost ? 1 : 0,
+                                "dioRepost" => dioRepost,
+                                _ => throw new KeyNotFoundException()
+                            };
+                        });
+                        registros.Add(rec);
+                    }
+
+                    var cursor = TestDispatchProxy<IResultCursor>.Create((m, _) =>
+                    {
+                        if (m.Name == nameof(IAsyncEnumerable<IRecord>.GetAsyncEnumerator))
+                            return new RecordEnumerator(registros);
+                        if (m.Name == nameof(IAsyncDisposable.DisposeAsync))
+                            return ValueTask.CompletedTask;
+
+                        throw new NotSupportedException($"No se esperaba llamar a {m.Name}.");
+                    });
+
+                    return Task.FromResult(cursor);
+                });
+
+                var session = TestDispatchProxy<IAsyncSession>.Create((metodo, argumentos) =>
+                {
+                    if (metodo.Name is nameof(IAsyncSession.ExecuteReadAsync) or nameof(IAsyncSession.ExecuteWriteAsync))
+                        return ((Delegate)argumentos![0]!).DynamicInvoke(transaccion);
+                    if (metodo.Name == nameof(IAsyncDisposable.DisposeAsync))
+                        return ValueTask.CompletedTask;
+
+                    throw new NotSupportedException($"No se esperaba llamar a {metodo.Name}.");
+                });
+
+                return TestDispatchProxy<IDriver>.Create((metodo, _) =>
+                {
+                    if (metodo.Name == nameof(IDriver.AsyncSession))
+                        return session;
+                    if (metodo.Name == nameof(IAsyncDisposable.DisposeAsync))
+                        return ValueTask.CompletedTask;
+
+                    throw new NotSupportedException($"No se esperaba llamar a {metodo.Name}.");
+                });
+            }
+
+            private sealed class RecordEnumerator(IReadOnlyList<IRecord> registros) : IAsyncEnumerator<IRecord>
+            {
+                private int _indice = -1;
+                public IRecord Current => registros[_indice];
+                public ValueTask<bool> MoveNextAsync() => ValueTask.FromResult(++_indice < registros.Count);
+                public ValueTask DisposeAsync() => ValueTask.CompletedTask;
             }
         }
 

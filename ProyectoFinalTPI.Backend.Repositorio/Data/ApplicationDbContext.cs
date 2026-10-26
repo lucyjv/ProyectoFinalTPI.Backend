@@ -29,6 +29,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
         public DbSet<MomentoAlias> MomentosAlias { get; set; }
         public DbSet<PublicacionMomento> PublicacionesMomentos { get; set; }
         public DbSet<TrabajoAnalisisRecuerdo> TrabajosAnalisisRecuerdos { get; set; }
+        public DbSet<Notificacion> Notificaciones { get; set; }
 
         public override int SaveChanges(bool acceptAllChangesOnSuccess)
         {
@@ -54,6 +55,8 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
                 m.VersionCatalogo = entry.State == EntityState.Added ? 1 : checked(entry.Property(x => x.VersionCatalogo).OriginalValue + 1);
             }
         }
+        public DbSet<Logro> Logro { get; set; }
+        public DbSet<Logros_Usuarios> Logros_Usuarios { get; set; }
 
         private void PrepararTrabajosAnalisis()
         {
@@ -77,6 +80,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
                 });
             }
         }
+
 
         // ── Chat ──────────────────────────────────────────────────────────────
         public DbSet<MensajeChat> MensajesChat { get; set; }
@@ -243,6 +247,79 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
                 entity.HasIndex(e => new { e.EmisorId, e.DestinatarioId })
                       .HasDatabaseName("IX_mensajes_chat_participantes");
             });
+            // ── Configuración de Notificacion ─────────────────────────────────────
+            modelBuilder.Entity<Notificacion>(entity =>
+            {
+                entity.ToTable("notificaciones");
+
+                entity.Property(e => e.Tipo)
+                      .HasConversion<string>()
+                      .HasMaxLength(50);
+
+                // FK al destinatario: si el usuario es eliminado, sus notificaciones también.
+                entity.HasOne(e => e.UsuarioDestinatario)
+                      .WithMany()
+                      .HasForeignKey(e => e.UsuarioDestinatarioId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                // FK al emisor: opcional. Si el emisor es eliminado, la FK queda en null.
+                entity.HasOne(e => e.Emisor)
+                      .WithMany()
+                      .HasForeignKey(e => e.EmisorId)
+                      .OnDelete(DeleteBehavior.SetNull);
+
+                // Índice principal: obtener notificaciones de un usuario ordenadas por fecha.
+                entity.HasIndex(e => new { e.UsuarioDestinatarioId, e.FechaCreacion })
+                      .HasDatabaseName("IX_notificaciones_usuario_fecha");
+
+                // Índice para la limpieza de expiradas.
+                entity.HasIndex(e => e.FechaExpiracion)
+                      .HasDatabaseName("IX_notificaciones_expiracion");
+
+                // Índice para ExisteNotificacionPendienteAsync (unicidad por tipo+publicación).
+                entity.HasIndex(e => new { e.UsuarioDestinatarioId, e.Tipo, e.PublicacionId, e.Leida })
+                      .HasDatabaseName("IX_notificaciones_pendiente");
+            });
+            // ──────────────────────────────────────────────────────────────────────
+            modelBuilder.Entity<Logro>()
+                .ToTable("logros");
+
+            modelBuilder.Entity<Logros_Usuarios>(entity =>
+            {
+                entity.ToTable("logros_usuarios");
+
+                entity.HasKey(ul => new { ul.UsuarioId, ul.LogroId });
+
+                entity.HasOne(ul => ul.Usuario)
+                      .WithMany(u => u.LogrosUsuarios) 
+                      .HasForeignKey(ul => ul.UsuarioId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(ul => ul.Logro)
+                      .WithMany(l => l.LogrosUsuarios)
+                      .HasForeignKey(ul => ul.LogroId)
+                      .OnDelete(DeleteBehavior.Cascade);
+            });
+            modelBuilder.Entity<Logro>().HasData(
+                new Logro { Id = 1, Titulo = "Primer Paso", Descripcion = "Crear tu primer recuerdo en el mapa.", PuntosRecompensa = 0, UrlIcono = "." },
+                new Logro { Id = 2, Titulo = "Primera Palabra", Descripcion = "Escribir tu primer comentario en el recuerdo de otra persona.", PuntosRecompensa = 0, UrlIcono = "." },
+                new Logro { Id = 3, Titulo = "Con Amigos", Descripcion = "Seguir a tus primeros 5 usuarios en la red social.", PuntosRecompensa = 0, UrlIcono = "." },
+                new Logro { Id = 6, Titulo = "Curioso", Descripcion = "Dar tu primer punto de nostalgia a una publicación.", PuntosRecompensa = 0, UrlIcono = "." },
+                new Logro { Id = 7, Titulo = "Cronista Local", Descripcion = "Publicar 5 recuerdos cerca de tu ubicación física.", PuntosRecompensa = 0, UrlIcono = "." },
+                new Logro { Id = 8, Titulo = "Voz de una Época", Descripcion = "Tener recuerdos publicados en 3 décadas distintas.", PuntosRecompensa = 0, UrlIcono = "." },
+                new Logro { Id = 9, Titulo = "Fotógrafo del Recuerdo", Descripcion = "Subir 10 recuerdos que incluyan una imagen o foto.", PuntosRecompensa = 0, UrlIcono = "." },
+                new Logro { Id = 10, Titulo = "Popular", Descripcion = "Lograr que uno de tus recuerdos llegue a 20 puntos de nostalgia.", PuntosRecompensa = 0, UrlIcono = "." },
+                new Logro { Id = 11, Titulo = "Generoso", Descripcion = "Dar 50 puntos de nostalgia en total a publicaciones ajenas.", PuntosRecompensa = 0, UrlIcono = "." },
+                new Logro { Id = 12, Titulo = "Conversador", Descripcion = "Llegar a los 25 comentarios en total dentro de la plataforma.", PuntosRecompensa = 0, UrlIcono = "." },
+                new Logro { Id = 13, Titulo = "Lince de las Praderas", Descripcion = "Alcanzar un total de 15 publicaciones creadas en tu muro.", PuntosRecompensa = 0, UrlIcono = "." },
+                new Logro { Id = 14, Titulo = "Racha de Hierro", Descripcion = "Ingresar a la aplicación durante 3 días seguidos.", PuntosRecompensa = 0, UrlIcono = "." },
+                new Logro { Id = 15, Titulo = "Década Completa", Descripcion = "Tener al menos un recuerdo publicado en cada una de las 6 décadas.", PuntosRecompensa = 0, UrlIcono = "." },
+                new Logro { Id = 16, Titulo = "Leyenda", Descripcion = "Lograr que uno de tus recuerdos llegue a 100 puntos de nostalgia.", PuntosRecompensa = 0, UrlIcono = "." },
+                new Logro { Id = 18, Titulo = "Influencer", Descripcion = "Conseguir 50 seguidores en tu red.", PuntosRecompensa = 0, UrlIcono = "." },
+                new Logro { Id = 19, Titulo = "Racha de Oro", Descripcion = "Ingresar a la aplicación durante 7 días seguidos.", PuntosRecompensa = 0, UrlIcono = "." },
+                new Logro { Id = 20, Titulo = "Viajero del Tiempo", Descripcion = "Republicar 10 publicaciones de otros usuarios en tu feed.", PuntosRecompensa = 0, UrlIcono = "." }
+            );
+
         }
     }
 }

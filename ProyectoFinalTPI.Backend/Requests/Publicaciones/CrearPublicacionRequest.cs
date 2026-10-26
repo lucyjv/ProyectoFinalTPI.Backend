@@ -28,6 +28,12 @@ namespace ProyectoFinalTPI.Backend.Requests.Publicaciones
         [Range(-180, 180)]
         public double Longitud { get; set; }
 
+        [Range(-90, 90)]
+        public double? GpsLatitud { get; set; }
+
+        [Range(-180, 180)]
+        public double? GpsLongitud { get; set; }
+
         [Required]
         [EnumDataType(typeof(MultimediaEnum))]
         public MultimediaEnum TipoMultimedia { get; set; }
@@ -43,6 +49,8 @@ namespace ProyectoFinalTPI.Backend.Requests.Publicaciones
         public IEnumerable<ValidationResult> Validate(
             ValidationContext validationContext)
         {
+            if (GpsLatitud.HasValue != GpsLongitud.HasValue)
+                yield return new ValidationResult("La ubicación actual requiere latitud y longitud.", new[] { nameof(GpsLatitud), nameof(GpsLongitud) });
             if (Fecha == default)
                 yield return new ValidationResult("Debe indicar una fecha.", new[] { nameof(Fecha) });
 
@@ -79,5 +87,7 @@ namespace ProyectoFinalTPI.Backend.Requests.Publicaciones
                     new[] { nameof(UrlArchivo) });
             }
         }
+
+
     }
 }
