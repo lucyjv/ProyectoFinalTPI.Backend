@@ -125,53 +125,6 @@ namespace ProyectoFinalTPI.Backend.Controllers
                 new { id });
         }
 
-        [HttpPost("compartir")]
-        [SwaggerOperation(
-            Summary = "Comparte una publicación.",
-            Description = "Crea una publicación vinculada a la original, con un comentario opcional. Conserva sus datos multimedia y ubicación. Se utiliza el autor autenticado cuando está disponible; en caso contrario, AutorId."
-        )]
-        [SwaggerResponse(StatusCodes.Status201Created, "Publicación compartida. Devuelve su id y la cabecera Location.")]
-        [SwaggerResponse(StatusCodes.Status400BadRequest, "Los datos para compartir no son válidos.", typeof(ProblemDetails))]
-        [SwaggerResponse(StatusCodes.Status404NotFound, "El autor o la publicación original no existen o no están disponibles.", typeof(ProblemDetails))]
-        [SwaggerResponse(StatusCodes.Status415UnsupportedMediaType, "El formato del cuerpo no es compatible; utilice application/json.", typeof(ProblemDetails))]
-        public async Task<IActionResult> Compartir(
-            [FromBody] CompartirPublicacionRequest request,
-            CancellationToken cancellationToken = default)
-        {
-            var autorIdAutenticado = User.ObtenerUsuarioId();
-            var autorIdFinal = (autorIdAutenticado.HasValue && autorIdAutenticado.Value > 0)
-                ? autorIdAutenticado.Value
-                : request.AutorId;
-
-            var id = await _publicacionServicio.Compartir(
-                request.ToPublicacion(autorIdFinal), cancellationToken);
-
-            return Created(
-                $"/api/publicaciones/{id}",
-                new { id });
-        }
-
-        [HttpDelete("compartir/{originalId:int}")]
-        [SwaggerOperation(
-            Summary = "Elimina un repost.",
-            Description = "Elimina la publicación compartida asociada al identificador original y al autor indicado. Se utiliza el autor autenticado cuando está disponible; en caso contrario, autorId."
-        )]
-        [SwaggerResponse(StatusCodes.Status200OK, "Repost eliminado.")]
-        [SwaggerResponse(StatusCodes.Status400BadRequest, "El identificador de la publicación original no es válido.", typeof(ProblemDetails))]
-        [SwaggerResponse(StatusCodes.Status404NotFound, "El repost no existe o no se pudo eliminar para el autor indicado.", typeof(ProblemDetails))]
-        public async Task<IActionResult> EliminarRepost(
-            int originalId,
-            [FromQuery] int? autorId = null,
-            CancellationToken cancellationToken = default)
-        {
-            var autorIdAutenticado = User.ObtenerUsuarioId();
-            var autorIdFinal = (autorIdAutenticado.HasValue && autorIdAutenticado.Value > 0)
-                ? autorIdAutenticado.Value
-                : autorId;
-
-            await _publicacionServicio.EliminarRepost(originalId, autorIdFinal, cancellationToken);
-            return Ok(new { mensaje = "Repost eliminado con éxito.", id = originalId });
-        }
 
         [HttpPost("{id:int}/repost")]
         [SwaggerOperation(

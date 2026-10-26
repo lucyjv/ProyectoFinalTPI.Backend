@@ -6,17 +6,6 @@ namespace ProyectoFinalTPI.Backend.Mappings;
 
 public static class PublicacionMappings
 {
-    public static Publicacion ToPublicacion(
-        this CompartirPublicacionRequest request, int autorId)
-    {
-        return new Publicacion
-        {
-            PublicacionOriginalId = request.PublicacionOriginalId,
-            UsuarioId = autorId,
-            Descripcion = request.Descripcion ?? string.Empty
-        };
-    }
-
     public static Publicacion ToPublicacion(this CrearPublicacionRequest request, int autorId)
     {
         return new Publicacion

@@ -198,19 +198,6 @@ namespace ProyectoFinalTPI.Backend.Servicio
             await VerificacionLogroCompartir(usuarioId, cancellationToken);
             return idCita;
         }
-        public async Task<int> Compartir(Publicacion publicacion, CancellationToken cancellationToken = default)
-        {
-            var targetId = publicacion.PublicacionOriginalId.GetValueOrDefault();
-            if (string.IsNullOrWhiteSpace(publicacion.Descripcion))
-            {
-                await Repostear(targetId, publicacion.UsuarioId, cancellationToken);
-                return targetId;
-            }
-            else
-            {
-                return await Citar(targetId, publicacion.UsuarioId, publicacion.Descripcion, cancellationToken);
-            }
-        }
         public async Task<ResultadoMapaDto> ObtenerPines(PublicacionFiltroDto filtro, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(filtro);
@@ -311,7 +298,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
         #endregion
 
-        #region Creacion, Compartir y Eliminacion
+        #region Creacion y Eliminacion
 
         public async Task<int> Crear(Publicacion publicacion, Stream? archivo = null, string? nombreArchivo = null, Point? gpsUsuario = null)
         {
@@ -331,14 +318,6 @@ namespace ProyectoFinalTPI.Backend.Servicio
             ValidarIdPublicacion(id);
 
             var eliminado = await _publicacionRepositorio.Eliminar(id, autorId, cancellationToken);
-            VerificarEliminar(eliminado);
-        }
-
-        public async Task EliminarRepost(int originalId, int? autorId = null, CancellationToken cancellationToken = default)
-        {
-            ValidarIdPublicacion(originalId);
-
-            var eliminado = await _publicacionRepositorio.EliminarRepost(originalId, autorId, cancellationToken);
             VerificarEliminar(eliminado);
         }
        

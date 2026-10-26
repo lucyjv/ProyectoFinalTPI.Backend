@@ -1098,30 +1098,6 @@ namespace ProyectoFinalTPI.Backend.Repositorio
             return true;
         }
 
-        public async Task<bool> EliminarRepost(int originalId, int? autorId = null, CancellationToken cancellationToken = default)
-        {
-            bool eliminado = false;
-            if (autorId.HasValue && autorId.Value > 0)
-            {
-                eliminado = await QuitarRepost(originalId, autorId.Value, cancellationToken);
-            }
-
-            var query = _context.Publicaciones.Where(p => p.PublicacionOriginalId == originalId);
-            if (autorId.HasValue && autorId.Value > 0)
-            {
-                query = query.Where(p => p.UsuarioId == autorId.Value);
-            }
-
-            var repostLegado = await query.OrderByDescending(p => p.FechaCreación).FirstOrDefaultAsync(cancellationToken);
-            if (repostLegado != null)
-            {
-                _context.Publicaciones.Remove(repostLegado);
-                await _context.SaveChangesAsync(cancellationToken);
-                eliminado = true;
-            }
-
-            return eliminado;
-        }
         public async Task<int> ContarPosteosCercanosAlUsuario(int usuarioId, NetTopologySuite.Geometries.Point gpsUsuario, CancellationToken cancellationToken = default)
         {
             return await _context.Publicaciones
