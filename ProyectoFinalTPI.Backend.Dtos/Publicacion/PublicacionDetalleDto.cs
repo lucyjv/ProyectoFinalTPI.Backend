@@ -30,15 +30,11 @@ namespace ProyectoFinalTPI.Backend.Dtos.Publicacion
         public int CantidadComentarios { get; set; }
         public bool DioLike { get; set; }
 
-        public int CantidadReposts { get; set; }
-        public bool DioRepost { get; set; }
-
         public int PuntosTotales { get; set; }
         public int? MiPuntuacion { get; set; }
 
         public GrupoResumenDto? Grupo { get; set; }
 
         public PublicacionResumenDto? PublicacionOriginal { get; set; }
-        public RepostInfoEmergenteDto? ReposteadoPor { get; set; }
     }
 }

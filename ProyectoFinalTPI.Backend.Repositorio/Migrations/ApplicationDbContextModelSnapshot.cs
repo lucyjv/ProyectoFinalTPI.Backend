@@ -120,190 +120,6 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.ToTable("grupos_integrantes", (string)null);
                 });
 
-            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Logro", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Descripcion")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("PuntosRecompensa")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Titulo")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("UrlIcono")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("logros", (string)null);
-
-                    b.HasData(
-                        new
-                        {
-                            Id = 1,
-                            Descripcion = "Crear tu primer recuerdo en el mapa.",
-                            PuntosRecompensa = 0,
-                            Titulo = "Primer Paso",
-                            UrlIcono = "."
-                        },
-                        new
-                        {
-                            Id = 2,
-                            Descripcion = "Escribir tu primer comentario en el recuerdo de otra persona.",
-                            PuntosRecompensa = 0,
-                            Titulo = "Primera Palabra",
-                            UrlIcono = "."
-                        },
-                        new
-                        {
-                            Id = 3,
-                            Descripcion = "Seguir a tus primeros 5 usuarios en la red social.",
-                            PuntosRecompensa = 0,
-                            Titulo = "Con Amigos",
-                            UrlIcono = "."
-                        },
-                        new
-                        {
-                            Id = 6,
-                            Descripcion = "Dar tu primer punto de nostalgia a una publicación.",
-                            PuntosRecompensa = 0,
-                            Titulo = "Curioso",
-                            UrlIcono = "."
-                        },
-                        new
-                        {
-                            Id = 7,
-                            Descripcion = "Publicar 5 recuerdos cerca de tu ubicación física.",
-                            PuntosRecompensa = 0,
-                            Titulo = "Cronista Local",
-                            UrlIcono = "."
-                        },
-                        new
-                        {
-                            Id = 8,
-                            Descripcion = "Tener recuerdos publicados en 3 décadas distintas.",
-                            PuntosRecompensa = 0,
-                            Titulo = "Voz de una Época",
-                            UrlIcono = "."
-                        },
-                        new
-                        {
-                            Id = 9,
-                            Descripcion = "Subir 10 recuerdos que incluyan una imagen o foto.",
-                            PuntosRecompensa = 0,
-                            Titulo = "Fotógrafo del Recuerdo",
-                            UrlIcono = "."
-                        },
-                        new
-                        {
-                            Id = 10,
-                            Descripcion = "Lograr que uno de tus recuerdos llegue a 20 puntos de nostalgia.",
-                            PuntosRecompensa = 0,
-                            Titulo = "Popular",
-                            UrlIcono = "."
-                        },
-                        new
-                        {
-                            Id = 11,
-                            Descripcion = "Dar 50 puntos de nostalgia en total a publicaciones ajenas.",
-                            PuntosRecompensa = 0,
-                            Titulo = "Generoso",
-                            UrlIcono = "."
-                        },
-                        new
-                        {
-                            Id = 12,
-                            Descripcion = "Llegar a los 25 comentarios en total dentro de la plataforma.",
-                            PuntosRecompensa = 0,
-                            Titulo = "Conversador",
-                            UrlIcono = "."
-                        },
-                        new
-                        {
-                            Id = 13,
-                            Descripcion = "Alcanzar un total de 15 publicaciones creadas en tu muro.",
-                            PuntosRecompensa = 0,
-                            Titulo = "Lince de las Praderas",
-                            UrlIcono = "."
-                        },
-                        new
-                        {
-                            Id = 14,
-                            Descripcion = "Ingresar a la aplicación durante 3 días seguidos.",
-                            PuntosRecompensa = 0,
-                            Titulo = "Racha de Hierro",
-                            UrlIcono = "."
-                        },
-                        new
-                        {
-                            Id = 15,
-                            Descripcion = "Tener al menos un recuerdo publicado en cada una de las 6 décadas.",
-                            PuntosRecompensa = 0,
-                            Titulo = "Década Completa",
-                            UrlIcono = "."
-                        },
-                        new
-                        {
-                            Id = 16,
-                            Descripcion = "Lograr que uno de tus recuerdos llegue a 100 puntos de nostalgia.",
-                            PuntosRecompensa = 0,
-                            Titulo = "Leyenda",
-                            UrlIcono = "."
-                        },
-                        new
-                        {
-                            Id = 18,
-                            Descripcion = "Conseguir 50 seguidores en tu red.",
-                            PuntosRecompensa = 0,
-                            Titulo = "Influencer",
-                            UrlIcono = "."
-                        },
-                        new
-                        {
-                            Id = 19,
-                            Descripcion = "Ingresar a la aplicación durante 7 días seguidos.",
-                            PuntosRecompensa = 0,
-                            Titulo = "Racha de Oro",
-                            UrlIcono = "."
-                        },
-                        new
-                        {
-                            Id = 20,
-                            Descripcion = "Republicar 10 publicaciones de otros usuarios en tu feed.",
-                            PuntosRecompensa = 0,
-                            Titulo = "Viajero del Tiempo",
-                            UrlIcono = "."
-                        });
-                });
-
-            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Logros_Usuarios", b =>
-                {
-                    b.Property<int>("UsuarioId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("LogroId")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("FechaDesbloqueo")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("UsuarioId", "LogroId");
-
-                    b.HasIndex("LogroId");
-
-                    b.ToTable("logros_usuarios", (string)null);
-                });
-
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Lugar", b =>
                 {
                     b.Property<int>("Id")
@@ -496,56 +312,6 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                         {
                             t.HasCheckConstraint("CK_momentos_alias_texto", "length(btrim(\"Texto\")) > 0 AND length(btrim(\"TextoNormalizado\")) > 0");
                         });
-                });
-
-            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Notificacion", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int?>("EmisorId")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("FechaCreacion")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("FechaExpiracion")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("FechaLeida")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("Leida")
-                        .HasColumnType("boolean");
-
-                    b.Property<int?>("PublicacionId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Tipo")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<int>("UsuarioDestinatarioId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("EmisorId");
-
-                    b.HasIndex("FechaExpiracion")
-                        .HasDatabaseName("IX_notificaciones_expiracion");
-
-                    b.HasIndex("UsuarioDestinatarioId", "FechaCreacion")
-                        .HasDatabaseName("IX_notificaciones_usuario_fecha");
-
-                    b.HasIndex("UsuarioDestinatarioId", "Tipo", "PublicacionId", "Leida")
-                        .HasDatabaseName("IX_notificaciones_pendiente");
-
-                    b.ToTable("notificaciones", (string)null);
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Publicacion", b =>
@@ -849,13 +615,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Property<int>("PuntosNostalgia")
                         .HasColumnType("integer");
 
-                    b.Property<int>("RachaDiasActual")
-                        .HasColumnType("integer");
-
                     b.Property<DateTime?>("SuspendidoHasta")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("UltimoIngresoUtc")
                         .HasColumnType("timestamp with time zone");
 
                     b.HasDiscriminator().HasValue("Usuario_Interactivo");
@@ -970,25 +730,6 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Navigation("Usuario");
                 });
 
-            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Logros_Usuarios", b =>
-                {
-                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Logro", "Logro")
-                        .WithMany("LogrosUsuarios")
-                        .HasForeignKey("LogroId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario_Interactivo", "Usuario")
-                        .WithMany("LogrosUsuarios")
-                        .HasForeignKey("UsuarioId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Logro");
-
-                    b.Navigation("Usuario");
-                });
-
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.MensajeChat", b =>
                 {
                     b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario", "Destinatario")
@@ -1034,24 +775,6 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                         .IsRequired();
 
                     b.Navigation("Momento");
-                });
-
-            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Notificacion", b =>
-                {
-                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario", "Emisor")
-                        .WithMany()
-                        .HasForeignKey("EmisorId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario", "UsuarioDestinatario")
-                        .WithMany()
-                        .HasForeignKey("UsuarioDestinatarioId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Emisor");
-
-                    b.Navigation("UsuarioDestinatario");
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Publicacion", b =>
@@ -1170,11 +893,6 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Navigation("Publicaciones");
                 });
 
-            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Logro", b =>
-                {
-                    b.Navigation("LogrosUsuarios");
-                });
-
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Publicacion", b =>
                 {
                     b.Navigation("Comentarios");
@@ -1186,8 +904,6 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Usuario_Interactivo", b =>
                 {
-                    b.Navigation("LogrosUsuarios");
-
                     b.Navigation("Publicaciones");
                 });
 #pragma warning restore 612, 618

@@ -143,13 +143,11 @@ builder.Services.AddScoped<ISesionUsuarioRepositorio, SesionUsuarioRepositorio>(
 builder.Services.AddScoped<ISeguimientoServicio, SeguimientoServicio>();
 builder.Services.AddScoped<IMultimediaServicio, MultimediaServicio>();
 builder.Services.AddScoped<IInteresServicio, InteresServicio>();
-builder.Services.AddScoped<ILogroServicio, LogroServicio>();
-builder.Services.AddScoped<ILogrosUsuariosRepositorio, LogrosUsuariosRepositorio>();
-
 builder.Services.AddScoped<IUsuarioServicio, UsuarioServicio>();
 
 builder.Services.AddMemoryCache();
 
+builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services.AddHttpClient("GooglePhotos", client => client.Timeout = TimeSpan.FromSeconds(30))
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false })
     .RemoveAllLoggers();
@@ -176,13 +174,6 @@ builder.Services.AddScoped<IMensajeChatRepositorio, MensajeChatRepositorio>();
 // Hosted service: corre en background y limpia mensajes expirados cada hora.
 builder.Services.AddHostedService<LimpiezaMensajesService>();
 // ─────────────────────────────────────────────────────────────────────────────
-
-// ── Notificaciones ────────────────────────────────────────────────────
-builder.Services.AddScoped<INotificacionRepositorio, NotificacionRepositorio>();
-builder.Services.AddScoped<INotificacionPush, NotificacionPush>();        // ← AGREGAR
-builder.Services.AddScoped<INotificacionServicio, NotificacionServicio>();
-builder.Services.AddHostedService<LimpiezaNotificacionesService>();
-// ─────────────────────────────────────────────────────────────────────
 
 var claveJwt = builder.Configuration["Jwt:Clave"]
     ?? (builder.Environment.EnvironmentName == "Testing"
@@ -321,8 +312,6 @@ app.MapControllers();
 
 // ── Ruta del Hub de chat ───────────────────────────────────────────────
 app.MapHub<ChatHub>("/hubs/chat");
-// ── Ruta del Hub de notificaciones ───────────────────────────────────────────────
-app.MapHub<NotificacionHub>("/hubs/notificaciones");
 // ─────────────────────────────────────────────────────────────────────────────
 
 app.MapControllerRoute(

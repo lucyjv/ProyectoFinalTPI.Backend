@@ -2,7 +2,6 @@ using Moq;
 using ProyectoFinalTPI.Backend.Dtos.Chat;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
-using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Servicio;
 using Xunit;
 
@@ -18,7 +17,7 @@ public class ChatServicioTests
     public async Task EnviarMensaje_llama_a_repositorio_con_datos_correctos()
     {
         var repositorioMock = new Mock<IMensajeChatRepositorio>();
-        var servicio = new ChatServicio(repositorioMock.Object, Mock.Of<INotificacionServicio>());
+        var servicio = new ChatServicio(repositorioMock.Object);
 
         await servicio.EnviarMensajeAsync(
             emisorId: 1,
@@ -40,7 +39,7 @@ public class ChatServicioTests
     public async Task EnviarMensaje_devuelve_dto_con_datos_del_mensaje()
     {
         var repositorioMock = new Mock<IMensajeChatRepositorio>();
-        var servicio = new ChatServicio(repositorioMock.Object, Mock.Of<INotificacionServicio>());
+        var servicio = new ChatServicio(repositorioMock.Object);
 
         var resultado = await servicio.EnviarMensajeAsync(
             emisorId: 1,
@@ -58,7 +57,7 @@ public class ChatServicioTests
     public async Task EnviarMensaje_fija_fecha_expiracion_en_7_dias()
     {
         var repositorioMock = new Mock<IMensajeChatRepositorio>();
-        var servicio = new ChatServicio(repositorioMock.Object, Mock.Of<INotificacionServicio>());
+        var servicio = new ChatServicio(repositorioMock.Object);
 
         var antes = DateTime.UtcNow;
         await servicio.EnviarMensajeAsync(1, "usuarioA", 2, "Hola!");
@@ -77,7 +76,7 @@ public class ChatServicioTests
     public async Task EnviarMensaje_fecha_envio_es_utc_reciente()
     {
         var repositorioMock = new Mock<IMensajeChatRepositorio>();
-        var servicio = new ChatServicio(repositorioMock.Object, Mock.Of<INotificacionServicio>());
+        var servicio = new ChatServicio(repositorioMock.Object);
 
         var antes = DateTime.UtcNow;
         var resultado = await servicio.EnviarMensajeAsync(1, "usuarioA", 2, "Hola!");
@@ -121,7 +120,7 @@ public class ChatServicioTests
             .Setup(r => r.ObtenerHistorialAsync(1, 2))
             .ReturnsAsync(mensajesFalsos);
 
-        var servicio = new ChatServicio(repositorioMock.Object, Mock.Of<INotificacionServicio>());
+        var servicio = new ChatServicio(repositorioMock.Object);
 
         var resultado = (await servicio.ObtenerHistorialAsync(1, 2)).ToList();
 
@@ -139,7 +138,7 @@ public class ChatServicioTests
             .Setup(r => r.ObtenerHistorialAsync(It.IsAny<int>(), It.IsAny<int>()))
             .ReturnsAsync(new List<MensajeChat>());
 
-        var servicio = new ChatServicio(repositorioMock.Object, Mock.Of<INotificacionServicio>());
+        var servicio = new ChatServicio(repositorioMock.Object);
 
         var resultado = await servicio.ObtenerHistorialAsync(1, 2);
 
@@ -154,7 +153,7 @@ public class ChatServicioTests
             .Setup(r => r.ObtenerHistorialAsync(It.IsAny<int>(), It.IsAny<int>()))
             .ReturnsAsync(new List<MensajeChat>());
 
-        var servicio = new ChatServicio(repositorioMock.Object, Mock.Of<INotificacionServicio>());
+        var servicio = new ChatServicio(repositorioMock.Object);
 
         await servicio.ObtenerHistorialAsync(usuarioAId: 5, usuarioBId: 7);
 
@@ -183,7 +182,7 @@ public class ChatServicioTests
             .Setup(r => r.ObtenerHistorialAsync(1, 2))
             .ReturnsAsync(mensajesSinNavigation);
 
-        var servicio = new ChatServicio(repositorioMock.Object, Mock.Of<INotificacionServicio>());
+        var servicio = new ChatServicio(repositorioMock.Object);
 
         var resultado = (await servicio.ObtenerHistorialAsync(1, 2)).ToList();
 

@@ -3,28 +3,26 @@ using CloudinaryDotNet.Actions;
 using Microsoft.Extensions.Configuration;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
 
 namespace ProyectoFinalTPI.Backend.Servicio
 {
     public class MultimediaServicio : IMultimediaServicio
     {
-        private readonly Lazy<Cloudinary> _cloudinary;
+        private readonly Cloudinary _cloudinary;
 
         public MultimediaServicio(IConfiguration configuration)
         {
-            _cloudinary = new Lazy<Cloudinary>(() =>
-            {
-                var cloudName = configuration["Cloudinary:CloudName"];
-                var apiKey = configuration["Cloudinary:ApiKey"];
-                var apiSecret = configuration["Cloudinary:ApiSecret"];
-                if (string.IsNullOrWhiteSpace(cloudName)
-                    || string.IsNullOrWhiteSpace(apiKey)
-                    || string.IsNullOrWhiteSpace(apiSecret))
-                    throw new InvalidOperationException(
-                        "Para subir archivos configurá Cloudinary:CloudName, Cloudinary:ApiKey y Cloudinary:ApiSecret.");
+            var account = new Account(
+                configuration["Cloudinary:CloudName"],
+                configuration["Cloudinary:ApiKey"],
+                configuration["Cloudinary:ApiSecret"]);
 
-                return new Cloudinary(new Account(cloudName, apiKey, apiSecret));
-            });
+            _cloudinary = new Cloudinary(account);
         }
         public async Task<string> SubirAsync(Stream? archivo, string? nombreArchivo, string? urlExterna, MultimediaEnum tipo)
         {
@@ -37,14 +35,13 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 return urlExterna!;
             }
 
-            var cloudinary = _cloudinary.Value;
             var file = archivo != null
             ? new FileDescription(nombreArchivo, archivo)
             : new FileDescription(urlExterna);
 
             if (tipo == MultimediaEnum.Video)
             {
-                var resultado = await cloudinary.UploadAsync(
+                var resultado = await _cloudinary.UploadAsync(
                     new VideoUploadParams
                     {
                         File = file,
@@ -57,7 +54,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 return resultado.SecureUrl.ToString();
             }
 
-            var resultadoImagen = await cloudinary.UploadAsync(
+            var resultadoImagen = await _cloudinary.UploadAsync(
                 new ImageUploadParams
                 {
                     File = file,

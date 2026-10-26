@@ -12,7 +12,7 @@ namespace ProyectoFinalTPI.Backend.Hubs
     ///
     /// Responsabilidades de esta clase:
     ///   1. Registrar/desregistrar usuarios en el servicio de presencia.
-    ///   2. Entregar mensajes en tiempo real si el destinatario está conectado.
+    ///   2. Validar que el destinatario esté en línea antes de enviar.
     ///   3. Delegar la persistencia del mensaje a ChatServicio.
     ///   4. Entregar el mensaje en tiempo real al destinatario vía SignalR.
     ///
@@ -55,9 +55,6 @@ namespace ProyectoFinalTPI.Backend.Hubs
 
         /// <summary>
         /// Método invocable por el cliente para enviar un mensaje privado.
-        /// El mensaje se persiste siempre, independientemente de si el destinatario
-        /// está conectado en este momento. Si está online, lo recibe en tiempo real;
-        /// si no, lo verá cuando abra el historial de la conversación.
         /// El frontend llama: connection.invoke("EnviarMensaje", destinatarioId, contenido)
         /// </summary>
         /// <param name="destinatarioId">Id del usuario destinatario.</param>
@@ -75,19 +72,23 @@ namespace ProyectoFinalTPI.Backend.Hubs
             if (emisorId == destinatarioId)
                 throw new HubException("No podés enviarte mensajes a vos mismo.");
 
+            // Validar presencia aquí, en el Hub, donde tenemos acceso a PresenciaService.
+            var connectionIdDestinatario = _presencia.ObtenerConnectionId(destinatarioId);
+            if (connectionIdDestinatario is null)
+                throw new HubException(
+                    "El destinatario no está en línea. Podés enviarle un mensaje a su casilla de correo.");
+
             var emisorUsername = Context.User?.FindFirstValue("username") ?? string.Empty;
 
-            // El servicio persiste el mensaje. No sabe nada de SignalR.
+            // El servicio solo persiste. No sabe nada de SignalR.
             var dto = await _chatServicio.EnviarMensajeAsync(
                 emisorId, emisorUsername, destinatarioId, contenido);
 
-            // Entrega en tiempo real: solo si el destinatario tiene una conexión activa.
-            // Si está offline, el mensaje quedó guardado y lo verá al abrir el historial.
-            var connectionIdDestinatario = _presencia.ObtenerConnectionId(destinatarioId);
-            if (connectionIdDestinatario is not null)
-                await Clients.Client(connectionIdDestinatario).SendAsync("RecibirMensaje", dto);
+            // Entregar el mensaje en tiempo real al destinatario.
+            // "RecibirMensaje" es el nombre del método que el frontend debe escuchar.
+            await Clients.Client(connectionIdDestinatario).SendAsync("RecibirMensaje", dto);
 
-            // Confirmar al emisor que el mensaje fue guardado.
+            // Confirmar al emisor que el mensaje fue enviado y guardado.
             await Clients.Caller.SendAsync("MensajeEnviado", dto);
         }
 

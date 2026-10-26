@@ -16,14 +16,9 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
         private static readonly TimeSpan TiempoExpiracion = TimeSpan.FromDays(7);
 
-        private readonly INotificacionServicio _notificacionServicio;
-
-        public ChatServicio(
-            IMensajeChatRepositorio repositorio,
-            INotificacionServicio notificacionServicio)
+        public ChatServicio(IMensajeChatRepositorio repositorio)
         {
             _repositorio = repositorio;
-            _notificacionServicio = notificacionServicio;
         }
 
         /// <inheritdoc/>
@@ -33,26 +28,23 @@ namespace ProyectoFinalTPI.Backend.Servicio
             var ahora = DateTime.UtcNow;
             var mensaje = new MensajeChat
             {
-                EmisorId = emisorId,
-                DestinatarioId = destinatarioId,
-                Contenido = contenido,
-                FechaEnvio = ahora,
+                EmisorId        = emisorId,
+                DestinatarioId  = destinatarioId,
+                Contenido       = contenido,
+                FechaEnvio      = ahora,
                 FechaExpiracion = ahora.Add(TiempoExpiracion)
             };
 
             await _repositorio.GuardarAsync(mensaje);
 
-            await _notificacionServicio.NotificarMensajeChatAsync(
-                destinatarioId, emisorId);
-
             return new MensajeChatDto
             {
-                Id = mensaje.Id,
-                EmisorId = emisorId,
+                Id             = mensaje.Id,
+                EmisorId       = emisorId,
                 EmisorUsername = emisorUsername,
                 DestinatarioId = destinatarioId,
-                Contenido = contenido,
-                FechaEnvio = ahora
+                Contenido      = contenido,
+                FechaEnvio     = ahora
             };
         }
 

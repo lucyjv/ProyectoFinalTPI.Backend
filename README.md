@@ -910,29 +910,6 @@ ws://localhost:{puerto}/hubs/chat?access_token=<TOKEN_JWT>
 | Método    |	Ruta    |	Descripción
 | GET   |	/api/chat/conversaciones    |	Devuelve las conversaciones activas del usuario autenticado: una entrada por cada usuario con quien haya intercambiado mensajes en los últimos 7 días, con el último mensaje de cada conversación. Requiere JWT. Devuelve lista vacía si no hay conversaciones activas.
 
-### Notificaciones en tiempo real (SignalR)
-
-El sistema de notificaciones utiliza SignalR sobre WebSockets. Al igual que el chat, el servidor puede enviar notificaciones al cliente en cualquier momento sin que este las solicite. Las notificaciones también se persisten en base de datos, por lo que el usuario puede recuperarlas aunque no esté conectado en el momento en que se generaron.
-
-Ruta del Hub
-/hubs/notificaciones
-
-El token JWT se envía por query string, igual que en el chat:
-
-ws://localhost:{puerto}/hubs/notificaciones?access_token=<TOKEN_JWT>
-Eventos que el cliente debe escuchar
-Evento	Payload	Cuándo se dispara
-RecibirNotificacion	NotificacionDto	Cuando se genera una notificación nueva para el usuario conectado.
-
-Endpoints HTTP de notificaciones
-
-Todos requieren JWT en el header Authorization: Bearer <token>.
-
-Método	|   Ruta	|   Descripción
-|   GET	|   /api/notificaciones	|   Devuelve las notificaciones no expiradas del usuario autenticado, ordenadas de más reciente a más antigua. Devuelve lista vacía si no hay ninguna.
-|   PATCH	|   /api/notificaciones/{id}/leida	|   Marca una notificación específica como leída e inicia el conteo de expiración de 7 días. Devuelve 404 si no existe o no pertenece al usuario.
-|   PATCH	|   /api/notificaciones/leidas	|   Marca todas las notificaciones no leídas del usuario como leídas.
-
 ### Endpoints de usuarios
 |   Método  |	Ruta    |	Descripción
 |   GET |	/api/usuarios/por-username/{username}   |	Busca un usuario por su username exacto. Devuelve su id y username. Requiere JWT. Devuelve 404 si no existe ningún usuario con ese username.

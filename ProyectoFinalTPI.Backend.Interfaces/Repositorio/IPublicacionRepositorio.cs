@@ -42,20 +42,7 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Repositorio
             DateTime fechaCorte, CursorCronologicoDto? cursor, int limite, IReadOnlyCollection<int> excluirIds,
             CancellationToken cancellationToken = default);
         Task<Dictionary<CategoriaEnum, int>> ObtenerCantidadPorCategoriaDelUsuario(int usuarioId, DateTime desde, CancellationToken cancellationToken = default);
-        Task<int> ContarPosteosCercanosAlUsuario(int usuarioId, NetTopologySuite.Geometries.Point gpsUsuario, CancellationToken cancellationToken = default);
-        Task<int> ContarPosteosDeDiferentesEpocasDelUsuario(int usuarioId, CancellationToken cancellationToken = default);
         Task<bool> Eliminar(int id, int? autorId = null, CancellationToken cancellationToken = default);
         Task<bool> EliminarRepost(int originalId, int? autorId = null, CancellationToken cancellationToken = default);
-        Task CrearRepost(int publicacionId, int usuarioId, CancellationToken cancellationToken = default);
-        Task<bool> QuitarRepost(int publicacionId, int usuarioId, CancellationToken cancellationToken = default);
-        Task<RepostPublicacionDto> ObtenerEstadoRepost(int publicacionId, int usuarioId, CancellationToken cancellationToken = default);
-        Task<IReadOnlyDictionary<int, (int Cantidad, bool DioRepost)>> ObtenerResumenReposts(
-            IReadOnlyCollection<int> publicacionesIds, int usuarioId, CancellationToken cancellationToken = default);
-        Task<IReadOnlyList<(int PublicacionId, int ReposteadorId, string ReposteadorUsername, DateTime Fecha)>> ObtenerRepostsDeSeguidos(
-            IReadOnlyCollection<int> autoresIds, CancellationToken cancellationToken = default);
-        Task<int> ContarPosteosConImagenDelUsuario(int usuarioId, CancellationToken cancellationToken = default);
-        Task<int> ContarRepostsDeOtrosUsuarios(int usuarioId, CancellationToken cancellationToken = default);
-        Task<int> ContarLikesOtorgados(int usuarioId, CancellationToken cancellationToken = default);
-        Task<int> SumarPuntosOtorgadosPorUsuario(int usuarioId, CancellationToken cancellationToken = default);
     }
 }

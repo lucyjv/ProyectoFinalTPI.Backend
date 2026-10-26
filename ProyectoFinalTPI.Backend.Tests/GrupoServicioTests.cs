@@ -193,7 +193,7 @@ public class GrupoServicioTests
                 grupo.Id, 22, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
         _publicaciones.Setup(servicio => servicio.Crear(
-                It.IsAny<Publicacion>(), null, null, null))
+                It.IsAny<Publicacion>(), null, null))
             .ReturnsAsync(99);
 
         var id = await CrearServicio().CrearRecuerdo(grupo.Id, 22, publicacion);
@@ -203,7 +203,7 @@ public class GrupoServicioTests
             It.Is<Publicacion>(recuerdo =>
                 recuerdo.GrupoId == grupo.Id && recuerdo.UsuarioId == 22),
             null,
-            null, null), Times.Once);
+            null), Times.Once);
     }
 
     [Fact]
@@ -221,7 +221,7 @@ public class GrupoServicioTests
             CrearServicio().CrearRecuerdo(grupo.Id, 22, new Publicacion()));
 
         _publicaciones.Verify(servicio => servicio.Crear(
-            It.IsAny<Publicacion>(), It.IsAny<Stream>(), It.IsAny<string>(), null), Times.Never);
+            It.IsAny<Publicacion>(), It.IsAny<Stream>(), It.IsAny<string>()), Times.Never);
     }
 
     private GrupoServicio CrearServicio() =>

@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Microsoft.Extensions.Options;
-using Moq;
 using ProyectoFinalTPI.Backend.Dtos;
 using ProyectoFinalTPI.Backend.Dtos.Comentario;
 using ProyectoFinalTPI.Backend.Dtos.Lugar;
@@ -27,8 +26,7 @@ namespace ProyectoFinalTPI.Backend.Tests
         {
             _servicio = new PublicacionServicio(
                 _repositorio, _usuarios, _multimedia, _sesiones, _seguimiento,
-                Options.Create(new FeedRecomendacionesOptions()),
-                Mock.Of<INotificacionServicio>(), Mock.Of<ILogroServicio>());
+                Options.Create(new FeedRecomendacionesOptions()));
         }
 
         [Fact]
@@ -139,6 +137,7 @@ namespace ProyectoFinalTPI.Backend.Tests
             //Assert
             Assert.Equal(30, result);
             Assert.NotNull(_repositorio.Creada);
+            Assert.Same(publicacion, _repositorio.Creada);
             Assert.Equal(5, _repositorio.Creada.PublicacionOriginalId);
             Assert.Equal("Recuerdo original", _repositorio.Creada.Titulo);
             Assert.Equal(7, _repositorio.Creada.LugarId);
@@ -251,25 +250,6 @@ namespace ProyectoFinalTPI.Backend.Tests
             await Assert.ThrowsAsync<ArgumentException>(() => _servicio.ObtenerPines(filtro));
 
             //Assert
-            Assert.Null(_repositorio.FiltroConsultado);
-        }
-
-        [Theory]
-        [InlineData(-181, -58)]
-        [InlineData(-59, 181)]
-        [InlineData(-58, -59)]
-        [InlineData(-58, -58)]
-        [InlineData(double.NaN, -58)]
-        [InlineData(-59, double.PositiveInfinity)]
-        public async Task QueNoSeObtenganPinesConLongitudesInvalidas(double minimo, double maximo)
-        {
-            var filtro = new PublicacionFiltroDto
-            {
-                MinLatitud = -35, MaxLatitud = -34, MinLongitud = minimo, MaxLongitud = maximo
-            };
-
-            await Assert.ThrowsAsync<ArgumentException>(() => _servicio.ObtenerPines(filtro));
-
             Assert.Null(_repositorio.FiltroConsultado);
         }
 
@@ -680,8 +660,7 @@ namespace ProyectoFinalTPI.Backend.Tests
             };
             var servicio = new PublicacionServicio(
                 _repositorio, _usuarios, _multimedia, _sesiones, _seguimiento,
-                Options.Create(opciones),
-                Mock.Of<INotificacionServicio>(), Mock.Of<ILogroServicio>());
+                Options.Create(opciones));
 
             await servicio.ObtenerPublicacionesParaVos(10, null, 20);
 
@@ -882,170 +861,9 @@ namespace ProyectoFinalTPI.Backend.Tests
             Assert.True(_repositorio.QuitarPuntuacionLlamado);
         }
 
-        [Fact]
-        public async Task Repostear_ValidaExistenciaYGuardaEnNeo4j()
-        {
-            _usuarios.Existe = true;
-            _repositorio.ExisteVisible = true;
-            _repositorio.Original = new Publicacion { Id = 10, UsuarioId = 5 };
-
-            var resultado = await _servicio.Repostear(10, 20);
-
-            Assert.Equal(10, resultado.PublicacionId);
-            Assert.True(resultado.DioRepost);
-            Assert.Equal(10, _repositorio.PublicacionIdRepostCreado);
-            Assert.Equal(20, _repositorio.UsuarioIdRepostCreado);
-        }
-
-        [Fact]
-        public async Task Repostear_LanzaExcepcionSiUsuarioNoExiste()
-        {
-            _usuarios.Existe = false;
-            _repositorio.ExisteVisible = true;
-            _repositorio.Original = new Publicacion { Id = 10, UsuarioId = 5 };
-
-            await Assert.ThrowsAsync<KeyNotFoundException>(() => _servicio.Repostear(10, 20));
-        }
-
-        [Fact]
-        public async Task Repostear_LanzaExcepcionSiPublicacionNoExiste()
-        {
-            _usuarios.Existe = true;
-            _repositorio.ExisteVisible = false;
-
-            await Assert.ThrowsAsync<KeyNotFoundException>(() => _servicio.Repostear(10, 20));
-        }
-
-        [Fact]
-        public async Task QuitarRepost_EliminaEnNeo4j()
-        {
-            _usuarios.Existe = true;
-
-            var resultado = await _servicio.QuitarRepost(10, 20);
-
-            Assert.Equal(10, resultado.PublicacionId);
-            Assert.Equal(10, _repositorio.IdEliminado);
-            Assert.Equal(20, _repositorio.AutorEliminado);
-        }
-
-        [Fact]
-        public async Task Citar_ValidaExistenciaYGuardaEnPostgres()
-        {
-            _usuarios.Existe = true;
-            _repositorio.ExisteVisible = true;
-            _repositorio.IdCreado = 44;
-            _repositorio.Original = new Publicacion
-            {
-                Id = 10,
-                Titulo = "Original",
-                UsuarioId = 5,
-                Categoria = CategoriaEnum.Lugares,
-                LugarId = 2,
-                UrlMultimedia = "https://example.com/foto.jpg",
-                TipoMultimedia = MultimediaEnum.Foto
-            };
-
-            var idCita = await _servicio.Citar(10, 20, "Mi cita genial");
-
-            Assert.Equal(44, idCita);
-            Assert.NotNull(_repositorio.Creada);
-            Assert.Equal(10, _repositorio.Creada.PublicacionOriginalId);
-            Assert.Equal(20, _repositorio.Creada.UsuarioId);
-            Assert.Equal("Mi cita genial", _repositorio.Creada.Descripcion);
-            Assert.Equal("Original", _repositorio.Creada.Titulo);
-        }
-
-        [Fact]
-        public async Task Citar_LanzaExcepcionSiDescripcionEstaVacia()
-        {
-            _usuarios.Existe = true;
-            _repositorio.ExisteVisible = true;
-            _repositorio.Original = new Publicacion { Id = 10, UsuarioId = 5 };
-
-            await Assert.ThrowsAsync<ArgumentException>(() => _servicio.Citar(10, 20, "   "));
-        }
-
-        [Fact]
-        public async Task ObtenerPorUsuarioId_IncluyePublicacionesPropiasYRepostsSimples()
-        {
-            var fechaPropia = new DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
-            var fechaRepost = new DateTime(2026, 2, 1, 12, 0, 0, DateTimeKind.Utc);
-
-            var propia = new PublicacionDetalleDto
-            {
-                Id = 1,
-                Titulo = "Mi publicacion",
-                FechaCreacion = fechaPropia,
-                Autor = new AutorResumenDto { Id = 5, Username = "usuario5" }
-            };
-
-            var ajena = new PublicacionDetalleDto
-            {
-                Id = 2,
-                Titulo = "Publicacion ajena",
-                FechaCreacion = new DateTime(2025, 12, 1, 12, 0, 0, DateTimeKind.Utc),
-                Autor = new AutorResumenDto { Id = 99, Username = "otro" }
-            };
-
-            _repositorio.PublicacionesPorIds.Add(propia);
-            _repositorio.PublicacionesPorIds.Add(ajena);
-            _repositorio.RepostsSeguidos.Add((2, 5, "usuario5", fechaRepost));
-
-            var resultado = await _servicio.ObtenerPorUsuarioId(5, null);
-
-            Assert.Equal(2, resultado.Count);
-            // El primer elemento debe ser el repost ya que tiene fecha más reciente
-            Assert.Equal(2, resultado[0].Id);
-            Assert.NotNull(resultado[0].ReposteadoPor);
-            Assert.Equal(5, resultado[0].ReposteadoPor.UsuarioId);
-            Assert.Equal("usuario5", resultado[0].ReposteadoPor.Username);
-            Assert.Equal(fechaRepost, resultado[0].FechaCreacion);
-
-            // El segundo elemento es la publicación propia
-            Assert.Equal(1, resultado[1].Id);
-            Assert.Null(resultado[1].ReposteadoPor);
-            Assert.Equal(fechaPropia, resultado[1].FechaCreacion);
-        }
-
-        [Fact]
-        public async Task ObtenerFeedSeguidos_ResuelveUsernameDeReposteadorCuandoNeo4jTieneUsernameVacio()
-        {
-            var fechaRepost = DateTime.UtcNow;
-            _seguimiento.Seguidos = new List<int> { 12 };
-
-            var original = new PublicacionDetalleDto
-            {
-                Id = 50,
-                Titulo = "Pub original",
-                FechaCreacion = fechaRepost.AddDays(-1),
-                Autor = new AutorResumenDto { Id = 99, Username = "autor_original" }
-            };
-
-            _repositorio.PublicacionesPorIds.Add(original);
-            // Repost con username vacío como viene de Neo4j cuando reposteador.username es nulo
-            _repositorio.RepostsSeguidos.Add((50, 12, "", fechaRepost));
-
-            var resultado = await _servicio.ObtenerFeedSeguidos(1, null, 10);
-
-            Assert.Single(resultado.Items);
-            var item = resultado.Items[0];
-            Assert.Equal(50, item.Id);
-            Assert.NotNull(item.ReposteadoPor);
-            Assert.Equal(12, item.ReposteadoPor.UsuarioId);
-            // Debe haber sido resuelto mediante ObtenerUsuariosPorIdsAsync -> "usuario12"
-            Assert.Equal("usuario12", item.ReposteadoPor.Username);
-        }
-
         // Estos dobles reemplazan las dependencias externas del servicio.
         private class PublicacionRepositorioFake : IPublicacionRepositorio
         {
-            public Task<int> ContarPosteosDeDiferentesEpocasDelUsuario(int usuarioId, CancellationToken cancellationToken = default) => Task.FromResult(0);
-            public Task<int> ContarPosteosConImagenDelUsuario(int usuarioId, CancellationToken cancellationToken = default) => Task.FromResult(0);
-            public Task<int> ContarRepostsDeOtrosUsuarios(int usuarioId, CancellationToken cancellationToken = default) => Task.FromResult(0);
-            public Task<int> ContarLikesOtorgados(int usuarioId, CancellationToken cancellationToken = default) => Task.FromResult(0);
-            public Task<int> SumarPuntosOtorgadosPorUsuario(int usuarioId, CancellationToken cancellationToken = default) => Task.FromResult(0);
-            public Task<int> ContarPosteosCercanosAlUsuario(int usuarioId, NetTopologySuite.Geometries.Point gpsUsuario, CancellationToken cancellationToken = default) => Task.FromResult(0);
-
             public Task<int> CrearComentario(Comentario comentario, CancellationToken cancellationToken = default)
                 => throw new NotImplementedException();
 
@@ -1255,53 +1073,10 @@ namespace ProyectoFinalTPI.Backend.Tests
                 AutorEliminado = autorId;
                 return Task.FromResult(EliminarResultado);
             }
-
-            public int? PublicacionIdRepostCreado { get; private set; }
-            public int? UsuarioIdRepostCreado { get; private set; }
-            public Task CrearRepost(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
-            {
-                PublicacionIdRepostCreado = publicacionId;
-                UsuarioIdRepostCreado = usuarioId;
-                return Task.CompletedTask;
-            }
-
-            public Task<bool> QuitarRepost(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
-            {
-                IdEliminado = publicacionId;
-                AutorEliminado = usuarioId;
-                return Task.FromResult(EliminarResultado);
-            }
-
-            public Task<RepostPublicacionDto> ObtenerEstadoRepost(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
-            {
-                return Task.FromResult(new RepostPublicacionDto
-                {
-                    PublicacionId = publicacionId,
-                    CantidadReposts = 1,
-                    DioRepost = true
-                });
-            }
-
-            public Task<IReadOnlyDictionary<int, (int Cantidad, bool DioRepost)>> ObtenerResumenReposts(
-                IReadOnlyCollection<int> publicacionesIds, int usuarioId, CancellationToken cancellationToken = default)
-            {
-                var dict = publicacionesIds.Distinct().ToDictionary(id => id, id => (1, false));
-                return Task.FromResult<IReadOnlyDictionary<int, (int Cantidad, bool DioRepost)>>(dict);
-            }
-
-            public List<(int PublicacionId, int ReposteadorId, string ReposteadorUsername, DateTime Fecha)> RepostsSeguidos { get; set; } = new();
-
-            public Task<IReadOnlyList<(int PublicacionId, int ReposteadorId, string ReposteadorUsername, DateTime Fecha)>> ObtenerRepostsDeSeguidos(
-                IReadOnlyCollection<int> autoresIds, CancellationToken cancellationToken = default)
-            {
-                return Task.FromResult<IReadOnlyList<(int PublicacionId, int ReposteadorId, string ReposteadorUsername, DateTime Fecha)>>(RepostsSeguidos);
-            }
         }
 
         private class UsuarioRepositorioFake : IUsuarioRepositorio
         {
-            public Task<Usuario_Interactivo?> ObtenerYUsuarioInteractivoPorIdAsync(int id) => Task.FromResult<Usuario_Interactivo?>(null);
-
             public bool Existe { get; set; }
             public int IdConsultado { get; private set; }
 
@@ -1311,9 +1086,8 @@ namespace ProyectoFinalTPI.Backend.Tests
                 return Task.FromResult(Existe);
             }
 
-            public Task<Usuario?> ObtenerPorIdAsync(int id) => Task.FromResult<Usuario?>(new Usuario { Id = id, Username = "test" });
-            public Task<List<AutorResumenDto>> ObtenerUsuariosPorIdsAsync(IReadOnlyCollection<int> ids, CancellationToken cancellationToken = default)
-                => Task.FromResult(ids.Select(id => new AutorResumenDto { Id = id, Username = $"usuario{id}" }).ToList());
+            public Task<Usuario?> ObtenerPorIdAsync(int id) => throw new NotImplementedException();
+            public Task<List<AutorResumenDto>> ObtenerUsuariosPorIdsAsync(IReadOnlyCollection<int> ids, CancellationToken cancellationToken = default) => throw new NotImplementedException();
             public Task<List<int>> ObtenerIdsExistentesAsync(IReadOnlyCollection<int> ids, CancellationToken cancellationToken = default) => throw new NotImplementedException();
             public Task<Usuario?> ObtenerPorEmailAsync(string email, CancellationToken cancellationToken = default) => throw new NotImplementedException();
             public Task<bool> ExistePorEmailAsync(string email, CancellationToken cancellationToken = default) => throw new NotImplementedException();

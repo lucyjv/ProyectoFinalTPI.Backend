@@ -1,9 +1,7 @@
 using Microsoft.EntityFrameworkCore;
-using Moq;
 using NetTopologySuite.Geometries;
 using ProyectoFinalTPI.Backend.Dtos.Comentario;
 using ProyectoFinalTPI.Backend.Entidades;
-using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Repositorio;
 using ProyectoFinalTPI.Backend.Repositorio.Data;
 using ProyectoFinalTPI.Backend.Servicio;
@@ -13,36 +11,6 @@ namespace ProyectoFinalTPI.Backend.Tests;
 
 public class ComentarioModuloTests
 {
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task ComentariosConservanNotificacionesYLogrosDespuesDelMerge(bool esAutor)
-    {
-        await using var context = CrearContexto();
-        await context.Database.EnsureCreatedAsync();
-        var (publicacion, autor, lector) = await CrearEscenario(context);
-        var usuario = esAutor ? autor : lector;
-        var notificaciones = new Mock<INotificacionServicio>();
-        var servicio = new ComentarioServicio(
-            new ComentarioRepositorio(context), new UsuarioRepositorio(context),
-            notificaciones.Object, new LogroServicio(new LogrosUsuariosRepositorio(context)));
-
-        for (var i = 0; i < 25; i++)
-            await servicio.Crear(new Comentario
-            {
-                PublicacionId = publicacion.Id, UsuarioId = usuario.Id, Contenido = $"Comentario {i}"
-            });
-
-        Assert.Equal(25, await context.Comentarios.CountAsync());
-        var logros = await context.Logros_Usuarios.Where(logro => logro.UsuarioId == usuario.Id)
-            .Select(logro => logro.LogroId).OrderBy(id => id).ToListAsync();
-        Assert.Equal(esAutor ? new[] { 12 } : new[] { 2, 12 }, logros);
-        Assert.False(await context.Logros_Usuarios.AnyAsync(logro => logro.UsuarioId != usuario.Id));
-        notificaciones.Verify(servicio => servicio.NotificarComentarioEnPublicacionAsync(
-            autor.Id, publicacion.Id, usuario.Id, It.IsAny<CancellationToken>()),
-            Times.Exactly(esAutor ? 0 : 25));
-    }
-
     [Fact]
     public async Task PermiteResponderUnaRespuestaSinLimiteDeProfundidad()
     {
@@ -137,7 +105,7 @@ public class ComentarioModuloTests
     }
 
     private static ComentarioServicio CrearServicio(ApplicationDbContext context) =>
-        new(new ComentarioRepositorio(context), new UsuarioRepositorio(context), Mock.Of<INotificacionServicio>(), Mock.Of<ILogroServicio>());
+        new(new ComentarioRepositorio(context), new UsuarioRepositorio(context));
 
     private static ApplicationDbContext CrearContexto()
     {

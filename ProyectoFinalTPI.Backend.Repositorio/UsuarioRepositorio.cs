@@ -59,11 +59,6 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                 .Select(u => u.Id)
                 .ToListAsync(cancellationToken);
         }
-        public async Task<Usuario_Interactivo?> ObtenerYUsuarioInteractivoPorIdAsync(int id)
-        {
-            return await _context.Set<Usuario_Interactivo>()
-                .FirstOrDefaultAsync(u => u.Id == id);
-        }
 
         public async Task<Usuario?> ObtenerPorEmailAsync(string email, CancellationToken cancellationToken = default)
         {

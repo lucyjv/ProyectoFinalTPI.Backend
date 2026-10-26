@@ -545,40 +545,6 @@ namespace ProyectoFinalTPI.Backend.Tests
             Assert.Null(_servicio.PublicacionCreada);
         }
 
-        [Fact]
-        public async Task QueSePuedaRepostearUnaPublicacion()
-        {
-            var result = await _controller.Repostear(42, 10);
-            var ok = Assert.IsType<OkObjectResult>(result);
-            var dto = Assert.IsType<RepostPublicacionDto>(ok.Value);
-            Assert.Equal(42, dto.PublicacionId);
-            Assert.True(dto.DioRepost);
-            Assert.Equal(42, _servicio.IdConsultado);
-        }
-
-        [Fact]
-        public async Task QueSePuedaQuitarRepostDeUnaPublicacion()
-        {
-            var result = await _controller.QuitarRepost(42, 10);
-            var ok = Assert.IsType<OkObjectResult>(result);
-            var dto = Assert.IsType<RepostPublicacionDto>(ok.Value);
-            Assert.Equal(42, dto.PublicacionId);
-            Assert.False(dto.DioRepost);
-            Assert.Equal(42, _servicio.IdConsultado);
-        }
-
-        [Fact]
-        public async Task QueSePuedaCitarUnaPublicacion()
-        {
-            _servicio.IdCreado = 99;
-            var request = new CitarPublicacionRequest { AutorId = 10, Descripcion = "Excelente foto" };
-            var result = await _controller.Citar(42, request);
-            var created = Assert.IsType<CreatedResult>(result);
-            Assert.Equal("/api/publicaciones/99", created.Location);
-            Assert.Equal(99, JsonSerializer.SerializeToElement(created.Value).GetProperty("id").GetInt32());
-            Assert.Equal(42, _servicio.IdConsultado);
-        }
-
         [Theory]
         [InlineData("crear")]
         [InlineData("compartir")]
@@ -655,7 +621,7 @@ namespace ProyectoFinalTPI.Backend.Tests
             public string? Cursor { get; private set; }
             public int Limite { get; private set; }
 
-            public async Task<int> Crear(Publicacion publicacion, Stream? archivo = null, string? nombreArchivo = null, NetTopologySuite.Geometries.Point? gpsUsuario = null)
+            public async Task<int> Crear(Publicacion publicacion, Stream? archivo = null, string? nombreArchivo = null)
             {
                 PublicacionCreada = publicacion;
                 NombreArchivoRecibido = nombreArchivo;
@@ -749,29 +715,6 @@ namespace ProyectoFinalTPI.Backend.Tests
                 IdEliminado = originalId;
                 AutorEliminado = autorId;
                 return Error == null ? Task.CompletedTask : Task.FromException(Error);
-            }
-
-            public Task<RepostPublicacionDto> Repostear(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
-            {
-                IdConsultado = publicacionId;
-                return Error == null ? Task.FromResult(new RepostPublicacionDto { PublicacionId = publicacionId, CantidadReposts = 1, DioRepost = true }) : Task.FromException<RepostPublicacionDto>(Error);
-            }
-
-            public Task<RepostPublicacionDto> QuitarRepost(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
-            {
-                IdConsultado = publicacionId;
-                return Error == null ? Task.FromResult(new RepostPublicacionDto { PublicacionId = publicacionId, CantidadReposts = 0, DioRepost = false }) : Task.FromException<RepostPublicacionDto>(Error);
-            }
-
-            public Task<int> Citar(int publicacionId, int usuarioId, string descripcion, CancellationToken cancellationToken = default)
-            {
-                IdConsultado = publicacionId;
-                return Error == null ? Task.FromResult(IdCreado) : Task.FromException<int>(Error);
-            }
-
-            public Task CompletarResumenesReposts(IReadOnlyCollection<PublicacionDetalleDto> publicaciones, int usuarioId, CancellationToken cancellationToken = default)
-            {
-                return Task.CompletedTask;
             }
         }
 
