@@ -19,19 +19,12 @@ namespace ProyectoFinalTPI.Backend.Servicio
         private readonly ISeguimientoServicio _seguimientoServicio;
         private readonly FeedRecomendacionesOptions _opcionesFeed;
         private readonly INotificacionServicio _notificacionServicio;
-
-        public PublicacionServicio(
-            IPublicacionRepositorio publicacionRepositorio,
-            IUsuarioRepositorio usuarioRepositorio,
-            IMultimediaServicio multimediaServicio,
-            ISesionFypRepositorio sesionFypRepositorio,
-            ISeguimientoServicio seguimientoServicio,
-            IOptions<FeedRecomendacionesOptions> opcionesFeed,
-            INotificacionServicio notificacionServicio)
         private readonly ILogroServicio _logroServicio;
+
         public PublicacionServicio(IPublicacionRepositorio publicacionRepositorio, IUsuarioRepositorio usuarioRepositorio, 
             IMultimediaServicio multimediaServicio, ISesionFypRepositorio sesionFypRepositorio,
-            ISeguimientoServicio seguimientoServicio, ILogroServicio logroServicio)
+            ISeguimientoServicio seguimientoServicio, ILogroServicio logroServicio, IOptions<FeedRecomendacionesOptions> opcionesFeed,
+            INotificacionServicio notificacionServicio)
         {
             _publicacionRepositorio = publicacionRepositorio;
             _usuarioRepositorio = usuarioRepositorio;
@@ -122,9 +115,8 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
                 var estadoNuevo = await _publicacionRepositorio.ObtenerEstadoPuntuacion(publicacionId, usuarioId, cancellationToken);
                 await VerificacionLogrosPuntuacion(usuarioId, publicacion, estadoNuevo, cancellationToken);
-
-                return estadoNuevo;
             }
+            return await _publicacionRepositorio.ObtenerEstadoPuntuacion(publicacionId, usuarioId, cancellationToken);
         }
 
         public async Task<PuntuacionPublicacionDto> QuitarPuntuacion(
@@ -474,8 +466,6 @@ namespace ProyectoFinalTPI.Backend.Servicio
                     "con el mínimo menor que el máximo.");
             }
         }
-        private async Task<IReadOnlyList<int>> ObtenerRecomendacionesPorLikes(
-            int usuarioId, int cantidadMaxima, CancellationToken cancellationToken)
         private async Task<IReadOnlyList<int>> CrearRankingFeedAsync(
             int usuarioId, CancellationToken cancellationToken)
         {

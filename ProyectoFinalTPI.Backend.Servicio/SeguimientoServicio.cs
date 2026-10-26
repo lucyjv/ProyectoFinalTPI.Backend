@@ -94,9 +94,6 @@ namespace ProyectoFinalTPI.Backend.Servicio
             return ResultadoSeguimiento.SinCambios;
         }
 
-            return ResultadoSeguimiento.SinCambios;
-        }
-
         public async Task<ResultadoSeguimiento> DejarDeSeguirUsuario(
             int idUsuario, int idUsuarioASeguir, CancellationToken cancellationToken = default)
         {

@@ -3,11 +3,6 @@ using CloudinaryDotNet.Actions;
 using Microsoft.Extensions.Configuration;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace ProyectoFinalTPI.Backend.Servicio
 {
@@ -41,7 +36,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
             if (tipo == MultimediaEnum.Video)
             {
-                var resultado = await cloudinary.UploadAsync(
+                var resultado = await _cloudinary.UploadAsync(
                     new VideoUploadParams
                     {
                         File = file,

@@ -11,7 +11,8 @@ public class ComentarioServicio(
     IComentarioRepositorio _comentarioRepositorio,
     IUsuarioRepositorio _usuarioRepositorio,
     INotificacionServicio _notificacionServicio,
-    ILogroServicio _logroServicio) : IComentarioServicio
+    ILogroServicio _logroServicio,
+    IPublicacionRepositorio _publicacionRepositorio) : IComentarioServicio
 {
     private const int LimiteRespuestasIniciales = 3;
 
@@ -224,7 +225,6 @@ public class ComentarioServicio(
             await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.Conversador);
         }
     }
-    };
 
     private async Task<Publicacion?> ObtenerPublicacionParaNotificacion(
     int publicacionId, CancellationToken cancellationToken)
@@ -232,7 +232,7 @@ public class ComentarioServicio(
         // Necesitamos saber el UsuarioId del autor de la publicación.
         // Usamos el repositorio de comentarios que ya existe en este servicio.
         // Si no existe, simplemente no notificamos (no rompemos el flujo principal).
-        return await comentarioRepositorio.ObtenerPublicacionAsync(
+        return await _comentarioRepositorio.ObtenerPublicacionAsync(
             publicacionId, cancellationToken);
     }
 }

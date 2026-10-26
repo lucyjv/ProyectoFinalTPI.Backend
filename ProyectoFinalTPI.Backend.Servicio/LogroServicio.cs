@@ -1,13 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Npgsql.PostgresTypes;
-using ProyectoFinalTPI.Backend.Entidades;
+﻿using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
-using ProyectoFinalTPI.Backend.Repositorio;
 using ProyectoFinalTPI.Backend.Dtos.Usuario;
 
 namespace ProyectoFinalTPI.Backend.Servicio
