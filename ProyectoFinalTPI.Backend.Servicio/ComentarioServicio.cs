@@ -205,7 +205,7 @@ public class ComentarioServicio(
         };
     private async Task VerificarLogrosComentario(int usuarioId, int publicacionId, CancellationToken cancellationToken)
     {
-        var publicacion = await _publicacionRepositorio.ObtenerPorId(publicacionId, cancellationToken);
+        var publicacion = await _comentarioRepositorio.ObtenerPublicacionAsync(publicacionId, cancellationToken);
         if (publicacion == null) return;
 
         if (publicacion.UsuarioId != usuarioId)

@@ -14,7 +14,7 @@ public class SeguimientoServicioTests
     public async Task Seguirse_a_si_mismo_devuelve_auto_seguimiento_sin_consultar_usuarios()
     {
         var repositorio = new UsuarioRepositorioFake(10);
-        var servicio = new SeguimientoServicio(repositorio, null!, Mock.Of<INotificacionServicio>());
+        var servicio = new SeguimientoServicio(repositorio, null!, Mock.Of<ILogroServicio>(), Mock.Of<INotificacionServicio>());
 
         var resultado = await servicio.SeguirUsuario(10, 10);
 
@@ -30,7 +30,7 @@ public class SeguimientoServicioTests
         int idUsuarioInexistente)
     {
         var repositorio = new UsuarioRepositorioFake(idUsuarioExistente);
-        var servicio = new SeguimientoServicio(repositorio, null!, Mock.Of<INotificacionServicio>());
+        var servicio = new SeguimientoServicio(repositorio, null!, Mock.Of<ILogroServicio>(), Mock.Of<INotificacionServicio>());
 
         var resultado = await servicio.SeguirUsuario(10, 20);
 
@@ -43,7 +43,7 @@ public class SeguimientoServicioTests
     public async Task Dejar_de_seguirse_a_si_mismo_devuelve_auto_seguimiento_sin_consultar_usuarios()
     {
         var repositorio = new UsuarioRepositorioFake(10);
-        var servicio = new SeguimientoServicio(repositorio, null!, Mock.Of<INotificacionServicio>());
+        var servicio = new SeguimientoServicio(repositorio, null!, Mock.Of<ILogroServicio>(), Mock.Of<INotificacionServicio>());
 
         var resultado = await servicio.DejarDeSeguirUsuario(10, 10);
 
@@ -59,7 +59,7 @@ public class SeguimientoServicioTests
         int idUsuarioInexistente)
     {
         var repositorio = new UsuarioRepositorioFake(idUsuarioExistente);
-        var servicio = new SeguimientoServicio(repositorio, null!, Mock.Of<INotificacionServicio>());
+        var servicio = new SeguimientoServicio(repositorio, null!, Mock.Of<ILogroServicio>(), Mock.Of<INotificacionServicio>());
 
         var resultado = await servicio.DejarDeSeguirUsuario(10, 20);
 
@@ -72,7 +72,7 @@ public class SeguimientoServicioTests
     public async Task Listar_seguidos_devuelve_null_si_el_usuario_no_existe_sin_acceder_a_Neo4j()
     {
         var repositorio = new UsuarioRepositorioFake();
-        var servicio = new SeguimientoServicio(repositorio, null!, Mock.Of<INotificacionServicio>());
+        var servicio = new SeguimientoServicio(repositorio, null!, Mock.Of<ILogroServicio>(), Mock.Of<INotificacionServicio>());
 
         var resultado = await servicio.ListarSeguidos(99);
 
@@ -84,7 +84,7 @@ public class SeguimientoServicioTests
     public async Task Listar_seguidores_devuelve_null_si_el_usuario_no_existe_sin_acceder_a_Neo4j()
     {
         var repositorio = new UsuarioRepositorioFake();
-        var servicio = new SeguimientoServicio(repositorio, null!, Mock.Of<INotificacionServicio>());
+        var servicio = new SeguimientoServicio(repositorio, null!, Mock.Of<ILogroServicio>(), Mock.Of<INotificacionServicio>());
 
         var resultado = await servicio.ListarSeguidores(99);
 
