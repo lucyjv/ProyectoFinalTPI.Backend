@@ -18,9 +18,13 @@ public sealed class PublicacionesApiFactory : WebApplicationFactory<Program>
 {
     private readonly string _connectionString;
     private bool _baseInicializada;
+    private readonly IDriver? _driver;
+    private readonly TimeProvider? _timeProvider;
 
-    public PublicacionesApiFactory(PostgisFixture postgres)
+    public PublicacionesApiFactory(PostgisFixture postgres, IDriver? driver = null, TimeProvider? timeProvider = null)
     {
+        _driver = driver;
+        _timeProvider = timeProvider;
         // La conexión proviene exclusivamente del contenedor, nunca de appsettings.
         _connectionString = new NpgsqlConnectionStringBuilder(postgres.ConnectionString)
         {
@@ -43,7 +47,8 @@ public sealed class PublicacionesApiFactory : WebApplicationFactory<Program>
             services.RemoveAll<IMultimediaServicio>();
             services.AddSingleton<IMultimediaServicio>(Media);
             services.RemoveAll<IDriver>();
-            services.AddSingleton(CrearNeo4jDriverFake());
+            services.AddSingleton(_driver ?? CrearNeo4jDriverFake());
+            if (_timeProvider != null) services.AddSingleton(_timeProvider);
             ConfigurarServiciosAdicionales?.Invoke(services);
         });
     }

@@ -28,7 +28,7 @@ namespace ProyectoFinalTPI.Backend.Tests
             _servicio = new PublicacionServicio(
                 _repositorio, _usuarios, _multimedia, _sesiones, _seguimiento,
                 Options.Create(new FeedRecomendacionesOptions()),
-                Mock.Of<INotificacionServicio>());
+                Mock.Of<INotificacionServicio>(), Mock.Of<ILogroServicio>());
         }
 
         [Fact]
@@ -252,6 +252,25 @@ namespace ProyectoFinalTPI.Backend.Tests
             await Assert.ThrowsAsync<ArgumentException>(() => _servicio.ObtenerPines(filtro));
 
             //Assert
+            Assert.Null(_repositorio.FiltroConsultado);
+        }
+
+        [Theory]
+        [InlineData(-181, -58)]
+        [InlineData(-59, 181)]
+        [InlineData(-58, -59)]
+        [InlineData(-58, -58)]
+        [InlineData(double.NaN, -58)]
+        [InlineData(-59, double.PositiveInfinity)]
+        public async Task QueNoSeObtenganPinesConLongitudesInvalidas(double minimo, double maximo)
+        {
+            var filtro = new PublicacionFiltroDto
+            {
+                MinLatitud = -35, MaxLatitud = -34, MinLongitud = minimo, MaxLongitud = maximo
+            };
+
+            await Assert.ThrowsAsync<ArgumentException>(() => _servicio.ObtenerPines(filtro));
+
             Assert.Null(_repositorio.FiltroConsultado);
         }
 
@@ -663,7 +682,7 @@ namespace ProyectoFinalTPI.Backend.Tests
             var servicio = new PublicacionServicio(
                 _repositorio, _usuarios, _multimedia, _sesiones, _seguimiento,
                 Options.Create(opciones),
-                Mock.Of<INotificacionServicio>());
+                Mock.Of<INotificacionServicio>(), Mock.Of<ILogroServicio>());
 
             await servicio.ObtenerPublicacionesParaVos(10, null, 20);
 

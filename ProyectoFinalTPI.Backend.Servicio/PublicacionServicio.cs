@@ -19,6 +19,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
         private readonly ISeguimientoServicio _seguimientoServicio;
         private readonly FeedRecomendacionesOptions _opcionesFeed;
         private readonly INotificacionServicio _notificacionServicio;
+        private readonly ILogroServicio _logroServicio;
 
         public PublicacionServicio(
             IPublicacionRepositorio publicacionRepositorio,
@@ -27,11 +28,8 @@ namespace ProyectoFinalTPI.Backend.Servicio
             ISesionFypRepositorio sesionFypRepositorio,
             ISeguimientoServicio seguimientoServicio,
             IOptions<FeedRecomendacionesOptions> opcionesFeed,
-            INotificacionServicio notificacionServicio)
-        private readonly ILogroServicio _logroServicio;
-        public PublicacionServicio(IPublicacionRepositorio publicacionRepositorio, IUsuarioRepositorio usuarioRepositorio, 
-            IMultimediaServicio multimediaServicio, ISesionFypRepositorio sesionFypRepositorio,
-            ISeguimientoServicio seguimientoServicio, ILogroServicio logroServicio)
+            INotificacionServicio notificacionServicio,
+            ILogroServicio logroServicio)
         {
             _publicacionRepositorio = publicacionRepositorio;
             _usuarioRepositorio = usuarioRepositorio;
@@ -119,12 +117,12 @@ namespace ProyectoFinalTPI.Backend.Servicio
                         usuarioId,
                         cancellationToken);
                 }
-
-                var estadoNuevo = await _publicacionRepositorio.ObtenerEstadoPuntuacion(publicacionId, usuarioId, cancellationToken);
-                await VerificacionLogrosPuntuacion(usuarioId, publicacion, estadoNuevo, cancellationToken);
-
-                return estadoNuevo;
             }
+
+            var estadoNuevo = await _publicacionRepositorio.ObtenerEstadoPuntuacion(publicacionId, usuarioId, cancellationToken);
+            await VerificacionLogrosPuntuacion(usuarioId, publicacion, estadoNuevo, cancellationToken);
+
+            return estadoNuevo;
         }
 
         public async Task<PuntuacionPublicacionDto> QuitarPuntuacion(
@@ -473,9 +471,18 @@ namespace ProyectoFinalTPI.Backend.Servicio
                     "El rango de latitud debe estar entre -90 y 90, " +
                     "con el mínimo menor que el máximo.");
             }
+
+            if (!double.IsFinite(filtro.MinLongitud) ||
+                !double.IsFinite(filtro.MaxLongitud) ||
+                filtro.MinLongitud < -180 ||
+                filtro.MaxLongitud > 180 ||
+                filtro.MinLongitud >= filtro.MaxLongitud)
+            {
+                throw new ArgumentException(
+                    "El rango de longitud debe estar entre -180 y 180, " +
+                    "con el mínimo menor que el máximo.");
+            }
         }
-        private async Task<IReadOnlyList<int>> ObtenerRecomendacionesPorLikes(
-            int usuarioId, int cantidadMaxima, CancellationToken cancellationToken)
         private async Task<IReadOnlyList<int>> CrearRankingFeedAsync(
             int usuarioId, CancellationToken cancellationToken)
         {

@@ -36,17 +36,19 @@ public class ChatTests
 
         await connA.StartAsync();
         await connB.StartAsync();
+        // El handshake del cliente puede terminar antes de OnConnectedAsync.
+        // Una invocación confirma que B ya está registrado antes del envío de A.
+        await connB.InvokeAsync<List<MensajeChatRespuesta>>("ObtenerHistorial", idA);
 
         // Preparar receptor: B espera recibir un mensaje
-        var tcs = new TaskCompletionSource<dynamic>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var tcs = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
         connB.On<object>("RecibirMensaje", msg => tcs.TrySetResult(msg));
 
         // A envía un mensaje a B
         await connA.InvokeAsync("EnviarMensaje", idB, "Hola desde A");
 
         // Esperamos máximo 5 segundos a que B reciba el mensaje
-        var completado = await Task.WhenAny(tcs.Task, Task.Delay(5000));
-        Assert.Equal(tcs.Task, completado);
+        await tcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
     }
 
     [Fact]

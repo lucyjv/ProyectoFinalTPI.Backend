@@ -13,16 +13,23 @@ namespace ProyectoFinalTPI.Backend.Servicio
 {
     public class MultimediaServicio : IMultimediaServicio
     {
-        private readonly Cloudinary _cloudinary;
+        private readonly Lazy<Cloudinary> _cloudinary;
 
         public MultimediaServicio(IConfiguration configuration)
         {
-            var account = new Account(
-                configuration["Cloudinary:CloudName"],
-                configuration["Cloudinary:ApiKey"],
-                configuration["Cloudinary:ApiSecret"]);
+            _cloudinary = new Lazy<Cloudinary>(() =>
+            {
+                var cloudName = configuration["Cloudinary:CloudName"];
+                var apiKey = configuration["Cloudinary:ApiKey"];
+                var apiSecret = configuration["Cloudinary:ApiSecret"];
+                if (string.IsNullOrWhiteSpace(cloudName)
+                    || string.IsNullOrWhiteSpace(apiKey)
+                    || string.IsNullOrWhiteSpace(apiSecret))
+                    throw new InvalidOperationException(
+                        "Para subir archivos configurá Cloudinary:CloudName, Cloudinary:ApiKey y Cloudinary:ApiSecret.");
 
-            _cloudinary = new Cloudinary(account);
+                return new Cloudinary(new Account(cloudName, apiKey, apiSecret));
+            });
         }
         public async Task<string> SubirAsync(Stream? archivo, string? nombreArchivo, string? urlExterna, MultimediaEnum tipo)
         {
@@ -35,6 +42,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 return urlExterna!;
             }
 
+            var cloudinary = _cloudinary.Value;
             var file = archivo != null
             ? new FileDescription(nombreArchivo, archivo)
             : new FileDescription(urlExterna);
@@ -54,7 +62,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 return resultado.SecureUrl.ToString();
             }
 
-            var resultadoImagen = await _cloudinary.UploadAsync(
+            var resultadoImagen = await cloudinary.UploadAsync(
                 new ImageUploadParams
                 {
                     File = file,
