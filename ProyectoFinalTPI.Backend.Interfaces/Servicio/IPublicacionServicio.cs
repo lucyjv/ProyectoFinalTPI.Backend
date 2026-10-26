@@ -1,3 +1,4 @@
+using NetTopologySuite.Geometries;
 using ProyectoFinalTPI.Backend.Dtos;
 using ProyectoFinalTPI.Backend.Dtos.Mapa;
 using ProyectoFinalTPI.Backend.Dtos.Publicacion;
@@ -9,7 +10,7 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Servicio
         List<Publicacion> ObtenerPublicaciones();
         List<Publicacion> ObtenerPublicacionPorCategoria(CategoriaEnum categoria);
 
-        Task<int> Crear(Publicacion publicacion, Stream? archivo = null, string? nombreArchivo = null);
+        Task<int> Crear(Publicacion publicacion, Stream? archivo = null, string? nombreArchivo = null, Point? gpsUsuario = null);
         Task<int> Compartir(Publicacion publicacion, CancellationToken cancellationToken = default);
         Task<ResultadoMapaDto> ObtenerPines(PublicacionFiltroDto filtro, CancellationToken cancellationToken = default);
         Task<PublicacionResumenDto> ObtenerResumenPorId(int id, CancellationToken cancellationToken = default);
@@ -32,5 +33,10 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Servicio
             CancellationToken cancellationToken = default);
         Task Eliminar(int id, int? autorId = null, CancellationToken cancellationToken = default);
         Task EliminarRepost(int originalId, int? autorId = null, CancellationToken cancellationToken = default);
+        Task<RepostPublicacionDto> Repostear(int publicacionId, int usuarioId, CancellationToken cancellationToken = default);
+        Task<RepostPublicacionDto> QuitarRepost(int publicacionId, int usuarioId, CancellationToken cancellationToken = default);
+        Task<int> Citar(int publicacionId, int usuarioId, string descripcion, CancellationToken cancellationToken = default);
+        Task CompletarResumenesReposts(IReadOnlyCollection<PublicacionDetalleDto> publicaciones, int usuarioId,
+            CancellationToken cancellationToken = default);
     }
 }

@@ -13,5 +13,6 @@ namespace ProyectoFinalTPI.Backend.Dtos.Usuario
         public int CantidadSeguidores { get; set; }
         public int CantidadSeguidos { get; set; }
         public bool LoSigo { get; set; }
+        public List<LogroEstadoDto> Logros { get; set; } = new();
     }
 }

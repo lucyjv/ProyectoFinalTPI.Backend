@@ -2,6 +2,7 @@ using ProyectoFinalTPI.Backend.Dtos.Usuario;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
+using ProyectoFinalTPI.Backend.Repositorio;
 
 namespace ProyectoFinalTPI.Backend.Servicio
 {
@@ -12,13 +13,18 @@ namespace ProyectoFinalTPI.Backend.Servicio
     {
         private readonly IUsuarioRepositorio _repositorio;
         private readonly ISeguimientoServicio? _seguimientoServicio;
+        private readonly ILogroServicio _logroServicio;
+        private readonly TimeProvider _timeProvider;
 
         public UsuarioServicio(
             IUsuarioRepositorio repositorio,
-            ISeguimientoServicio? seguimientoServicio = null)
+            ILogroServicio logroServicio,
+            ISeguimientoServicio? seguimientoServicio = null, TimeProvider? timeProvider = null)
         {
             _repositorio = repositorio;
             _seguimientoServicio = seguimientoServicio;
+            _logroServicio = logroServicio;
+            _timeProvider = timeProvider ?? TimeProvider.System;
         }
 
         /// <inheritdoc/>
@@ -73,6 +79,55 @@ namespace ProyectoFinalTPI.Backend.Servicio
             return await ConstruirPerfilDto(usuario, usuarioAutenticadoId, cancellationToken);
         }
 
+        public async Task<List<LogroEstadoDto>> RegistrarIngresoDiarioAsync(int usuarioId, CancellationToken cancellationToken = default)
+        {
+            var usuario = await _repositorio.ObtenerYUsuarioInteractivoPorIdAsync(usuarioId);
+            if (usuario == null) return new();
+
+            var ahora = _timeProvider.GetUtcNow().UtcDateTime;
+            var hoy = ahora.Date;
+
+            if (usuario.UltimoIngresoUtc.HasValue)
+            {
+                var ultimoIngreso = usuario.UltimoIngresoUtc.Value.Date;
+
+                if (ultimoIngreso == hoy)
+                {
+                    return await ValidarLogros(usuarioId, usuario);
+                }
+                else if (ultimoIngreso == hoy.AddDays(-1))
+                {
+                    usuario.RachaDiasActual++;
+                }
+                else
+                {
+                    usuario.RachaDiasActual = 1;
+                }
+            }
+            else
+            {
+                usuario.RachaDiasActual = 1;
+            }
+
+            usuario.UltimoIngresoUtc = ahora;
+            
+            await _repositorio.ActualizarAsync(usuario, cancellationToken);
+
+            return await ValidarLogros(usuarioId, usuario);
+        }
+
+        private async Task<List<LogroEstadoDto>> ValidarLogros(int usuarioId, Usuario_Interactivo usuario)
+        {
+            var nuevos = new List<int>();
+            if (usuario.RachaDiasActual >= 3 && await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.RachaDeHierro))
+                nuevos.Add((int)LogroEnum.RachaDeHierro);
+
+            if (usuario.RachaDiasActual >= 7 && await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.RachaDeOro))
+                nuevos.Add((int)LogroEnum.RachaDeOro);
+            return nuevos.Count == 0 ? new() : (await _logroServicio.ObtenerCatalogoParaUsuario(usuarioId))
+                .Where(logro => nuevos.Contains(logro.Id)).ToList();
+        }
+
         private async Task<UsuarioPerfilDto> ConstruirPerfilDto(
             Usuario usuario, int? usuarioAutenticadoId, CancellationToken cancellationToken)
         {
@@ -104,7 +159,8 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 CantidadPublicaciones = cantidadPublicaciones,
                 CantidadSeguidores = cantidadSeguidores,
                 CantidadSeguidos = cantidadSeguidos,
-                LoSigo = loSigo
+                LoSigo = loSigo,
+                Logros = await _logroServicio.ObtenerCatalogoParaUsuario(usuario.Id)
             };
 
             if (usuario is Usuario_Personal personal)
@@ -112,7 +168,12 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 dto.TipoUsuario = "Usuario_Personal";
                 dto.Nombre = personal.Nombre;
                 dto.Apellido = personal.Apellido;
-                dto.Reputacion = FormatearReputacion(personal.Reputacion);
+                var reputacion = personal.Reputacion;
+                if (reputacion == ReputacionEnum.Errante && cantidadPublicaciones > 0)
+                {
+                    reputacion = ReputacionEnum.Nostalgico;
+                }
+                dto.Reputacion = FormatearReputacion(reputacion);
                 dto.PuntosNostalgia = personal.PuntosNostalgia;
             }
             else if (usuario is Usuario_Marca marca)

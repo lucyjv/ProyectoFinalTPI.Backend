@@ -7,5 +7,6 @@ namespace ProyectoFinalTPI.Backend.Dtos.Auth
         public string Username { get; set; } = string.Empty;
         public string Email { get; set; } = string.Empty;
         public bool EsAdmin { get; set; }
+        public List<Usuario.LogroEstadoDto> LogrosNuevos { get; set; } = new();
     }
 }
