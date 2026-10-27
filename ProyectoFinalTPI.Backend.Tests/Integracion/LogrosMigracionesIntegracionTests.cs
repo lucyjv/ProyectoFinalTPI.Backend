@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
-using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Repositorio.Data;
 using Xunit;
 
@@ -24,17 +23,25 @@ public class LogrosMigracionesIntegracionTests(PostgisFixture postgres) : IClass
         {
             await db.GetService<IMigrator>().MigrateAsync("20261025190612_CompletarConfiguracionLogros");
             Assert.Equal(20, await db.Logro.CountAsync());
-            var usuario = new Usuario_Personal
-            {
-                Username = "migracion", Email = "migracion@example.test", FechaNacimiento = new DateOnly(1990, 1, 1)
-            };
-            db.Usuarios.Add(usuario);
-            await db.SaveChangesAsync();
-            foreach (var id in new[] { 1, 4, 5, 17 }) db.Logros_Usuarios.Add(new Logros_Usuarios
-            {
-                UsuarioId = usuario.Id, LogroId = id, FechaDesbloqueo = DateTime.UtcNow
-            });
-            await db.SaveChangesAsync();
+            // Esta prueba se detiene en un esquema histórico. El modelo EF actual ya
+            // incluye columnas posteriores (como FotoPerfilUrl), por eso sembramos
+            // los datos con SQL compatible con la versión que se está probando.
+            await db.Database.ExecuteSqlRawAsync("""
+                WITH nuevo_usuario AS (
+                    INSERT INTO "Usuario"
+                        ("Username", "Email", "Contraseña", "EsAdmin", "FechaCreacion",
+                         "tipo_usuario", "Nombre", "Apellido", "FechaNacimiento",
+                         "PuntosNostalgia", "Reputacion")
+                    VALUES
+                        ('migracion', 'migracion@example.test', '', false, now(),
+                         'Usuario_Personal', '', '', DATE '1990-01-01', 0, 0)
+                    RETURNING "Id"
+                )
+                INSERT INTO logros_usuarios ("UsuarioId", "LogroId", "FechaDesbloqueo")
+                SELECT nuevo_usuario."Id", logros.id, now()
+                FROM nuevo_usuario
+                CROSS JOIN (VALUES (1), (4), (5), (17)) AS logros(id);
+                """);
 
             await db.Database.MigrateAsync();
             db.ChangeTracker.Clear();
