@@ -7,7 +7,7 @@ using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Servicio.ProyectoFinalTPI.Backend.Servicio;
 using NetTopologySuite.Geometries;
- 
+
 namespace ProyectoFinalTPI.Backend.Servicio
 {
     public class PublicacionServicio : IPublicacionServicio
@@ -111,40 +111,15 @@ namespace ProyectoFinalTPI.Backend.Servicio
             await ValidarInteraccionConPublicacion(publicacionId, usuarioId, cancellationToken);
 
             var publicacion = await _publicacionRepositorio.ObtenerPorId(publicacionId, cancellationToken);
-            if (publicacion != null && publicacion.UsuarioId == usuarioId)
-            {
-                throw new InvalidOperationException("No podés puntuar tu propia publicación.");
-            }
+            VerificarNoEsPublicacionPropia(usuarioId, publicacion);
 
-            var estadoActual = await _publicacionRepositorio.ObtenerEstadoPuntuacion(publicacionId, usuarioId, cancellationToken);
-            if (estadoActual.MiPuntuacion == puntaje)
-            {
-                // Toggle: si vuelve a presionar el mismo puntaje, se quita la puntuación
-                await _publicacionRepositorio.QuitarPuntuacion(publicacionId, usuarioId, cancellationToken);
-            }
-            else
-            {
-                await _publicacionRepositorio.PuntuarPublicacion(
-                    publicacionId, usuarioId, puntaje, cancellationToken);
-
-                // Notificar al autor si el puntuador no es el mismo autor.
-                // publicacion ya fue cargada más arriba en el método.
-                if (publicacion != null && publicacion.UsuarioId != usuarioId)
-                {
-                    await _notificacionServicio.NotificarPuntuacionEnPublicacionAsync(
-                        publicacion.UsuarioId,
-                        publicacionId,
-                        usuarioId,
-                        cancellationToken);
-                }
-            }
+            await ActualizarPuntuacion(publicacionId, usuarioId, puntaje, publicacion, cancellationToken);
 
             var estadoNuevo = await _publicacionRepositorio.ObtenerEstadoPuntuacion(publicacionId, usuarioId, cancellationToken);
             await VerificacionLogrosPuntuacion(usuarioId, publicacion, estadoNuevo, cancellationToken);
 
             return estadoNuevo;
         }
-
         public async Task<PuntuacionPublicacionDto> QuitarPuntuacion(
             int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
         {
@@ -187,92 +162,42 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
         public async Task<RepostPublicacionDto> Repostear(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
         {
-            if (publicacionId <= 0)
-                throw new ArgumentException("El ID de la publicación debe ser mayor que cero.");
-            if (usuarioId <= 0)
-                throw new ArgumentException("El ID de usuario debe ser mayor que cero.");
-
-            var existeAutor = await _usuarioRepositorio.ExisteUsuario(usuarioId);
-            if (!existeAutor)
-                throw new KeyNotFoundException("El usuario indicado no existe.");
-
-            var original = await _publicacionRepositorio.ObtenerPorId(publicacionId, cancellationToken);
-            if (original == null)
-                throw new KeyNotFoundException("La publicación original no existe o no está disponible.");
+            ValidarIdPublicacion(publicacionId);
+            ValidarIdUsuario(usuarioId);
+            await VerificarAutorExistente(usuarioId);
+            Publicacion original = await ObtenerPublicacionOriginalParaCompartir(publicacionId, cancellationToken);
 
             var targetId = original.PublicacionOriginalId ?? original.Id;
             await _publicacionRepositorio.CrearRepost(targetId, usuarioId, cancellationToken);
             await VerificacionLogroCompartir(usuarioId, cancellationToken);
             return await _publicacionRepositorio.ObtenerEstadoRepost(targetId, usuarioId, cancellationToken);
         }
-
         public async Task<RepostPublicacionDto> QuitarRepost(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
         {
-            if (publicacionId <= 0)
-                throw new ArgumentException("El ID de la publicación debe ser mayor que cero.");
-            if (usuarioId <= 0)
-                throw new ArgumentException("El ID de usuario debe ser mayor que cero.");
+            ValidarIdPublicacion(publicacionId);
+            ValidarIdUsuario(usuarioId);
 
             await _publicacionRepositorio.QuitarRepost(publicacionId, usuarioId, cancellationToken);
             return await _publicacionRepositorio.ObtenerEstadoRepost(publicacionId, usuarioId, cancellationToken);
         }
-
         public async Task<int> Citar(int publicacionId, int usuarioId, string descripcion, CancellationToken cancellationToken = default)
         {
-            if (publicacionId <= 0)
-                throw new ArgumentException("El ID de la publicación debe ser mayor que cero.");
-            if (usuarioId <= 0)
-                throw new ArgumentException("El ID de usuario debe ser mayor que cero.");
-            if (string.IsNullOrWhiteSpace(descripcion))
-                throw new ArgumentException("La descripción de la cita no puede estar vacía.");
+            ValidarIdPublicacion(publicacionId);
+            ValidarIdUsuario(usuarioId);
+            ValidarDescripcion(descripcion);
+            await VerificarAutorExistente(usuarioId);
 
-            var existeAutor = await _usuarioRepositorio.ExisteUsuario(usuarioId);
-            if (!existeAutor)
-                throw new KeyNotFoundException("El usuario indicado no existe.");
-
-            var original = await _publicacionRepositorio.ObtenerPorId(publicacionId, cancellationToken);
-            if (original == null)
-                throw new KeyNotFoundException("La publicación original no existe o no está disponible.");
+            var original = await ObtenerPublicacionOriginalParaCompartir(publicacionId, cancellationToken);
 
             var targetOriginal = original.PublicacionOriginalId.HasValue
                 ? await _publicacionRepositorio.ObtenerPorId(original.PublicacionOriginalId.Value, cancellationToken) ?? original
                 : original;
-
-            var cita = new Publicacion
-            {
-                Titulo = targetOriginal.Titulo,
-                Descripcion = descripcion.Trim(),
-                Fecha = targetOriginal.Fecha,
-                Categoria = targetOriginal.Categoria,
-                UrlMultimedia = targetOriginal.UrlMultimedia,
-                TipoMultimedia = targetOriginal.TipoMultimedia,
-                LugarId = targetOriginal.LugarId,
-                PublicacionOriginalId = targetOriginal.Id,
-                UsuarioId = usuarioId,
-                FechaCreación = DateTime.UtcNow,
-                EstaOculto = false,
-                MotivoOculto = null
-            };
+            Publicacion cita = CrearPublicacion(usuarioId, descripcion, targetOriginal);
 
             var idCita = await _publicacionRepositorio.Crear(cita);
             await VerificacionLogroCompartir(usuarioId, cancellationToken);
             return idCita;
         }
-
-        public async Task<int> Compartir(Publicacion publicacion, CancellationToken cancellationToken = default)
-        {
-            var targetId = publicacion.PublicacionOriginalId.GetValueOrDefault();
-            if (string.IsNullOrWhiteSpace(publicacion.Descripcion))
-            {
-                await Repostear(targetId, publicacion.UsuarioId, cancellationToken);
-                return targetId;
-            }
-            else
-            {
-                return await Citar(targetId, publicacion.UsuarioId, publicacion.Descripcion, cancellationToken);
-            }
-        }
-
         public async Task<ResultadoMapaDto> ObtenerPines(PublicacionFiltroDto filtro, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(filtro);
@@ -313,56 +238,9 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
             var publicaciones = await _publicacionRepositorio.ObtenerPorUsuarioId(usuarioId, cancellationToken);
 
-            var reposts = await _publicacionRepositorio.ObtenerRepostsDeSeguidos(new[] { usuarioId }, cancellationToken);
-            if (reposts.Count > 0)
-            {
-                var usuario = await _usuarioRepositorio.ObtenerPorIdAsync(usuarioId);
-                var usernameFallback = usuario?.Username ?? "";
+            publicaciones = await IncorporarRepostsDelUsuario(publicaciones, usuarioId, cancellationToken);
 
-                var idsPublicacionesReposteadas = reposts.Select(r => r.PublicacionId).Distinct().ToList();
-                var publicacionesReposteadas = await _publicacionRepositorio.ObtenerPublicacionesPorIds(
-                    idsPublicacionesReposteadas, cancellationToken);
-                var mapaPubs = publicacionesReposteadas.ToDictionary(p => p.Id);
-
-                var itemsRepost = new List<PublicacionDetalleDto>();
-                foreach (var r in reposts)
-                {
-                    if (mapaPubs.TryGetValue(r.PublicacionId, out var orig))
-                    {
-                        var nombreUsuario = !string.IsNullOrEmpty(r.ReposteadorUsername) ? r.ReposteadorUsername : usernameFallback;
-                        itemsRepost.Add(new PublicacionDetalleDto
-                        {
-                            Id = orig.Id,
-                            Titulo = orig.Titulo,
-                            Descripcion = orig.Descripcion,
-                            Fecha = orig.Fecha,
-                            FechaCreacion = r.Fecha,
-                            Categoria = orig.Categoria,
-                            UrlMultimedia = orig.UrlMultimedia,
-                            TipoMultimedia = orig.TipoMultimedia,
-                            Autor = orig.Autor,
-                            Lugar = orig.Lugar,
-                            Grupo = orig.Grupo,
-                            PublicacionOriginal = orig.PublicacionOriginal,
-                            ReposteadoPor = new RepostInfoEmergenteDto
-                            {
-                                UsuarioId = r.ReposteadorId,
-                                Username = nombreUsuario,
-                                Fecha = r.Fecha
-                            }
-                        });
-                    }
-                }
-
-                publicaciones = publicaciones.Concat(itemsRepost)
-                    .OrderByDescending(p => p.FechaCreacion)
-                    .ThenByDescending(p => p.Id)
-                    .ToList();
-            }
-
-            await CompletarResumenesLikes(publicaciones, usuarioAutenticadoId ?? 0, cancellationToken);
-            await CompletarResumenesPuntuaciones(publicaciones, usuarioAutenticadoId, cancellationToken);
-            await CompletarResumenesReposts(publicaciones, usuarioAutenticadoId ?? 0, cancellationToken);
+            await CompletarResumenesInteracciones(publicaciones, usuarioAutenticadoId, cancellationToken);
             return publicaciones;
         }
         public async Task<ResultadoPaginadoDto<PublicacionDetalleDto>> ObtenerFeedSeguidos(int usuarioId, string? cursor, int limite,
@@ -388,74 +266,14 @@ namespace ProyectoFinalTPI.Backend.Servicio
                     limite,
                     cancellationToken);
 
-            var reposts = await _publicacionRepositorio.ObtenerRepostsDeSeguidos(autoresIds, cancellationToken);
-            if (reposts.Count > 0)
-            {
-                if (cursorDecodificado != null)
-                {
-                    reposts = reposts.Where(r =>
-                        r.Fecha < cursorDecodificado.FechaCreacion ||
-                        (r.Fecha == cursorDecodificado.FechaCreacion && r.PublicacionId < cursorDecodificado.Id))
-                        .ToList();
-                }
-
-                var idsPublicacionesReposteadas = reposts.Select(r => r.PublicacionId).Distinct().ToList();
-                var publicacionesReposteadas = await _publicacionRepositorio.ObtenerPublicacionesPorIds(
-                    idsPublicacionesReposteadas, cancellationToken);
-                var mapaPubs = publicacionesReposteadas.ToDictionary(p => p.Id);
-
-                var reposteadoresIds = reposts.Select(r => r.ReposteadorId).Distinct().ToList();
-                var usuariosReposteadores = await _usuarioRepositorio.ObtenerUsuariosPorIdsAsync(reposteadoresIds, cancellationToken);
-                var mapaUsuarios = usuariosReposteadores.ToDictionary(u => u.Id, u => u.Username);
-
-                var itemsRepost = new List<PublicacionDetalleDto>();
-                foreach (var r in reposts)
-                {
-                    if (mapaPubs.TryGetValue(r.PublicacionId, out var orig))
-                    {
-                        var nombreUsuario = !string.IsNullOrWhiteSpace(r.ReposteadorUsername)
-                            ? r.ReposteadorUsername
-                            : (mapaUsuarios.TryGetValue(r.ReposteadorId, out var uName) ? uName : "");
-
-                        itemsRepost.Add(new PublicacionDetalleDto
-                        {
-                            Id = orig.Id,
-                            Titulo = orig.Titulo,
-                            Descripcion = orig.Descripcion,
-                            Fecha = orig.Fecha,
-                            FechaCreacion = r.Fecha,
-                            Categoria = orig.Categoria,
-                            UrlMultimedia = orig.UrlMultimedia,
-                            TipoMultimedia = orig.TipoMultimedia,
-                            Autor = orig.Autor,
-                            Lugar = orig.Lugar,
-                            Grupo = orig.Grupo,
-                            PublicacionOriginal = orig.PublicacionOriginal,
-                            ReposteadoPor = new RepostInfoEmergenteDto
-                            {
-                                UsuarioId = r.ReposteadorId,
-                                Username = nombreUsuario,
-                                Fecha = r.Fecha
-                            }
-                        });
-                    }
-                }
-
-                publicaciones = publicaciones.Concat(itemsRepost)
-                    .OrderByDescending(p => p.FechaCreacion)
-                    .ThenByDescending(p => p.Id)
-                    .ToList();
-            }
-
-            var hayMas = publicaciones.Count > limite;
+            publicaciones = await IncorporarRepostsDeSeguidos(
+                publicaciones, autoresIds, cursorDecodificado, cancellationToken);
 
             var items = publicaciones
                 .Take(limite)
                 .ToList();
 
-            await CompletarResumenesLikes(items, usuarioId, cancellationToken);
-            await CompletarResumenesPuntuaciones(items, usuarioId, cancellationToken);
-            await CompletarResumenesReposts(items, usuarioId, cancellationToken);
+            await CompletarResumenesInteracciones(items, usuarioId, cancellationToken);
 
             return new ResultadoPaginadoDto<PublicacionDetalleDto>
             {
@@ -474,93 +292,13 @@ namespace ProyectoFinalTPI.Backend.Servicio
             ValidarIdUsuario(usuarioId);
             ValidarLimite(limite);
 
-            var cursorDecodificado = CursorFypCodec.Leer(cursor);
-
-            SesionFypDto sesion;
-            int posicion;
-
-            if (cursorDecodificado == null)
-            {
-                var recomendaciones = await CrearRankingFeedAsync(usuarioId, cancellationToken);
-                sesion = _sesionFypRepositorio.Crear(usuarioId, recomendaciones);
-
-                posicion = 0;
-            }
-            else
-            {
-                sesion = _sesionFypRepositorio.Obtener(cursorDecodificado.SesionId, usuarioId)
-                    ?? throw new SesionFypNoDisponibleException();
-
-                posicion = cursorDecodificado.Posicion;
-
-                if (posicion > sesion.PublicacionesIds.Count)
-                {
-                    throw new ArgumentException(
-                        "La posición del cursor no es válida.");
-                }
-            }
-
-            var items = new List<PublicacionDetalleDto>();
-            const int tamanioLote = 50;
-
-            while (posicion < sesion.PublicacionesIds.Count)
-            {
-                var idsLote = sesion.PublicacionesIds
-                    .Skip(posicion)
-                    .Take(tamanioLote)
-                    .ToArray();
-
-                var publicaciones =
-                    await _publicacionRepositorio.ObtenerPublicacionesPorIds(
-                        idsLote,
-                        cancellationToken);
-
-                var publicacionesPorId = publicaciones
-                    .ToDictionary(p => p.Id);
-
-                foreach (var id in idsLote)
-                {
-                    if (publicacionesPorId.TryGetValue(
-                        id,
-                        out var publicacion))
-                    {
-                        // Encontramos otra publicación visible:
-                        // la página actual ya está completa.
-                        if (items.Count == limite)
-                        {
-                            await CompletarResumenesLikes(items, usuarioId, cancellationToken);
-                            await CompletarResumenesPuntuaciones(items, usuarioId, cancellationToken);
-
-                            return new ResultadoPaginadoDto<PublicacionDetalleDto>
-                            {
-                                Items = items,
-                                SiguienteCursor = CursorFypCodec.Crear(
-                                    sesion.Id,
-                                    posicion)
-                            };
-                        }
-
-                        items.Add(publicacion);
-                    }
-
-                    posicion++;
-                }
-            }
-
-            await CompletarResumenesLikes(items, usuarioId, cancellationToken);
-            await CompletarResumenesPuntuaciones(items, usuarioId, cancellationToken);
-            await CompletarResumenesReposts(items, usuarioId, cancellationToken);
-
-            return new ResultadoPaginadoDto<PublicacionDetalleDto>
-            {
-                Items = items,
-                SiguienteCursor = null
-            };
+            var (sesion, posicion) = await ObtenerSesionFeed(usuarioId, cursor, cancellationToken);
+            return await ObtenerPaginaFeed(sesion, posicion, usuarioId, limite, cancellationToken);
         }
 
         #endregion
 
-        #region Creacion, Compartir y Eliminacion
+        #region Creacion y Eliminacion
 
         public async Task<int> Crear(Publicacion publicacion, Stream? archivo = null, string? nombreArchivo = null, Point? gpsUsuario = null)
         {
@@ -577,29 +315,10 @@ namespace ProyectoFinalTPI.Backend.Servicio
         }
         public async Task Eliminar(int id, int? autorId = null, CancellationToken cancellationToken = default)
         {
-            if (id <= 0)
-            {
-                throw new ArgumentException("El ID de la publicación debe ser mayor que cero.");
-            }
+            ValidarIdPublicacion(id);
 
             var eliminado = await _publicacionRepositorio.Eliminar(id, autorId, cancellationToken);
-            if (!eliminado)
-            {
-                throw new KeyNotFoundException("La publicación no existe o no se pudo eliminar.");
-            }
-        }
-        public async Task EliminarRepost(int originalId, int? autorId = null, CancellationToken cancellationToken = default)
-        {
-            if (originalId <= 0)
-            {
-                throw new ArgumentException("El ID de la publicación debe ser mayor que cero.");
-            }
-
-            var eliminado = await _publicacionRepositorio.EliminarRepost(originalId, autorId, cancellationToken);
-            if (!eliminado)
-            {
-                throw new KeyNotFoundException("El repost no existe o no se pudo eliminar.");
-            }
+            VerificarEliminar(eliminado);
         }
        
         #endregion
@@ -929,7 +648,269 @@ namespace ProyectoFinalTPI.Backend.Servicio
             if (puntaje < 1 || puntaje > 5)
                 throw new ArgumentOutOfRangeException(nameof(puntaje), "La puntuación debe estar entre 1 y 5.");
         }
+        private static void VerificarEliminar(bool eliminado)
+        {
+            if (!eliminado)
+            {
+                throw new KeyNotFoundException("La publicación no existe o no se pudo eliminar.");
+            }
+        }
+        private static void VerificarNoEsPublicacionPropia(int usuarioId, Publicacion? publicacion)
+        {
+            if (publicacion != null && publicacion.UsuarioId == usuarioId)
+            {
+                throw new InvalidOperationException("No podés puntuar tu propia publicación.");
+            }
+        }
+        private async Task<Publicacion> ObtenerPublicacionOriginalParaCompartir(int publicacionId, CancellationToken cancellationToken)
+        {
+            return await _publicacionRepositorio.ObtenerPorId(publicacionId, cancellationToken)
+                ?? throw new KeyNotFoundException("La publicación original no existe o no está disponible.");
+        }
+        private static Publicacion CrearPublicacion(int usuarioId, string descripcion, Publicacion targetOriginal)
+        {
+            return new Publicacion
+            {
+                Titulo = targetOriginal.Titulo,
+                Descripcion = descripcion.Trim(),
+                Fecha = targetOriginal.Fecha,
+                Categoria = targetOriginal.Categoria,
+                UrlMultimedia = targetOriginal.UrlMultimedia,
+                TipoMultimedia = targetOriginal.TipoMultimedia,
+                LugarId = targetOriginal.LugarId,
+                PublicacionOriginalId = targetOriginal.Id,
+                UsuarioId = usuarioId,
+                FechaCreación = DateTime.UtcNow,
+                EstaOculto = false,
+                MotivoOculto = null
+            };
+        }
+        private static void ValidarDescripcion(string descripcion)
+        {
+            if (string.IsNullOrWhiteSpace(descripcion))
+                throw new ArgumentException("La descripción de la cita no puede estar vacía.");
+        }
+        private async Task<List<PublicacionDetalleDto>> IncorporarRepostsDelUsuario(
+            List<PublicacionDetalleDto> publicaciones, int usuarioId, CancellationToken cancellationToken)
+        {
+            var reposts = await _publicacionRepositorio.ObtenerRepostsDeSeguidos(new[] { usuarioId }, cancellationToken);
+            if (reposts.Count == 0) return publicaciones;
 
+            var usuario = await _usuarioRepositorio.ObtenerPorIdAsync(usuarioId);
+            var usernameFallback = usuario?.Username ?? "";
+
+            var mapaPubs = await ObtenerOriginalesDeReposts(
+                reposts.Select(r => r.PublicacionId), cancellationToken);
+
+            var itemsRepost = new List<PublicacionDetalleDto>();
+            foreach (var r in reposts)
+            {
+                if (mapaPubs.TryGetValue(r.PublicacionId, out var orig))
+                {
+                    var nombreUsuario = !string.IsNullOrEmpty(r.ReposteadorUsername) ? r.ReposteadorUsername : usernameFallback;
+                    itemsRepost.Add(CrearDetalleRepost(
+                        orig, r.ReposteadorId, nombreUsuario, r.Fecha));
+                }
+            }
+
+            return OrdenarPublicacionesConReposts(publicaciones, itemsRepost);
+        }
+        private async Task<Dictionary<int, PublicacionDetalleDto>> ObtenerOriginalesDeReposts(
+           IEnumerable<int> publicacionesIds, CancellationToken cancellationToken)
+        {
+            var publicaciones = await _publicacionRepositorio.ObtenerPublicacionesPorIds(
+                publicacionesIds.Distinct().ToList(), cancellationToken);
+            return publicaciones.ToDictionary(publicacion => publicacion.Id);
+        }
+        private static PublicacionDetalleDto CrearDetalleRepost(
+            PublicacionDetalleDto original, int usuarioId, string username, DateTime fecha)
+        {
+            return new PublicacionDetalleDto
+            {
+                Id = original.Id,
+                Titulo = original.Titulo,
+                Descripcion = original.Descripcion,
+                Fecha = original.Fecha,
+                FechaCreacion = fecha,
+                Categoria = original.Categoria,
+                UrlMultimedia = original.UrlMultimedia,
+                TipoMultimedia = original.TipoMultimedia,
+                Autor = original.Autor,
+                Lugar = original.Lugar,
+                Grupo = original.Grupo,
+                PublicacionOriginal = original.PublicacionOriginal,
+                ReposteadoPor = new RepostInfoEmergenteDto
+                {
+                    UsuarioId = usuarioId,
+                    Username = username,
+                    Fecha = fecha
+                }
+            };
+        }
+        private static List<PublicacionDetalleDto> OrdenarPublicacionesConReposts(
+            IEnumerable<PublicacionDetalleDto> publicaciones, IEnumerable<PublicacionDetalleDto> reposts)
+        {
+            return publicaciones.Concat(reposts)
+                .OrderByDescending(publicacion => publicacion.FechaCreacion)
+                .ThenByDescending(publicacion => publicacion.Id)
+                .ToList();
+        }
+        private async Task CompletarResumenesInteracciones(
+            IReadOnlyCollection<PublicacionDetalleDto> publicaciones, int? usuarioId,
+            CancellationToken cancellationToken)
+        {
+            await CompletarResumenesLikes(publicaciones, usuarioId ?? 0, cancellationToken);
+            await CompletarResumenesPuntuaciones(publicaciones, usuarioId, cancellationToken);
+            await CompletarResumenesReposts(publicaciones, usuarioId ?? 0, cancellationToken);
+        }
+        private async Task<List<PublicacionDetalleDto>> IncorporarRepostsDeSeguidos(
+            List<PublicacionDetalleDto> publicaciones, IReadOnlyCollection<int> autoresIds,
+            CursorCronologicoDto? cursorDecodificado, CancellationToken cancellationToken)
+        {
+            var reposts = await _publicacionRepositorio.ObtenerRepostsDeSeguidos(autoresIds, cancellationToken);
+            if (reposts.Count == 0) return publicaciones;
+
+            if (cursorDecodificado != null)
+            {
+                reposts = reposts.Where(r =>
+                    r.Fecha < cursorDecodificado.FechaCreacion ||
+                    (r.Fecha == cursorDecodificado.FechaCreacion && r.PublicacionId < cursorDecodificado.Id))
+                    .ToList();
+            }
+
+            var mapaPubs = await ObtenerOriginalesDeReposts(
+                reposts.Select(r => r.PublicacionId), cancellationToken);
+
+            var reposteadoresIds = reposts.Select(r => r.ReposteadorId).Distinct().ToList();
+            var usuariosReposteadores = await _usuarioRepositorio.ObtenerUsuariosPorIdsAsync(reposteadoresIds, cancellationToken);
+            var mapaUsuarios = usuariosReposteadores.ToDictionary(u => u.Id, u => u.Username);
+
+            var itemsRepost = new List<PublicacionDetalleDto>();
+            foreach (var r in reposts)
+            {
+                if (mapaPubs.TryGetValue(r.PublicacionId, out var orig))
+                {
+                    var nombreUsuario = !string.IsNullOrWhiteSpace(r.ReposteadorUsername)
+                        ? r.ReposteadorUsername
+                        : (mapaUsuarios.TryGetValue(r.ReposteadorId, out var uName) ? uName : "");
+
+                    itemsRepost.Add(CrearDetalleRepost(
+                        orig, r.ReposteadorId, nombreUsuario, r.Fecha));
+                }
+            }
+
+            return OrdenarPublicacionesConReposts(publicaciones, itemsRepost);
+        }
+        private async Task<(SesionFypDto Sesion, int Posicion)> ObtenerSesionFeed(
+            int usuarioId, string? cursor, CancellationToken cancellationToken)
+        {
+            var cursorDecodificado = CursorFypCodec.Leer(cursor);
+
+            SesionFypDto sesion;
+            int posicion;
+
+            if (cursorDecodificado == null)
+            {
+                var recomendaciones = await CrearRankingFeedAsync(usuarioId, cancellationToken);
+                sesion = _sesionFypRepositorio.Crear(usuarioId, recomendaciones);
+
+                posicion = 0;
+            }
+            else
+            {
+                sesion = _sesionFypRepositorio.Obtener(cursorDecodificado.SesionId, usuarioId)
+                    ?? throw new SesionFypNoDisponibleException();
+
+                posicion = cursorDecodificado.Posicion;
+
+                if (posicion > sesion.PublicacionesIds.Count)
+                {
+                    throw new ArgumentException(
+                        "La posición del cursor no es válida.");
+                }
+            }
+
+            return (sesion, posicion);
+        }
+
+        private async Task<ResultadoPaginadoDto<PublicacionDetalleDto>> ObtenerPaginaFeed(
+            SesionFypDto sesion, int posicion, int usuarioId, int limite, CancellationToken cancellationToken)
+        {
+            var items = new List<PublicacionDetalleDto>();
+            const int tamanioLote = 50;
+
+            while (posicion < sesion.PublicacionesIds.Count)
+            {
+                var idsLote = sesion.PublicacionesIds
+                    .Skip(posicion)
+                    .Take(tamanioLote)
+                    .ToArray();
+
+                var publicaciones =
+                    await _publicacionRepositorio.ObtenerPublicacionesPorIds(
+                        idsLote,
+                        cancellationToken);
+                var publicacionesPorId = publicaciones
+                    .ToDictionary(p => p.Id);
+
+                foreach (var id in idsLote)
+                {
+                    if (publicacionesPorId.TryGetValue(
+                        id,
+                        out var publicacion))
+                    {
+                        // Encontramos otra publicación visible:
+                        // la página actual ya está completa.
+                        if (items.Count == limite)
+                        {
+                            await CompletarResumenesLikes(items, usuarioId, cancellationToken);
+                            await CompletarResumenesPuntuaciones(items, usuarioId, cancellationToken);
+
+                            return new ResultadoPaginadoDto<PublicacionDetalleDto>
+                            {
+                                Items = items,
+                                SiguienteCursor = CursorFypCodec.Crear(
+                                    sesion.Id,
+                                    posicion)
+                            };
+                        }
+
+                        items.Add(publicacion);
+                    }
+
+                    posicion++;
+                }
+            }
+
+            await CompletarResumenesInteracciones(items, usuarioId, cancellationToken);
+
+            return new ResultadoPaginadoDto<PublicacionDetalleDto>
+            {
+                Items = items,
+                SiguienteCursor = null
+            };
+        }
+        private async Task ActualizarPuntuacion(
+            int publicacionId, int usuarioId, int puntaje, Publicacion? publicacion,
+            CancellationToken cancellationToken)
+        {
+            var estadoActual = await _publicacionRepositorio.ObtenerEstadoPuntuacion(publicacionId, usuarioId, cancellationToken);
+            if (estadoActual.MiPuntuacion == puntaje)
+            {
+                // Toggle: si vuelve a presionar el mismo puntaje, se quita la puntuación
+                await _publicacionRepositorio.QuitarPuntuacion(publicacionId, usuarioId, cancellationToken);
+                return;
+            }
+
+            await _publicacionRepositorio.PuntuarPublicacion(
+                publicacionId, usuarioId, puntaje, cancellationToken);
+
+            if (publicacion != null && publicacion.UsuarioId != usuarioId)
+            {
+                await _notificacionServicio.NotificarPuntuacionEnPublicacionAsync(
+                    publicacion.UsuarioId, publicacionId, usuarioId, cancellationToken);
+            }
+        }
         #region Verificación de Logros
         private async Task VerificacionLogrosCrearPublicacion(Publicacion publicacion, Point? gpsUsuario)
         {
