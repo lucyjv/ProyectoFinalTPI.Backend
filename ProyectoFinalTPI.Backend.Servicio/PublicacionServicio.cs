@@ -48,12 +48,6 @@ namespace ProyectoFinalTPI.Backend.Servicio
             await ValidarInteraccionConPublicacion(publicacionId, usuarioId, cancellationToken);
             await _publicacionRepositorio.CrearLike(publicacionId, usuarioId, cancellationToken);
 
-            int totalLikesDados = await _publicacionRepositorio.ContarLikesOtorgados(usuarioId, cancellationToken);
-            if (totalLikesDados >= 1)
-            {
-                await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.Curioso);
-            }
-
             //vuelve a consultar a Neo4j para saber camo quedo esa publicacion (cantidad de likes, quien le dio MG) y arma el DTO
             return await _publicacionRepositorio.ObtenerEstadoLike(publicacionId, usuarioId, cancellationToken);
         }

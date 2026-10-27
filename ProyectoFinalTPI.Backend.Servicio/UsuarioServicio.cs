@@ -27,30 +27,24 @@ namespace ProyectoFinalTPI.Backend.Servicio
             _timeProvider = timeProvider ?? TimeProvider.System;
         }
 
+        #region Operaciones públicas
+
         /// <inheritdoc/>
         public async Task<UsuarioResumenDto> ObtenerPorUsernameAsync(
             string username, CancellationToken cancellationToken = default)
         {
-            var usuario = await _repositorio.ObtenerPorUsernameAsync(username, cancellationToken);
-
-            if (usuario is null)
-                throw new KeyNotFoundException($"No existe ningún usuario con el username '{username}'.");
+            var usuario = await ObtenerUsuarioPorUsername(username, cancellationToken);
 
             return new UsuarioResumenDto
             {
                 UsuarioId = usuario.Id,
-                Username  = usuario.Username
+                Username = usuario.Username
             };
         }
-
         public async Task<IReadOnlyList<AutorResumenDto>> BuscarAsync(
             string texto, int limite = 10, CancellationToken cancellationToken = default)
         {
-            var busqueda = texto?.Trim() ?? string.Empty;
-            if (busqueda.Length < 2 || busqueda.Length > 50)
-                throw new ArgumentException("El texto de búsqueda debe tener entre 2 y 50 caracteres.", nameof(texto));
-            if (limite < 1 || limite > 20)
-                throw new ArgumentOutOfRangeException(nameof(limite), "El límite debe estar entre 1 y 20.");
+            string busqueda = ValidarBusqueda(texto, limite);
 
             return await _repositorio.BuscarPorUsernameAsync(busqueda, limite, cancellationToken);
         }
@@ -59,10 +53,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
         public async Task<UsuarioPerfilDto> ObtenerPerfilPorUsernameAsync(
             string username, int? usuarioAutenticadoId, CancellationToken cancellationToken = default)
         {
-            var usuario = await _repositorio.ObtenerPorUsernameAsync(username, cancellationToken);
-
-            if (usuario is null)
-                throw new KeyNotFoundException($"No existe ningún usuario con el username '{username}'.");
+            var usuario = await ObtenerUsuarioPorUsername(username, cancellationToken);
 
             return await ConstruirPerfilDto(usuario, usuarioAutenticadoId, cancellationToken);
         }
@@ -85,38 +76,20 @@ namespace ProyectoFinalTPI.Backend.Servicio
             if (usuario == null) return new();
 
             var ahora = _timeProvider.GetUtcNow().UtcDateTime;
-            var hoy = ahora.Date;
-
-            if (usuario.UltimoIngresoUtc.HasValue)
+            if (usuario.UltimoIngresoUtc?.Date != ahora.Date)
             {
-                var ultimoIngreso = usuario.UltimoIngresoUtc.Value.Date;
-
-                if (ultimoIngreso == hoy)
-                {
-                    return await ValidarLogros(usuarioId, usuario);
-                }
-                else if (ultimoIngreso == hoy.AddDays(-1))
-                {
-                    usuario.RachaDiasActual++;
-                }
-                else
-                {
-                    usuario.RachaDiasActual = 1;
-                }
-            }
-            else
-            {
-                usuario.RachaDiasActual = 1;
+                ActualizarRacha(usuario, ahora);
+                await _repositorio.ActualizarAsync(usuario, cancellationToken);
             }
 
-            usuario.UltimoIngresoUtc = ahora;
-            
-            await _repositorio.ActualizarAsync(usuario, cancellationToken);
-
-            return await ValidarLogros(usuarioId, usuario);
+            return await ValidarLogrosDeRacha(usuarioId, usuario);
         }
 
-        private async Task<List<LogroEstadoDto>> ValidarLogros(int usuarioId, Usuario_Interactivo usuario)
+        #endregion
+
+        #region Métodos privados y validaciones
+
+        private async Task<List<LogroEstadoDto>> ValidarLogrosDeRacha(int usuarioId, Usuario_Interactivo usuario)
         {
             var nuevos = new List<int>();
             if (usuario.RachaDiasActual >= 3 && await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.RachaDeHierro))
@@ -127,7 +100,14 @@ namespace ProyectoFinalTPI.Backend.Servicio
             return nuevos.Count == 0 ? new() : (await _logroServicio.ObtenerCatalogoParaUsuario(usuarioId))
                 .Where(logro => nuevos.Contains(logro.Id)).ToList();
         }
-
+        private static void ActualizarRacha(Usuario_Interactivo usuario, DateTime ahora)
+        {
+            var ultimoIngreso = usuario.UltimoIngresoUtc?.Date;
+            usuario.RachaDiasActual = ultimoIngreso.HasValue && ultimoIngreso.Value == ahora.Date.AddDays(-1)
+                ? usuario.RachaDiasActual + 1
+                : 1;
+            usuario.UltimoIngresoUtc = ahora;
+        }
         private async Task<UsuarioPerfilDto> ConstruirPerfilDto(
             Usuario usuario, int? usuarioAutenticadoId, CancellationToken cancellationToken)
         {
@@ -191,6 +171,20 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
             return dto;
         }
+        private async Task<Usuario> ObtenerUsuarioPorUsername(string username, CancellationToken cancellationToken)
+        {
+            return await _repositorio.ObtenerPorUsernameAsync(username, cancellationToken)
+                ?? throw new KeyNotFoundException($"No existe ningún usuario con el username '{username}'.");
+        }
+        private static string ValidarBusqueda(string texto, int limite)
+        {
+            var busqueda = texto?.Trim() ?? string.Empty;
+            if (busqueda.Length < 2 || busqueda.Length > 50)
+                throw new ArgumentException("El texto de búsqueda debe tener entre 2 y 50 caracteres.", nameof(texto));
+            if (limite < 1 || limite > 20)
+                throw new ArgumentOutOfRangeException(nameof(limite), "El límite debe estar entre 1 y 20.");
+            return busqueda;
+        }
 
         private static string FormatearReputacion(ReputacionEnum reputacion) => reputacion switch
         {
@@ -200,5 +194,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
             ReputacionEnum.Mnnemónide => "Mnemosine",
             _ => "Errante"
         };
+
+        #endregion
     }
 }
