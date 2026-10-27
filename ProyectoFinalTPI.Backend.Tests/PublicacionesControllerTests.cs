@@ -633,6 +633,12 @@ namespace ProyectoFinalTPI.Backend.Tests
             public List<Publicacion> ObtenerPublicacionPorCategoria(CategoriaEnum categoria) => throw new NotImplementedException();
             public Task<ResultadoPaginadoDto<PublicacionDetalleDto>> ObtenerFeedSeguidos(int usuarioId, string? cursor, int limite, CancellationToken cancellationToken = default) => throw new NotImplementedException();
             public Task<ResultadoPaginadoDto<PublicacionDetalleDto>> ObtenerPublicacionesParaVos(int usuarioId, string? cursor, int limite, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+            public Task<ResultadoPaginadoDto<PublicacionDetalleDto>> ObtenerPublicacionesPorHashtag(string hashtag, string? cursor, int limite,
+                int? usuarioId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+            public Task<List<TendenciaHashtagDto>> ObtenerTendenciasHashtags(int limite, CancellationToken cancellationToken = default)
+                => throw new NotImplementedException();
+            public Task<List<TendenciaHashtagDto>> BuscarHashtags(string consulta, int limite, CancellationToken cancellationToken = default)
+                => throw new NotImplementedException();
             public Task RegistrarImpresionesFeed(int usuarioId, IReadOnlyCollection<int> publicacionesIds,
                 CancellationToken cancellationToken = default) => Task.CompletedTask;
 

@@ -954,6 +954,10 @@ namespace ProyectoFinalTPI.Backend.Tests
         // Estos dobles reemplazan las dependencias externas del servicio.
         private class PublicacionRepositorioFake : IPublicacionRepositorio
         {
+            public Task<List<int>> ObtenerIdsPorHashtag(string hashtag, CursorCronologicoDto? cursor, int limite,
+                CancellationToken cancellationToken = default) => Task.FromResult(new List<int>());
+            public Task<List<(string Descripcion, int UsuarioId)>> ObtenerDescripcionesParaHashtags(DateTime? desde,
+                CancellationToken cancellationToken = default) => Task.FromResult(new List<(string Descripcion, int UsuarioId)>());
             public Task<int> ContarPosteosDeDiferentesEpocasDelUsuario(int usuarioId, CancellationToken cancellationToken = default) => Task.FromResult(0);
             public Task<int> ContarPosteosConImagenDelUsuario(int usuarioId, CancellationToken cancellationToken = default) => Task.FromResult(0);
             public Task<int> ContarRepostsDeOtrosUsuarios(int usuarioId, CancellationToken cancellationToken = default) => Task.FromResult(0);
