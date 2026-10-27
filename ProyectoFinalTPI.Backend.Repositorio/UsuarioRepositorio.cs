@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Dtos.Usuario;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
@@ -96,7 +97,16 @@ namespace ProyectoFinalTPI.Backend.Repositorio
         public async Task ActualizarAsync(Usuario usuario, CancellationToken cancellationToken = default)
         {
             _context.Usuarios.Update(usuario);
-            await _context.SaveChangesAsync(cancellationToken);
+            try
+            {
+                await _context.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException ex) when (ex.InnerException is PostgresException pg
+                && pg.SqlState == PostgresErrorCodes.UniqueViolation
+                && pg.ConstraintName == "IX_Usuario_Username")
+            {
+                throw new NombreUsuarioEnUsoException();
+            }
         }
 
         /// <inheritdoc/>

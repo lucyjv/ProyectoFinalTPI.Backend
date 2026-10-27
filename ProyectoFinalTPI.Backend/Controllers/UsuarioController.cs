@@ -20,6 +20,47 @@ public class UsuarioController : ControllerBase
         _usuarioServicio = usuarioServicio;
     }
 
+    [HttpGet("me/perfil")]
+    [SwaggerOperation(Summary = "Obtiene el perfil propio actualizado.")]
+    [SwaggerResponse(StatusCodes.Status200OK, "Perfil propio.", typeof(UsuarioPerfilDto))]
+    public async Task<IActionResult> ObtenerMiPerfil(CancellationToken cancellationToken)
+    {
+        var usuarioId = User.ObtenerUsuarioId();
+        if (!usuarioId.HasValue) return Unauthorized();
+        return Ok(await _usuarioServicio.ObtenerPerfilPorIdAsync(usuarioId.Value, usuarioId, cancellationToken));
+    }
+
+    [HttpPatch("me/username")]
+    [SwaggerOperation(Summary = "Cambia el nombre de usuario de la cuenta autenticada.")]
+    [SwaggerResponse(StatusCodes.Status200OK, "Perfil actualizado.", typeof(UsuarioPerfilDto))]
+    [SwaggerResponse(StatusCodes.Status409Conflict, "El nombre de usuario ya existe.", typeof(ProblemDetails))]
+    public async Task<IActionResult> CambiarMiUsername(
+        [FromBody] CambiarUsernameDto dto, CancellationToken cancellationToken)
+    {
+        var usuarioId = User.ObtenerUsuarioId();
+        if (!usuarioId.HasValue) return Unauthorized();
+        return Ok(await _usuarioServicio.CambiarUsernamePropioAsync(usuarioId.Value, dto.Username, cancellationToken));
+    }
+
+    [HttpPut("me/foto")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(3 * 1024 * 1024)]
+    [SwaggerOperation(Summary = "Sube o reemplaza la foto de perfil de la cuenta autenticada.")]
+    [SwaggerResponse(StatusCodes.Status200OK, "Perfil actualizado.", typeof(UsuarioPerfilDto))]
+    public async Task<IActionResult> CambiarMiFoto(
+        IFormFile archivo, CancellationToken cancellationToken)
+    {
+        var usuarioId = User.ObtenerUsuarioId();
+        if (!usuarioId.HasValue) return Unauthorized();
+        if (archivo is null || archivo.Length == 0)
+            return BadRequest(new { mensaje = "Seleccioná una foto." });
+        if (archivo.Length > 2 * 1024 * 1024)
+            return BadRequest(new { mensaje = "La foto no puede superar 2 MiB." });
+        await using var contenido = archivo.OpenReadStream();
+        return Ok(await _usuarioServicio.CambiarFotoPerfilPropiaAsync(
+            usuarioId.Value, contenido, archivo.ContentType, cancellationToken));
+    }
+
     [HttpGet("por-username/{username}")]
     [SwaggerOperation(
         Summary = "Busca un usuario por su username.",

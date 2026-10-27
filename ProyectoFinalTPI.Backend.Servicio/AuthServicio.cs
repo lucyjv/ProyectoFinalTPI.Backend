@@ -161,6 +161,7 @@ public class AuthServicio : IAuthServicio
                 Token = GenerarJwt(usuario, sesionId),
                 UsuarioId = usuario.Id,
                 Username = usuario.Username,
+                FotoPerfilUrl = usuario.FotoPerfilUrl,
                 Email = usuario.Email,
                 EsAdmin = usuario.EsAdmin
             },

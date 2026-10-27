@@ -7,6 +7,9 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Servicio
     /// </summary>
     public interface IUsuarioServicio
     {
+        Task<UsuarioPerfilDto> CambiarUsernamePropioAsync(int usuarioId, string username, CancellationToken cancellationToken = default);
+        Task<UsuarioPerfilDto> CambiarFotoPerfilPropiaAsync(int usuarioId, Stream archivo, string contentType, CancellationToken cancellationToken = default);
+
         Task<List<LogroEstadoDto>> RegistrarIngresoDiarioAsync(int usuarioId, CancellationToken cancellationToken = default);
         /// <summary>
         /// Busca un usuario por su username exacto.
