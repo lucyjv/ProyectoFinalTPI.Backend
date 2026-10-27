@@ -22,7 +22,7 @@ public class LogrosMigracionesIntegracionTests(PostgisFixture postgres) : IClass
             .UseNpgsql(connection.ConnectionString, options => options.UseNetTopologySuite()).Options);
         try
         {
-            await db.GetService<IMigrator>().MigrateAsync("20261025190612_CompletarConfiguracionLogros");
+            await db.GetService<IMigrator>().MigrateAsync("20261027164752_AgregarFotoPerfilUsuario");
             Assert.Equal(20, await db.Logro.CountAsync());
             var usuario = new Usuario_Personal
             {
