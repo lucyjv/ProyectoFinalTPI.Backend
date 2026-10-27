@@ -1,7 +1,7 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
+using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Services;
 using ProyectoFinalTPI.Backend.Extensions;
 
@@ -25,11 +25,13 @@ namespace ProyectoFinalTPI.Backend.Hubs
     {
         private readonly PresenciaService _presencia;
         private readonly IChatServicio _chatServicio;
+        private readonly IUsuarioRepositorio _usuarioRepositorio;
 
-        public ChatHub(PresenciaService presencia, IChatServicio chatServicio)
+        public ChatHub(PresenciaService presencia, IChatServicio chatServicio, IUsuarioRepositorio usuarioRepositorio)
         {
             _presencia    = presencia;
             _chatServicio = chatServicio;
+            _usuarioRepositorio = usuarioRepositorio;
         }
 
         /// <summary>
@@ -75,7 +77,8 @@ namespace ProyectoFinalTPI.Backend.Hubs
             if (emisorId == destinatarioId)
                 throw new HubException("No podés enviarte mensajes a vos mismo.");
 
-            var emisorUsername = Context.User?.FindFirstValue("username") ?? string.Empty;
+            var emisor = await _usuarioRepositorio.ObtenerPorIdAsync(emisorId);
+            var emisorUsername = emisor?.Username ?? throw new HubException("El usuario no existe.");
 
             // El servicio persiste el mensaje. No sabe nada de SignalR.
             var dto = await _chatServicio.EnviarMensajeAsync(

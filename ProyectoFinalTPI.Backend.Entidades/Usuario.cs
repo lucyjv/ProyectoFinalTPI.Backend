@@ -1,9 +1,10 @@
-﻿namespace ProyectoFinalTPI.Backend.Entidades
+namespace ProyectoFinalTPI.Backend.Entidades
 {
     public class Usuario
     {
         public int Id { get; set; }
         public string Username { get; set; } = string.Empty;
+        public string? FotoPerfilUrl { get; set; }
         public string Email { get; set; } = string.Empty;
         public string Contraseña { get; set; } = string.Empty;
         public bool EsAdmin { get; set; }
