@@ -53,4 +53,4 @@ jobs:
           package: ./publish
 
       - name: Check API startup
-        run: curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 6 https://nostalgiar-api-cpf0fhaqgnbrdpb3.brazilsouth-01.azurewebsites.net/swagger/v1/swagger.json --output /dev/null
+        run: curl --fail --silent --show-error --retry 40 --retry-all-errors --retry-delay 6 --retry-max-time 300 https://nostalgiar-api-cpf0fhaqgnbrdpb3.brazilsouth-01.azurewebsites.net/swagger/v1/swagger.json --output /dev/null
