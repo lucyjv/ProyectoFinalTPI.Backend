@@ -7,11 +7,19 @@ using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Servicio.ProyectoFinalTPI.Backend.Servicio;
 using NetTopologySuite.Geometries;
+using System.Globalization;
+using System.Text;
+using System.Text.RegularExpressions;
 
 namespace ProyectoFinalTPI.Backend.Servicio
 {
     public class PublicacionServicio : IPublicacionServicio
     {
+        private static readonly Regex PatronHashtag = new(
+            @"(?:^|[\s(¿¡.,;:!?])#([\p{L}\p{N}_]+)", RegexOptions.Compiled);
+        private static readonly Regex PatronNombreHashtag = new(
+            @"^[\p{L}\p{N}_]{1,32}$", RegexOptions.Compiled);
+        private static readonly CultureInfo CulturaHashtag = CultureInfo.GetCultureInfo("es");
         private readonly IPublicacionRepositorio _publicacionRepositorio;
         private readonly IUsuarioRepositorio _usuarioRepositorio;
         private readonly IMultimediaServicio _multimediaServicio;
@@ -288,6 +296,93 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
             var (sesion, posicion) = await ObtenerSesionFeed(usuarioId, cursor, cancellationToken);
             return await ObtenerPaginaFeed(sesion, posicion, usuarioId, limite, cancellationToken);
+        }
+
+        public async Task<ResultadoPaginadoDto<PublicacionDetalleDto>> ObtenerPublicacionesPorHashtag(
+            string hashtag, string? cursor, int limite, int? usuarioId, CancellationToken cancellationToken = default)
+        {
+            var nombre = NormalizarHashtag(hashtag);
+            ValidarLimite(limite);
+            var cursorDecodificado = CursorCronologicoCodec.Leer(cursor);
+            var ids = await _publicacionRepositorio.ObtenerIdsPorHashtag(
+                nombre, cursorDecodificado, limite, cancellationToken);
+            var idsPagina = ids.Take(limite).ToArray();
+            var publicaciones = await _publicacionRepositorio.ObtenerPublicacionesPorIds(idsPagina, cancellationToken);
+            var porId = publicaciones.ToDictionary(p => p.Id);
+            var items = idsPagina.Where(porId.ContainsKey).Select(id => porId[id]).ToList();
+            await CompletarResumenesInteracciones(items, usuarioId, cancellationToken);
+
+            return new ResultadoPaginadoDto<PublicacionDetalleDto>
+            {
+                Items = items,
+                SiguienteCursor = ids.Count > limite && items.Count > 0
+                    ? CursorCronologicoCodec.Crear(items[^1].FechaCreacion, items[^1].Id)
+                    : null
+            };
+        }
+
+        public async Task<List<TendenciaHashtagDto>> ObtenerTendenciasHashtags(
+            int limite, CancellationToken cancellationToken = default)
+        {
+            ValidarLimite(limite);
+            var desde = DateTime.UtcNow.AddDays(-7);
+            var publicaciones = await _publicacionRepositorio.ObtenerDescripcionesParaHashtags(desde, cancellationToken);
+            return AgruparHashtags(publicaciones).Take(limite).ToList();
+        }
+
+        public async Task<List<TendenciaHashtagDto>> BuscarHashtags(
+            string consulta, int limite, CancellationToken cancellationToken = default)
+        {
+            ValidarLimite(limite);
+            if (string.IsNullOrWhiteSpace(consulta)) return new List<TendenciaHashtagDto>();
+            var prefijo = NormalizarHashtag(consulta);
+            var publicaciones = await _publicacionRepositorio.ObtenerDescripcionesParaHashtags(null, cancellationToken);
+            return AgruparHashtags(publicaciones)
+                .Where(t => t.Hashtag.StartsWith(prefijo, StringComparison.Ordinal))
+                .Take(limite).ToList();
+        }
+
+        private static string NormalizarHashtag(string valor)
+        {
+            var texto = valor.Trim();
+            var nombre = (texto.StartsWith('#') ? texto[1..] : texto)
+                .Normalize(NormalizationForm.FormKC).ToLower(CulturaHashtag);
+            if (!PatronNombreHashtag.IsMatch(nombre))
+                throw new ArgumentException("El hashtag debe tener entre 1 y 32 letras, números o guiones bajos.");
+            return nombre;
+        }
+
+        private static IEnumerable<string> ExtraerHashtags(string descripcion) =>
+            PatronHashtag.Matches(descripcion.Normalize(NormalizationForm.FormKC))
+                .Select(m => m.Groups[1].Value.ToLower(CulturaHashtag))
+                .Where(nombre => nombre.Length <= 32)
+                .Distinct(StringComparer.Ordinal);
+
+        private static List<TendenciaHashtagDto> AgruparHashtags(
+            IEnumerable<(string Descripcion, int UsuarioId)> publicaciones)
+        {
+            var conteos = new Dictionary<string, (int Cantidad, HashSet<int> Autores)>(StringComparer.Ordinal);
+            foreach (var (descripcion, usuarioId) in publicaciones)
+            {
+                foreach (var hashtag in ExtraerHashtags(descripcion))
+                {
+                    if (!conteos.TryGetValue(hashtag, out var estado))
+                        estado = (0, new HashSet<int>());
+                    estado.Autores.Add(usuarioId);
+                    conteos[hashtag] = (estado.Cantidad + 1, estado.Autores);
+                }
+            }
+
+            return conteos.Select(par => new TendenciaHashtagDto
+                {
+                    Hashtag = par.Key,
+                    CantidadPublicaciones = par.Value.Cantidad,
+                    CantidadAutores = par.Value.Autores.Count
+                })
+                .OrderByDescending(t => t.CantidadPublicaciones)
+                .ThenByDescending(t => t.CantidadAutores)
+                .ThenBy(t => t.Hashtag, StringComparer.Ordinal)
+                .ToList();
         }
 
         #endregion

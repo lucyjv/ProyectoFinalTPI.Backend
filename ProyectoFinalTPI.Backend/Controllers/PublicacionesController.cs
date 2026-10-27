@@ -8,6 +8,7 @@ using ProyectoFinalTPI.Backend.Requests.Publicaciones;
 using ProyectoFinalTPI.Backend.Mappings;
 using ProyectoFinalTPI.Backend.Extensions;
 using ProyectoFinalTPI.Backend.Entidades;
+using ProyectoFinalTPI.Backend.Dtos;
 
 namespace ProyectoFinalTPI.Backend.Controllers
 {
@@ -94,6 +95,54 @@ namespace ProyectoFinalTPI.Backend.Controllers
             var publicaciones = await _publicacionServicio.ObtenerPorUsuarioId(
                 usuarioId, User.ObtenerUsuarioId(), cancellationToken);
             return Ok(publicaciones);
+        }
+
+        [HttpGet("hashtags/{hashtag}/publicaciones")]
+        [SwaggerOperation(Summary = "Obtiene todas las publicaciones visibles de un hashtag.",
+            Description = "Busca el hashtag en las descripciones, sin crear grupos ni almacenar etiquetas por separado. Orden cronológico y paginación por cursor.")]
+        [SwaggerResponse(StatusCodes.Status200OK, "Página de publicaciones.", typeof(ResultadoPaginadoDto<PublicacionDetalleDto>))]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "El hashtag, cursor o límite no es válido.")]
+        public async Task<ActionResult<ResultadoPaginadoDto<PublicacionDetalleDto>>> ObtenerPorHashtag(
+            string hashtag, [FromQuery] string? cursor = null, [FromQuery] int limite = 20,
+            CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                return Ok(await _publicacionServicio.ObtenerPublicacionesPorHashtag(
+                    hashtag, cursor, limite, User.ObtenerUsuarioId(), cancellationToken));
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { mensaje = ex.Message });
+            }
+        }
+
+        [HttpGet("hashtags/tendencias")]
+        [SwaggerOperation(Summary = "Obtiene los hashtags más usados en los últimos siete días.")]
+        [SwaggerResponse(StatusCodes.Status200OK, "Tendencias semanales.", typeof(List<TendenciaHashtagDto>))]
+        public async Task<ActionResult<List<TendenciaHashtagDto>>> ObtenerTendenciasHashtags(
+            [FromQuery] int limite = 5, CancellationToken cancellationToken = default)
+        {
+            if (limite is < 1 or > 50) return BadRequest(new { mensaje = "El límite debe estar entre 1 y 50." });
+            return Ok(await _publicacionServicio.ObtenerTendenciasHashtags(limite, cancellationToken));
+        }
+
+        [HttpGet("hashtags/buscar")]
+        [SwaggerOperation(Summary = "Busca hashtags existentes por prefijo.")]
+        [SwaggerResponse(StatusCodes.Status200OK, "Hashtags encontrados.", typeof(List<TendenciaHashtagDto>))]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "La búsqueda o límite no es válido.")]
+        public async Task<ActionResult<List<TendenciaHashtagDto>>> BuscarHashtags(
+            [FromQuery] string? q, [FromQuery] int limite = 10,
+            CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                return Ok(await _publicacionServicio.BuscarHashtags(q ?? string.Empty, limite, cancellationToken));
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { mensaje = ex.Message });
+            }
         }
 
         [HttpPost]
