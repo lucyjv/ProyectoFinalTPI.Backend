@@ -2,13 +2,15 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
-using BC = BCrypt.Net.BCrypt;
+using System.Threading;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using ProyectoFinalTPI.Backend.Dtos.Auth;
+using ProyectoFinalTPI.Backend.Dtos.Usuario;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
+using BC = BCrypt.Net.BCrypt;
 
 namespace ProyectoFinalTPI.Backend.Servicio;
 
@@ -30,28 +32,14 @@ public class AuthServicio : IAuthServicio
         _usuarioServicio = usuarioServicio;
     }
 
+    #region Operaciones públicas
+
     public async Task<ResultadoAutenticacionDto> RegistrarAsync(
         RegistroDto dto,
         string? userAgent = null,
         CancellationToken cancellationToken = default)
-    {
-        var email = NormalizarEmail(dto.Email);
-        if (await _usuarioRepositorio.ExistePorEmailAsync(email, cancellationToken))
-            throw new InvalidOperationException("Ya existe una cuenta registrada con ese email.");
-
-        var username = dto.Username.Trim();
-        if (await _usuarioRepositorio.ExistePorUsernameAsync(username, cancellationToken))
-            throw new InvalidOperationException("Ya existe una cuenta registrada con ese nombre de usuario.");
-
-        var usuario = new Usuario_Personal
-        {
-            Username = username,
-            Email = email,
-            Contraseña = BC.HashPassword(dto.Contraseña),
-            EsAdmin = false,
-            FechaCreacion = DateTime.UtcNow
-        };
-
+    {     
+        var usuario = await PrepararUsuarioParaRegistro(dto, cancellationToken);
         await _usuarioRepositorio.AgregarAsync(usuario, cancellationToken);
         return await CrearSesionAsync(usuario, userAgent, cancellationToken);
     }
@@ -61,59 +49,19 @@ public class AuthServicio : IAuthServicio
         string? userAgent = null,
         CancellationToken cancellationToken = default)
     {
-        var usuario = await _usuarioRepositorio.ObtenerPorEmailAsync(NormalizarEmail(dto.Email), cancellationToken);
-        if (usuario is null)
-            throw new UnauthorizedAccessException("Email o contraseña incorrectos.");
-
-        var passwordValida = false;
-        try
-        {
-            passwordValida = BC.Verify(dto.Contraseña, usuario.Contraseña);
-        }
-        catch
-        {
-            if (dto.Contraseña == usuario.Contraseña)
-            {
-                passwordValida = true;
-                usuario.Contraseña = BC.HashPassword(dto.Contraseña);
-                await _usuarioRepositorio.ActualizarAsync(usuario, cancellationToken);
-            }
-        }
-
-        if (!passwordValida)
-            throw new UnauthorizedAccessException("Email o contraseña incorrectos.");
+        var usuario = await ObtenerUsuarioParaLogin(dto.Email, cancellationToken);
+        await ValidarCredenciales(usuario, dto.Contraseña, cancellationToken);
 
         return await CrearSesionAsync(usuario, userAgent, cancellationToken);
     }
-
     public async Task<ResultadoAutenticacionDto> RenovarAsync(
         string refreshToken,
         CancellationToken cancellationToken = default)
     {
-        if (!TryObtenerSesionId(refreshToken, out var sesionId))
-            throw new UnauthorizedAccessException("La sesión no es válida.");
-
-        var sesion = await _sesionRepositorio.ObtenerPorIdAsync(sesionId, cancellationToken);
-        if (sesion is null || !sesion.EstaActiva || !HashCoincide(refreshToken, sesion.RefreshTokenHash))
-            throw new UnauthorizedAccessException("La sesión no es válida o expiró.");
-
-        var ahora = DateTime.UtcNow;
-        var nuevoRefreshToken = GenerarRefreshToken(sesion.Id);
-        var nuevaExpiracion = ahora.AddDays(ObtenerRefreshTokenDias());
-        var rotada = await _sesionRepositorio.RotarAsync(
-            sesion,
-            HashearToken(nuevoRefreshToken),
-            nuevaExpiracion,
-            ahora,
-            cancellationToken);
-
-        if (!rotada)
-            throw new UnauthorizedAccessException("La sesión ya fue renovada por otra solicitud.");
-
+        var sesion = await ObtenerSesionParaRenovar(refreshToken, cancellationToken);
+        var (nuevoRefreshToken, nuevaExpiracion) = await RotarSesion(sesion, cancellationToken);
         var nuevos = await _usuarioServicio.RegistrarIngresoDiarioAsync(sesion.UsuarioId, cancellationToken);
-        var resultado = CrearResultado(sesion.Usuario, sesion.Id, nuevoRefreshToken, nuevaExpiracion);
-        resultado.Respuesta.LogrosNuevos = nuevos ?? new();
-        return resultado;
+        return CrearResultado(sesion.Usuario, sesion.Id, nuevoRefreshToken, nuevaExpiracion, nuevos);
     }
 
     public async Task CerrarSesionAsync(string? refreshToken, CancellationToken cancellationToken = default)
@@ -130,7 +78,16 @@ public class AuthServicio : IAuthServicio
 
     public Task CerrarTodasLasSesionesAsync(int usuarioId, CancellationToken cancellationToken = default) =>
         _sesionRepositorio.RevocarTodasAsync(usuarioId, DateTime.UtcNow, cancellationToken);
+    
+    #endregion
 
+    #region Métodos privados y validaciones
+    private static bool TryObtenerSesionId(string token, out Guid sesionId)
+    {
+        sesionId = Guid.Empty;
+        var separador = token.IndexOf('.');
+        return separador == 32 && Guid.TryParseExact(token[..separador], "N", out sesionId);
+    }
     private async Task<ResultadoAutenticacionDto> CrearSesionAsync(
         Usuario usuario,
         string? userAgent,
@@ -152,7 +109,6 @@ public class AuthServicio : IAuthServicio
         resultado.Respuesta.LogrosNuevos = nuevos ?? new();
         return resultado;
     }
-
     private ResultadoAutenticacionDto CrearResultado(Usuario usuario, Guid sesionId, string refreshToken, DateTime expiracion) =>
         new()
         {
@@ -168,7 +124,6 @@ public class AuthServicio : IAuthServicio
             RefreshToken = refreshToken,
             RefreshTokenExpira = expiracion
         };
-
     private string GenerarJwt(Usuario usuario, Guid sesionId)
     {
         var claveSecreta = _configuration["Jwt:Clave"]
@@ -193,21 +148,15 @@ public class AuthServicio : IAuthServicio
             signingCredentials: credenciales);
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
-
     private int ObtenerAccessTokenMinutos() =>
         int.TryParse(_configuration["Jwt:AccessTokenMinutes"], out var minutos) && minutos is >= 5 and <= 60 ? minutos : 15;
-
     private int ObtenerRefreshTokenDias() =>
         int.TryParse(_configuration["Jwt:RefreshTokenDays"], out var dias) && dias is >= 1 and <= 90 ? dias : 30;
-
     private static string NormalizarEmail(string email) => email.Trim().ToLowerInvariant();
-
     private static string GenerarRefreshToken(Guid sesionId) =>
         $"{sesionId:N}.{Base64UrlEncoder.Encode(RandomNumberGenerator.GetBytes(64))}";
-
     private static string HashearToken(string token) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
-
     private static bool HashCoincide(string token, string hashEsperado)
     {
         try
@@ -221,11 +170,97 @@ public class AuthServicio : IAuthServicio
             return false;
         }
     }
-
-    private static bool TryObtenerSesionId(string token, out Guid sesionId)
+    private async Task<Usuario_Personal> PrepararUsuarioParaRegistro(RegistroDto dto, CancellationToken cancellationToken)
     {
-        sesionId = Guid.Empty;
-        var separador = token.IndexOf('.');
-        return separador == 32 && Guid.TryParseExact(token[..separador], "N", out sesionId);
+        var email = NormalizarEmail(dto.Email);
+        if (await _usuarioRepositorio.ExistePorEmailAsync(email, cancellationToken))
+            throw new InvalidOperationException("Ya existe una cuenta registrada con ese email.");
+
+        var username = dto.Username.Trim();
+        if (await _usuarioRepositorio.ExistePorUsernameAsync(username, cancellationToken))
+            throw new InvalidOperationException("Ya existe una cuenta registrada con ese nombre de usuario.");
+
+        var usuario = new Usuario_Personal
+        {
+            Username = username,
+            Email = email,
+            Contraseña = BC.HashPassword(dto.Contraseña),
+            EsAdmin = false,
+            FechaCreacion = DateTime.UtcNow
+        };
+        return usuario;
     }
+    private async Task ValidarCredenciales(Usuario usuario, string contrasena, CancellationToken cancellationToken)
+    {
+        var contrasenaValida = false;
+        try
+        {
+            contrasenaValida = BC.Verify(contrasena, usuario.Contraseña);
+        }
+        catch
+        {
+            if (contrasena == usuario.Contraseña)
+            {
+                contrasenaValida = true;
+                usuario.Contraseña = BC.HashPassword(contrasena);
+                await _usuarioRepositorio.ActualizarAsync(usuario, cancellationToken);
+            }
+        }
+
+        if (!contrasenaValida)
+            throw new UnauthorizedAccessException("Email o contraseña incorrectos.");
+    }
+    private async Task<Usuario?> ObtenerUsuarioParaLogin(string email, CancellationToken cancellationToken)
+    {
+        var usuario = await _usuarioRepositorio.ObtenerPorEmailAsync(NormalizarEmail(email), cancellationToken);
+        if (usuario is null)
+            throw new UnauthorizedAccessException("Email o contraseña incorrectos.");
+        return usuario;
+    }
+    private async Task<SesionUsuario> ObtenerSesionParaRenovar(string refreshToken, CancellationToken cancellationToken)
+    {
+        if (!TryObtenerSesionId(refreshToken, out var sesionId))
+            throw new UnauthorizedAccessException("La sesión no es válida.");
+
+        var sesion = await _sesionRepositorio.ObtenerPorIdAsync(sesionId, cancellationToken);
+        if (sesion is null || !sesion.EstaActiva || !HashCoincide(refreshToken, sesion.RefreshTokenHash))
+            throw new UnauthorizedAccessException("La sesión no es válida o expiró.");
+
+        return sesion;
+    }
+    private async Task<(string RefreshToken, DateTime Expiracion)> RotarSesion(
+        SesionUsuario sesion, CancellationToken cancellationToken)
+    {
+        var ahora = DateTime.UtcNow;
+        var nuevoRefreshToken = GenerarRefreshToken(sesion.Id);
+        var nuevaExpiracion = ahora.AddDays(ObtenerRefreshTokenDias());
+        var rotada = await _sesionRepositorio.RotarAsync(
+            sesion,
+            HashearToken(nuevoRefreshToken),
+            nuevaExpiracion,
+            ahora,
+            cancellationToken);
+
+        if (!rotada)
+            throw new UnauthorizedAccessException("La sesión ya fue renovada por otra solicitud.");
+
+        return (nuevoRefreshToken, nuevaExpiracion);
+    }
+    private ResultadoAutenticacionDto CrearResultado(
+        Usuario usuario, Guid sesionId, string refreshToken, DateTime expiracion, List<LogroEstadoDto>? logrosNuevos) =>
+        new()
+        {
+            Respuesta = new AuthRespuestaDto
+            {
+                Token = GenerarJwt(usuario, sesionId),
+                UsuarioId = usuario.Id,
+                Username = usuario.Username,
+                Email = usuario.Email,
+                EsAdmin = usuario.EsAdmin,
+                LogrosNuevos = logrosNuevos ?? new()
+            },
+            RefreshToken = refreshToken,
+            RefreshTokenExpira = expiracion
+        };
+    #endregion
 }

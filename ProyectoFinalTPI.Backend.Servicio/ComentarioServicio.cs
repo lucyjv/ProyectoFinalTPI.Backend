@@ -15,38 +15,20 @@ public class ComentarioServicio(
 {
     private const int LimiteRespuestasIniciales = 3;
 
+    #region Consultas
+
     public async Task<ResultadoPaginadoDto<ComentarioDto>> ObtenerRaices(
         int publicacionId, string? cursor, int limite, int? usuarioId,
         CancellationToken cancellationToken = default)
     {
         await ValidarPublicacion(publicacionId, cancellationToken);
         ValidarLimite(limite, 50);
+
         var comentarios = await _comentarioRepositorio.ObtenerRaices(
             publicacionId, CursorCronologicoCodec.Leer(cursor), limite, cancellationToken);
         var raices = comentarios.Take(limite).ToList();
-        var respuestasPorRaiz = new Dictionary<int, List<Comentario>>();
-        foreach (var raiz in raices)
-        {
-            respuestasPorRaiz[raiz.Id] = await _comentarioRepositorio.ObtenerRespuestas(
-                publicacionId, raiz.Id, null, LimiteRespuestasIniciales, cancellationToken);
-        }
-
-        var ids = raices.Select(comentario => comentario.Id)
-            .Concat(respuestasPorRaiz.Values.SelectMany(respuestas => respuestas.Take(LimiteRespuestasIniciales))
-                .Select(respuesta => respuesta.Id))
-            .ToArray();
-        var cantidades = await _comentarioRepositorio.ContarRespuestasDirectas(ids, cancellationToken);
-        var items = raices.Select(raiz =>
-        {
-            var respuestas = respuestasPorRaiz[raiz.Id];
-            var respuestasVisibles = respuestas.Take(LimiteRespuestasIniciales).ToList();
-            return raiz.ToDto(
-                usuarioId,
-                Cantidad(cantidades, raiz.Id),
-                respuestasVisibles.Select(respuesta =>
-                    respuesta.ToDto(usuarioId, Cantidad(cantidades, respuesta.Id))).ToList(),
-                CrearSiguienteCursor(respuestas, respuestasVisibles));
-        }).ToList();
+        var respuestasPorRaiz = await ObtenerRespuestasIniciales(publicacionId, raices, cancellationToken);
+        var items = await ConstruirRaicesDto(raices, respuestasPorRaiz, usuarioId, cancellationToken);
 
         return Pagina(items, comentarios.Count > limite ? raices.LastOrDefault() : null);
     }
@@ -58,6 +40,7 @@ public class ComentarioServicio(
         await ValidarPublicacion(publicacionId, cancellationToken);
         ValidarId(comentarioId, "comentario");
         ValidarLimite(limite, 20);
+
         _ = await _comentarioRepositorio.Obtener(publicacionId, comentarioId, cancellationToken)
             ?? throw new KeyNotFoundException("El comentario no existe o no está disponible.");
         var respuestas = await _comentarioRepositorio.ObtenerRespuestas(
@@ -69,6 +52,9 @@ public class ComentarioServicio(
             respuesta.ToDto(usuarioId, Cantidad(cantidades, respuesta.Id))).ToList();
         return Pagina(items, respuestas.Count > limite ? visibles.LastOrDefault() : null);
     }
+    #endregion
+
+    #region Crear, eliminar
 
     public async Task<ComentarioDto> Crear(
         Comentario comentario, CancellationToken cancellationToken = default)
@@ -77,58 +63,36 @@ public class ComentarioServicio(
         await ValidarPublicacion(comentario.PublicacionId, cancellationToken);
         ValidarId(comentario.UsuarioId, "usuario");
 
-        var contenido = comentario.Contenido?.Trim() ?? string.Empty;
-        if (contenido.Length == 0) throw new ArgumentException("Debe indicar el contenido del comentario.");
-        if (contenido.Length > 1000) throw new ArgumentException("El comentario no puede superar los 1000 caracteres.");
-        
+        string contenido = ValidarContenido(comentario);
+
         var usuario = await _usuarioRepositorio.ObtenerPorIdAsync(comentario.UsuarioId)
             ?? throw new KeyNotFoundException("El usuario indicado no existe.");
 
-        Comentario? padre = null;
-        if (comentario.ComentarioPadreId.HasValue)
-        {
-            padre = await _comentarioRepositorio.Obtener(
-                comentario.PublicacionId, comentario.ComentarioPadreId.Value, cancellationToken)
-                ?? throw new KeyNotFoundException("El comentario al que querés responder no existe.");
-            if (padre.EstaEliminado)
-                throw new ArgumentException("No se puede responder a un comentario eliminado.");
-        }
+        var padre = await ObtenerPadreValido(comentario, cancellationToken);
 
-        comentario.Contenido = contenido;
-        comentario.FechaCreacion = DateTime.UtcNow;
-        comentario.UsuarioId = usuario.Id;
-        comentario.Usuario = usuario;
-        comentario.ComentarioPadreId = padre?.Id;
+        PrepararComentario(comentario, contenido, usuario, padre);
 
         await _comentarioRepositorio.Crear(comentario, cancellationToken);
-
-        // Notificar al autor de la publicación si el comentador no es el mismo autor.
-        var publicacion = await ObtenerPublicacionParaNotificacion(
-            comentario.PublicacionId, cancellationToken);
-        if (publicacion != null && publicacion.UsuarioId != comentario.UsuarioId)
-        {
-            await _notificacionServicio.NotificarComentarioEnPublicacionAsync(
-                publicacion.UsuarioId,
-                comentario.PublicacionId,
-                comentario.UsuarioId,
-                cancellationToken);
-        }
+        
+        await NotificarComentario(comentario, cancellationToken);
         await VerificarLogrosComentario(comentario.UsuarioId, comentario.PublicacionId, cancellationToken);
 
         return comentario.ToDto(comentario.UsuarioId);
     }
-
     public async Task Eliminar(
         int publicacionId, int comentarioId, int usuarioId, CancellationToken cancellationToken = default)
     {
         ValidarId(usuarioId, "usuario");
-        var comentario = await _comentarioRepositorio.Obtener(publicacionId, comentarioId, cancellationToken)
-            ?? throw new KeyNotFoundException("El comentario no existe o no está disponible.");
+        var comentario = await ObtenerComentarioExistente(publicacionId, comentarioId, cancellationToken);
         if (comentario.UsuarioId != usuarioId)
             throw new UnauthorizedAccessException("No podés eliminar un comentario de otra persona.");
         if (comentario.EstaEliminado) return;
+
         await _comentarioRepositorio.Eliminar(comentario, cancellationToken);
     }
+    #endregion
+
+    #region Interacciones
 
     public async Task<ComentarioDto> EstablecerReaccion(
         int publicacionId, int comentarioId, int usuarioId, string tipo,
@@ -140,7 +104,6 @@ public class ComentarioServicio(
         await _comentarioRepositorio.EstablecerReaccion(comentario.Id, usuarioId, reaccion, cancellationToken);
         return await ObtenerDto(publicacionId, comentarioId, usuarioId, cancellationToken);
     }
-
     public async Task<ComentarioDto> QuitarReaccion(
         int publicacionId, int comentarioId, int usuarioId, CancellationToken cancellationToken = default)
     {
@@ -148,16 +111,9 @@ public class ComentarioServicio(
         await _comentarioRepositorio.QuitarReaccion(comentario.Id, usuarioId, cancellationToken);
         return await ObtenerDto(publicacionId, comentarioId, usuarioId, cancellationToken);
     }
+    #endregion
 
-    private async Task<Comentario> ObtenerParaInteraccion(
-        int publicacionId, int comentarioId, CancellationToken cancellationToken)
-    {
-        var comentario = await _comentarioRepositorio.Obtener(publicacionId, comentarioId, cancellationToken)
-            ?? throw new KeyNotFoundException("El comentario no existe o no está disponible.");
-        if (comentario.EstaEliminado)
-            throw new ArgumentException("No se puede interactuar con un comentario eliminado.");
-        return comentario;
-    }
+    #region Métodos privados y validaciones
 
     private async Task<ComentarioDto> ObtenerDto(
         int publicacionId, int comentarioId, int usuarioId, CancellationToken cancellationToken)
@@ -167,33 +123,27 @@ public class ComentarioServicio(
         var cantidades = await _comentarioRepositorio.ContarRespuestasDirectas([comentarioId], cancellationToken);
         return comentario.ToDto(usuarioId, Cantidad(cantidades, comentarioId));
     }
-
     private async Task ValidarPublicacion(int publicacionId, CancellationToken cancellationToken)
     {
         ValidarId(publicacionId, "publicación");
         if (!await _comentarioRepositorio.ExistePublicacionVisible(publicacionId, cancellationToken))
             throw new KeyNotFoundException("La publicación no existe o no está disponible.");
     }
-
     private static void ValidarId(int id, string recurso)
     {
         if (id <= 0) throw new ArgumentException($"El ID de {recurso} debe ser mayor que cero.");
     }
-
     private static void ValidarLimite(int limite, int maximo)
     {
         if (limite < 1 || limite > maximo)
             throw new ArgumentException($"El límite debe estar entre 1 y {maximo}.");
     }
-
     private static int Cantidad(IReadOnlyDictionary<int, int> cantidades, int comentarioId) =>
         cantidades.GetValueOrDefault(comentarioId);
-
     private static string? CrearSiguienteCursor(List<Comentario> pagina, List<Comentario> visibles) =>
         pagina.Count > visibles.Count && visibles.Count > 0
             ? CursorCronologicoCodec.Crear(visibles[^1].FechaCreacion, visibles[^1].Id)
             : null;
-
     private static ResultadoPaginadoDto<ComentarioDto> Pagina(
         List<ComentarioDto> items, Comentario? ultimoConMasResultados) => new()
         {
@@ -224,7 +174,6 @@ public class ComentarioServicio(
             await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.Conversador);
         }
     }
-
     private async Task<Publicacion?> ObtenerPublicacionParaNotificacion(
     int publicacionId, CancellationToken cancellationToken)
     {
@@ -234,4 +183,96 @@ public class ComentarioServicio(
         return await _comentarioRepositorio.ObtenerPublicacionAsync(
             publicacionId, cancellationToken);
     }
+    private async Task<Dictionary<int, List<Comentario>>> ObtenerRespuestasIniciales(
+        int publicacionId, List<Comentario> raices, CancellationToken cancellationToken)
+    {
+        var respuestasPorRaiz = new Dictionary<int, List<Comentario>>();
+        foreach (var raiz in raices)
+        {
+            respuestasPorRaiz[raiz.Id] = await _comentarioRepositorio.ObtenerRespuestas(
+                publicacionId, raiz.Id, null, LimiteRespuestasIniciales, cancellationToken);
+        }
+
+        return respuestasPorRaiz;
+    }
+    private static ComentarioDto CrearRaizDto(
+        Comentario raiz, List<Comentario> respuestas, IReadOnlyDictionary<int, int> cantidades, int? usuarioId)
+    {
+        var respuestasVisibles = respuestas.Take(LimiteRespuestasIniciales).ToList();
+        return raiz.ToDto(
+            usuarioId,
+            Cantidad(cantidades, raiz.Id),
+            respuestasVisibles.Select(respuesta =>
+                respuesta.ToDto(usuarioId, Cantidad(cantidades, respuesta.Id))).ToList(),
+            CrearSiguienteCursor(respuestas, respuestasVisibles));
+    }
+    private async Task<List<ComentarioDto>> ConstruirRaicesDto(
+        List<Comentario> raices, Dictionary<int, List<Comentario>> respuestasPorRaiz,
+        int? usuarioId, CancellationToken cancellationToken)
+    {
+        var ids = raices.Select(comentario => comentario.Id)
+            .Concat(respuestasPorRaiz.Values.SelectMany(respuestas => respuestas.Take(LimiteRespuestasIniciales))
+                .Select(respuesta => respuesta.Id))
+            .ToArray();
+        var cantidades = await _comentarioRepositorio.ContarRespuestasDirectas(ids, cancellationToken);
+        return raices.Select(raiz => CrearRaizDto(
+            raiz, respuestasPorRaiz[raiz.Id], cantidades, usuarioId)).ToList();
+    }
+    private async Task NotificarComentario(Comentario comentario, CancellationToken cancellationToken)
+    {
+        var publicacion = await ObtenerPublicacionParaNotificacion(
+                    comentario.PublicacionId, cancellationToken);
+        if (publicacion != null && publicacion.UsuarioId != comentario.UsuarioId)
+        {
+            await _notificacionServicio.NotificarComentarioEnPublicacionAsync(
+                publicacion.UsuarioId,
+                comentario.PublicacionId,
+                comentario.UsuarioId,
+                cancellationToken);
+        }
+    }
+    private static void PrepararComentario(Comentario comentario, string contenido, Usuario usuario, Comentario? padre)
+    {
+        comentario.Contenido = contenido;
+        comentario.FechaCreacion = DateTime.UtcNow;
+        comentario.UsuarioId = usuario.Id;
+        comentario.Usuario = usuario;
+        comentario.ComentarioPadreId = padre?.Id;
+    }
+    private async Task<Comentario?> ObtenerPadreValido(Comentario comentario, CancellationToken cancellationToken)
+    {
+        Comentario? padre = null;
+        if (comentario.ComentarioPadreId.HasValue)
+        {
+            padre = await _comentarioRepositorio.Obtener(
+                comentario.PublicacionId, comentario.ComentarioPadreId.Value, cancellationToken)
+                ?? throw new KeyNotFoundException("El comentario al que querés responder no existe.");
+            if (padre.EstaEliminado)
+                throw new ArgumentException("No se puede responder a un comentario eliminado.");
+        }
+
+        return padre;
+    }
+    private static string ValidarContenido(Comentario comentario)
+    {
+        var contenido = comentario.Contenido?.Trim() ?? string.Empty;
+        if (contenido.Length == 0) throw new ArgumentException("Debe indicar el contenido del comentario.");
+        if (contenido.Length > 1000) throw new ArgumentException("El comentario no puede superar los 1000 caracteres.");
+        return contenido;
+    }
+    private async Task<Comentario> ObtenerComentarioExistente(int publicacionId, int comentarioId, CancellationToken cancellationToken)
+    {
+        return await _comentarioRepositorio.Obtener(publicacionId, comentarioId, cancellationToken)
+                    ?? throw new KeyNotFoundException("El comentario no existe o no está disponible.");
+    }
+    private async Task<Comentario> ObtenerParaInteraccion(
+        int publicacionId, int comentarioId, CancellationToken cancellationToken)
+    {
+        var comentario = await _comentarioRepositorio.Obtener(publicacionId, comentarioId, cancellationToken)
+            ?? throw new KeyNotFoundException("El comentario no existe o no está disponible.");
+        if (comentario.EstaEliminado)
+            throw new ArgumentException("No se puede interactuar con un comentario eliminado.");
+        return comentario;
+    }
+    #endregion
 }

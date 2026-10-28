@@ -28,6 +28,10 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Servicio
             CancellationToken cancellationToken = default);
         Task<ResultadoPaginadoDto<PublicacionDetalleDto>>ObtenerPublicacionesParaVos(int usuarioId, string? cursor, int limite,
             CancellationToken cancellationToken = default);
+        Task<ResultadoPaginadoDto<PublicacionDetalleDto>> ObtenerPublicacionesPorHashtag(string hashtag, string? cursor, int limite,
+            int? usuarioId, CancellationToken cancellationToken = default);
+        Task<List<TendenciaHashtagDto>> ObtenerTendenciasHashtags(int limite, CancellationToken cancellationToken = default);
+        Task<List<TendenciaHashtagDto>> BuscarHashtags(string consulta, int limite, CancellationToken cancellationToken = default);
         Task RegistrarImpresionesFeed(int usuarioId, IReadOnlyCollection<int> publicacionesIds,
             CancellationToken cancellationToken = default);
         Task Eliminar(int id, int? autorId = null, CancellationToken cancellationToken = default);

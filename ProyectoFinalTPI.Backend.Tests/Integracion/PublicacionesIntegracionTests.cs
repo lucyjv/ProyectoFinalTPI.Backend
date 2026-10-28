@@ -54,6 +54,85 @@ public class PublicacionesIntegracionTests : IClassFixture<PostgisFixture>
     };
 
     [Fact]
+    public async Task HashtagAgrupaPublicacionesVisiblesConCoincidenciaExactaYPaginacion()
+    {
+        await using var factory = new PublicacionesApiFactory(_postgres);
+        using var client = factory.CreateClient();
+        using var scope = factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await SembrarPublicacionesConHashtags(context);
+
+        var primera = await client.GetFromJsonAsync<ResultadoPaginadoDto<PublicacionDetalleDto>>(
+            "/api/publicaciones/hashtags/amanecer/publicaciones?limite=1");
+        Assert.NotNull(primera);
+        Assert.Equal(1, Assert.Single(primera.Items).Id);
+        Assert.True(primera.HayMas);
+
+        var segunda = await client.GetFromJsonAsync<ResultadoPaginadoDto<PublicacionDetalleDto>>(
+            "/api/publicaciones/hashtags/amanecer/publicaciones?limite=1&cursor=" +
+            Uri.EscapeDataString(primera.SiguienteCursor!));
+        Assert.NotNull(segunda);
+        Assert.Equal(2, Assert.Single(segunda.Items).Id);
+        Assert.True(segunda.HayMas);
+
+        var tercera = await client.GetFromJsonAsync<ResultadoPaginadoDto<PublicacionDetalleDto>>(
+            "/api/publicaciones/hashtags/amanecer/publicaciones?limite=1&cursor=" +
+            Uri.EscapeDataString(segunda.SiguienteCursor!));
+        Assert.NotNull(tercera);
+        Assert.Equal(6, Assert.Single(tercera.Items).Id);
+        Assert.False(tercera.HayMas);
+    }
+
+    [Fact]
+    public async Task TendenciasCuentanLaSemanaYBusquedaEncuentraHashtagsHistoricos()
+    {
+        await using var factory = new PublicacionesApiFactory(_postgres);
+        using var client = factory.CreateClient();
+        using var scope = factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await SembrarPublicacionesConHashtags(context);
+
+        var tendencias = await client.GetFromJsonAsync<List<TendenciaHashtagDto>>(
+            "/api/publicaciones/hashtags/tendencias");
+        Assert.NotNull(tendencias);
+        var amanecer = Assert.Single(tendencias.Where(t => t.Hashtag == "amanecer"));
+        Assert.Equal(2, amanecer.CantidadPublicaciones);
+        Assert.Equal(1, amanecer.CantidadAutores);
+
+        var buscados = await client.GetFromJsonAsync<List<TendenciaHashtagDto>>(
+            "/api/publicaciones/hashtags/buscar?q=aman");
+        Assert.NotNull(buscados);
+        Assert.Equal("amanecer", buscados[0].Hashtag);
+        Assert.Equal(3, buscados[0].CantidadPublicaciones);
+        Assert.Contains(buscados, t => t.Hashtag == "amaneceres" && t.CantidadPublicaciones == 1);
+    }
+
+    private async Task SembrarPublicacionesConHashtags(ApplicationDbContext context)
+    {
+        var ahora = DateTime.UtcNow;
+        var descripciones = new[]
+        {
+            "Un día de #amanecer #amanecer en la plaza",
+            "El #Amanecer que recordamos",
+            "Otro recuerdo de #amaneceres",
+            "Texto pegadofoo#amanecer no es una etiqueta",
+            "Recuerdo oculto #amanecer",
+            "Viejo recuerdo #amanecer"
+        };
+        for (var id = 1; id <= descripciones.Length; id++)
+        {
+            context.Publicaciones.Add(new Publicacion
+            {
+                Id = id, Titulo = $"Recuerdo {id}", Descripcion = descripciones[id - 1],
+                Fecha = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                FechaCreación = ahora.AddDays(id == 6 ? -10 : -id),
+                EstaOculto = id == 5, Usuario = usuario, Lugar = lugar
+            });
+        }
+        await context.SaveChangesAsync();
+    }
+
+    [Fact]
     public async Task QueSeCreeUnComentarioYSePuedaConsultarPorGet()
     {
         //Arrange
