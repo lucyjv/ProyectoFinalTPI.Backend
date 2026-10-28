@@ -199,7 +199,7 @@ public class GruposController(IGrupoServicio grupoServicio) : ControllerBase
     [HttpPost("{grupoId:int}/recuerdos")]
     [SwaggerOperation(
         Summary = "Publica un recuerdo dentro de un grupo.",
-        Description = "Requiere autenticacion y pertenecer al grupo. Crea una publicacion asociada al grupo usando multipart/form-data y permite enviar un archivo o una URL HTTPS. El recuerdo tambien aparece en los feeds normales.")]
+        Description = "Requiere autenticacion y pertenecer al grupo. Crea una publicacion asociada al grupo usando multipart/form-data y permite enviar un archivo o una URL HTTPS. La multimedia es opcional salvo que Publicaciones:RequerirMultimedia este activo. El recuerdo tambien aparece en los feeds normales.")]
     [SwaggerResponse(StatusCodes.Status201Created, "Recuerdo creado. Devuelve su id y la ubicacion en Location.")]
     [SwaggerResponse(StatusCodes.Status400BadRequest, "El identificador o los datos del recuerdo no son validos.", typeof(ProblemDetails))]
     [SwaggerResponse(StatusCodes.Status401Unauthorized, "Se requiere una autenticacion valida.")]

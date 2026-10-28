@@ -20,6 +20,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
         private readonly FeedRecomendacionesOptions _opcionesFeed;
         private readonly INotificacionServicio _notificacionServicio;
         private readonly ILogroServicio _logroServicio;
+        private readonly OpcionesPublicacion _opcionesPublicacion;
 
         public PublicacionServicio(
             IPublicacionRepositorio publicacionRepositorio,
@@ -29,7 +30,8 @@ namespace ProyectoFinalTPI.Backend.Servicio
             ISeguimientoServicio seguimientoServicio,
             IOptions<FeedRecomendacionesOptions> opcionesFeed,
             INotificacionServicio notificacionServicio,
-            ILogroServicio logroServicio)
+            ILogroServicio logroServicio,
+            IOptions<OpcionesPublicacion>? opcionesPublicacion = null)
         {
             _publicacionRepositorio = publicacionRepositorio;
             _usuarioRepositorio = usuarioRepositorio;
@@ -39,6 +41,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
             _opcionesFeed = opcionesFeed.Value;
             _notificacionServicio = notificacionServicio;
             _logroServicio = logroServicio;
+            _opcionesPublicacion = opcionesPublicacion?.Value ?? new OpcionesPublicacion();
         }
 
         #region Interacciones (Likes y Puntuaciones)
@@ -642,6 +645,14 @@ namespace ProyectoFinalTPI.Backend.Servicio
         Stream? archivo,
         string? nombreArchivo)
             {
+                if (archivo == null && string.IsNullOrWhiteSpace(publicacion.UrlMultimedia))
+                {
+                    if (_opcionesPublicacion.RequerirMultimedia)
+                        throw new ArgumentException("Debe subir un archivo o indicar una URL.");
+                    // No invocar al proveedor ni inventar una imagen para recuerdos de texto.
+                    return string.Empty;
+                }
+
                 string? urlExistente = string.IsNullOrEmpty(publicacion.UrlMultimedia)
                     ? null
                     : publicacion.UrlMultimedia;

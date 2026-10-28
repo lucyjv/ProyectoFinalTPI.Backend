@@ -99,6 +99,28 @@ public class LogrosReglasIntegracionTests(PostgisFixture postgres, Neo4jLogrosFi
     }
 
     [Fact]
+    public async Task RecuerdosSinAdjuntoPersistenYSumanPublicaciones_PeroNoFotos()
+    {
+        await using var factory = new PublicacionesApiFactory(postgres);
+        using var client = factory.CreateClient();
+        var usuario = await CrearUsuario(client, "sin_adjuntos");
+        var id = 0;
+        for (var i = 0; i < 10; i++) id = await CrearRecuerdo(client, multimedia: false);
+        var detalle = (await client.GetFromJsonAsync<PublicacionDetalleDto>($"/api/publicaciones/{id}"))!;
+        Assert.Equal(string.Empty, detalle.UrlMultimedia);
+        Assert.Equal(0, factory.Media.Calls);
+        Assert.True((await Perfil(client, usuario.UsuarioId)).Logros.Single(logro => logro.Id == (int)LogroEnum.PrimerPaso).Desbloqueado);
+        Assert.False((await Perfil(client, usuario.UsuarioId)).Logros.Single(logro => logro.Id == (int)LogroEnum.FotografoDelRecuerdo).Desbloqueado);
+
+        // Diez recuerdos de texto no pueden convertir la primera foto en la décima.
+        await CrearRecuerdo(client);
+        Assert.Equal(1, factory.Media.Calls);
+        Assert.False((await Perfil(client, usuario.UsuarioId)).Logros.Single(logro => logro.Id == (int)LogroEnum.FotografoDelRecuerdo).Desbloqueado);
+        for (var i = 0; i < 9; i++) await CrearRecuerdo(client);
+        Assert.True((await Perfil(client, usuario.UsuarioId)).Logros.Single(logro => logro.Id == (int)LogroEnum.FotografoDelRecuerdo).Desbloqueado);
+    }
+
+    [Fact]
     public async Task LinceSeEntregaEnLaPublicacionQuinceYNoEnLaCatorce()
     {
         await using var factory = new PublicacionesApiFactory(postgres);
@@ -279,19 +301,20 @@ public class LogrosReglasIntegracionTests(PostgisFixture postgres, Neo4jLogrosFi
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         return (await response.Content.ReadFromJsonAsync<PuntuacionPublicacionDto>())!;
     }
-    private static MultipartFormDataContent Formulario(double latitud = -34.6)
+    private static MultipartFormDataContent Formulario(double latitud = -34.6, bool multimedia = true)
     {
         var form = new MultipartFormDataContent();
         foreach (var (key, value) in new Dictionary<string, string> {
             ["Titulo"] = "Recuerdo", ["Descripcion"] = "Una historia", ["Fecha"] = "1995-01-01T00:00:00Z",
             ["Categoria"] = "Lugares", ["NombreLugar"] = "Buenos Aires", ["Latitud"] = latitud.ToString(CultureInfo.InvariantCulture),
             ["Longitud"] = "-58.4", ["TipoMultimedia"] = "Foto", ["UrlArchivo"] = "https://media.example/test", ["AutorId"] = "1"
-        }) form.Add(new StringContent(value), key);
+        })
+            if (multimedia || key != "UrlArchivo") form.Add(new StringContent(value), key);
         return form;
     }
-    private static async Task<int> CrearRecuerdo(HttpClient client, bool gps = false, double latitud = -34.6)
+    private static async Task<int> CrearRecuerdo(HttpClient client, bool gps = false, double latitud = -34.6, bool multimedia = true)
     {
-        using var form = Formulario(latitud);
+        using var form = Formulario(latitud, multimedia);
         if (gps) { form.Add(new StringContent("-34.6"), "GpsLatitud"); form.Add(new StringContent("-58.4"), "GpsLongitud"); }
         var response = await client.PostAsync("/api/publicaciones", form);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);

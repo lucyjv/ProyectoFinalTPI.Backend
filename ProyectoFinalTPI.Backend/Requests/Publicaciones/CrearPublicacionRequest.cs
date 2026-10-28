@@ -1,4 +1,6 @@
-﻿
+using Microsoft.Extensions.Options;
+using ProyectoFinalTPI.Backend.Servicio;
+
 using global::ProyectoFinalTPI.Backend.Entidades;
 using System.ComponentModel.DataAnnotations;
 
@@ -57,7 +59,10 @@ namespace ProyectoFinalTPI.Backend.Requests.Publicaciones
             if (Archivo != null && Archivo.Length == 0)
                 yield return new ValidationResult("El archivo no puede estar vacío.", new[] { nameof(Archivo) });
 
-            if (Archivo == null && string.IsNullOrWhiteSpace(UrlArchivo))
+            var requerirMultimedia = validationContext.GetService(typeof(IOptions<OpcionesPublicacion>))
+                is IOptions<OpcionesPublicacion> opciones && opciones.Value.RequerirMultimedia;
+
+            if (requerirMultimedia && Archivo == null && string.IsNullOrWhiteSpace(UrlArchivo))
             {
                 yield return new ValidationResult(
                     "Debe subir un archivo o indicar una URL.",

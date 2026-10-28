@@ -86,7 +86,7 @@ namespace ProyectoFinalTPI.Backend.Tests
             _usuarios.Existe = true;
             var error = new InvalidOperationException("Error al subir la imagen");
             _multimedia.Error = error;
-            var publicacion = new Publicacion { UsuarioId = 10 };
+            var publicacion = new Publicacion { UsuarioId = 10, UrlMultimedia = "https://example.com/foto.jpg" };
 
             //Act
             var result = await Assert.ThrowsAsync<InvalidOperationException>(() => _servicio.Crear(publicacion));
