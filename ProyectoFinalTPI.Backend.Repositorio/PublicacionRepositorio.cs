@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Text.RegularExpressions;
 using Neo4j.Driver;
 using ProyectoFinalTPI.Backend.Dtos;
 using ProyectoFinalTPI.Backend.Dtos.Grupo;
@@ -1102,6 +1103,42 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                     } : null
                 })
                 .ToListAsync(cancellationToken);
+        }
+
+        public Task<List<int>> ObtenerIdsPorHashtag(string hashtag, CursorCronologicoDto? cursor, int limite,
+            CancellationToken cancellationToken = default)
+        {
+            // El servicio valida el hashtag; solo quedan letras, números y guion bajo.
+            var patron = $@"(^|[[:space:](¿¡.,;:!?])#{hashtag}($|[^[:alnum:]_])";
+            var consulta = _context.Publicaciones.AsNoTracking()
+                .Where(p => !p.EstaOculto && Regex.IsMatch(p.Descripcion, patron, RegexOptions.IgnoreCase));
+
+            if (cursor != null)
+                consulta = consulta.Where(p => p.FechaCreación < cursor.FechaCreacion ||
+                    (p.FechaCreación == cursor.FechaCreacion && p.Id < cursor.Id));
+
+            return consulta.OrderByDescending(p => p.FechaCreación)
+                .ThenByDescending(p => p.Id)
+                .Select(p => p.Id)
+                .Take(limite + 1)
+                .ToListAsync(cancellationToken);
+        }
+
+        public async Task<List<(string Descripcion, int UsuarioId)>> ObtenerDescripcionesParaHashtags(
+            DateTime? desde, CancellationToken cancellationToken = default)
+        {
+            var consulta = _context.Publicaciones.AsNoTracking()
+                .Where(p => !p.EstaOculto);
+
+            if (desde.HasValue)
+            {
+                var hasta = DateTime.UtcNow;
+                consulta = consulta.Where(p => p.FechaCreación >= desde.Value && p.FechaCreación <= hasta);
+            }
+
+            var publicaciones = await consulta.Select(p => new { p.Descripcion, p.UsuarioId })
+                .ToListAsync(cancellationToken);
+            return publicaciones.Select(p => (p.Descripcion, p.UsuarioId)).ToList();
         }
 
         public async Task<List<PublicacionDetalleDto>> ObtenerPorUsuarioId(int usuarioId, CancellationToken cancellationToken = default)
