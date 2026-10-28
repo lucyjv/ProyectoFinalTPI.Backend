@@ -20,6 +20,8 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Repositorio
         Task<List<PublicacionDetalleDto>> ObtenerPublicacionesParaVos(IReadOnlyCollection<CategoriaEnum> categorias, DateTime fechaCorte, CursorCronologicoDto? cursor,
         int limite, CancellationToken cancellationToken = default);
         Task<List<PublicacionDetalleDto>> ObtenerPublicacionesPorIds(IReadOnlyCollection<int> publicacionesIds, CancellationToken cancellationToken = default);
+        Task<List<int>> ObtenerIdsPorHashtag(string hashtag, CursorCronologicoDto? cursor, int limite, CancellationToken cancellationToken = default);
+        Task<List<(string Descripcion, int UsuarioId)>> ObtenerDescripcionesParaHashtags(DateTime? desde, CancellationToken cancellationToken = default);
         Task<List<PublicacionDetalleDto>> ObtenerPorUsuarioId(int usuarioId, CancellationToken cancellationToken = default);
         Task CrearLike(int publicacionId, int usuarioId, CancellationToken cancellationToken = default);
         Task QuitarLike(int publicacionId, int usuarioId, CancellationToken cancellationToken = default);
@@ -45,7 +47,6 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Repositorio
         Task<int> ContarPosteosCercanosAlUsuario(int usuarioId, NetTopologySuite.Geometries.Point gpsUsuario, CancellationToken cancellationToken = default);
         Task<int> ContarPosteosDeDiferentesEpocasDelUsuario(int usuarioId, CancellationToken cancellationToken = default);
         Task<bool> Eliminar(int id, int? autorId = null, CancellationToken cancellationToken = default);
-        Task<bool> EliminarRepost(int originalId, int? autorId = null, CancellationToken cancellationToken = default);
         Task CrearRepost(int publicacionId, int usuarioId, CancellationToken cancellationToken = default);
         Task<bool> QuitarRepost(int publicacionId, int usuarioId, CancellationToken cancellationToken = default);
         Task<RepostPublicacionDto> ObtenerEstadoRepost(int publicacionId, int usuarioId, CancellationToken cancellationToken = default);

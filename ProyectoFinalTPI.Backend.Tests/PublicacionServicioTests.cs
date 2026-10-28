@@ -118,69 +118,6 @@ namespace ProyectoFinalTPI.Backend.Tests
         }
 
         [Fact]
-        public async Task QueSePuedaCompartirUnaPublicacionConservandoLaReferenciaOriginal()
-        {
-            //Arrange
-            _usuarios.Existe = true;
-            _repositorio.IdCreado = 30;
-            _repositorio.Original = new Publicacion
-            {
-                Id = 5, Titulo = "Recuerdo original", LugarId = 7,
-                UsuarioId = 20, UrlMultimedia = "https://example.com/foto.jpg"
-            };
-            var publicacion = new Publicacion
-            {
-                UsuarioId = 10, PublicacionOriginalId = 5, Descripcion = "Mi recuerdo compartido"
-            };
-
-            //Act
-            var result = await _servicio.Compartir(publicacion);
-
-            //Assert
-            Assert.Equal(30, result);
-            Assert.NotNull(_repositorio.Creada);
-            Assert.Equal(5, _repositorio.Creada.PublicacionOriginalId);
-            Assert.Equal("Recuerdo original", _repositorio.Creada.Titulo);
-            Assert.Equal(7, _repositorio.Creada.LugarId);
-            Assert.Equal(10, _repositorio.Creada.UsuarioId);
-            Assert.Equal(publicacion.Descripcion, _repositorio.Creada.Descripcion);
-            Assert.Equal(5, _repositorio.IdOriginalConsultado);
-            Assert.Equal(0, _multimedia.Llamadas);
-        }
-
-        [Fact]
-        public async Task QueNoSeCompartaUnaPublicacionSiElAutorNoExiste()
-        {
-            //Arrange
-            _usuarios.Existe = false;
-            var publicacion = new Publicacion { UsuarioId = 99, PublicacionOriginalId = 5 };
-
-            //Act
-            await Assert.ThrowsAsync<KeyNotFoundException>(() => _servicio.Compartir(publicacion));
-
-            //Assert
-            Assert.Null(_repositorio.IdOriginalConsultado);
-            Assert.Null(_repositorio.Creada);
-        }
-
-        [Fact]
-        public async Task QueNoSeCompartaUnaPublicacionSiLaOriginalNoEstaDisponible()
-        {
-            //Arrange
-            _usuarios.Existe = true;
-            _repositorio.Original = null;
-            var publicacion = new Publicacion { UsuarioId = 10, PublicacionOriginalId = 99 };
-
-            //Act
-            await Assert.ThrowsAsync<KeyNotFoundException>(() => _servicio.Compartir(publicacion));
-
-            //Assert
-            Assert.Equal(99, _repositorio.IdOriginalConsultado);
-            Assert.Null(_repositorio.Creada);
-            Assert.Equal(0, _multimedia.Llamadas);
-        }
-
-        [Fact]
         public async Task QueSeElimineUnaPublicacionCorrectamente()
         {
             _repositorio.EliminarResultado = true;
@@ -200,28 +137,6 @@ namespace ProyectoFinalTPI.Backend.Tests
         {
             _repositorio.EliminarResultado = false;
             await Assert.ThrowsAsync<KeyNotFoundException>(() => _servicio.Eliminar(99));
-        }
-
-        [Fact]
-        public async Task QueSeElimineUnRepostCorrectamente()
-        {
-            _repositorio.EliminarResultado = true;
-            await _servicio.EliminarRepost(5, 10);
-            Assert.Equal(5, _repositorio.IdEliminado);
-            Assert.Equal(10, _repositorio.AutorEliminado);
-        }
-
-        [Fact]
-        public async Task QueFalleAlEliminarRepostSiElIdEsInvalido()
-        {
-            await Assert.ThrowsAsync<ArgumentException>(() => _servicio.EliminarRepost(0));
-        }
-
-        [Fact]
-        public async Task QueFalleAlEliminarRepostSiNoExiste()
-        {
-            _repositorio.EliminarResultado = false;
-            await Assert.ThrowsAsync<KeyNotFoundException>(() => _servicio.EliminarRepost(99));
         }
 
         [Fact]
@@ -1039,6 +954,10 @@ namespace ProyectoFinalTPI.Backend.Tests
         // Estos dobles reemplazan las dependencias externas del servicio.
         private class PublicacionRepositorioFake : IPublicacionRepositorio
         {
+            public Task<List<int>> ObtenerIdsPorHashtag(string hashtag, CursorCronologicoDto? cursor, int limite,
+                CancellationToken cancellationToken = default) => Task.FromResult(new List<int>());
+            public Task<List<(string Descripcion, int UsuarioId)>> ObtenerDescripcionesParaHashtags(DateTime? desde,
+                CancellationToken cancellationToken = default) => Task.FromResult(new List<(string Descripcion, int UsuarioId)>());
             public Task<int> ContarPosteosDeDiferentesEpocasDelUsuario(int usuarioId, CancellationToken cancellationToken = default) => Task.FromResult(0);
             public Task<int> ContarPosteosConImagenDelUsuario(int usuarioId, CancellationToken cancellationToken = default) => Task.FromResult(0);
             public Task<int> ContarRepostsDeOtrosUsuarios(int usuarioId, CancellationToken cancellationToken = default) => Task.FromResult(0);
@@ -1246,12 +1165,6 @@ namespace ProyectoFinalTPI.Backend.Tests
             public Task<bool> Eliminar(int id, int? autorId = null, CancellationToken cancellationToken = default)
             {
                 IdEliminado = id;
-                AutorEliminado = autorId;
-                return Task.FromResult(EliminarResultado);
-            }
-            public Task<bool> EliminarRepost(int originalId, int? autorId = null, CancellationToken cancellationToken = default)
-            {
-                IdEliminado = originalId;
                 AutorEliminado = autorId;
                 return Task.FromResult(EliminarResultado);
             }

@@ -340,8 +340,9 @@ reemplazarla por un `ProblemDetails`.
 | Método | Ruta | Descripción |
 |---|---|---|
 | `POST` | `/api/publicaciones` | Crea una publicación con sus datos, ubicación y multimedia. Recibe `multipart/form-data`, con un archivo o una URL HTTPS. |
-| `POST` | `/api/publicaciones/compartir` | Comparte una publicación existente. Recibe `publicacionOriginalId`, `descripcion` (opcional) y `autorId`. Si `descripcion` está vacía o es null, genera un repost simple (desenrollando a la publicación raíz original); si contiene texto, genera un repost con cita (*quote tweet*) directo a dicha publicación. |
-| `DELETE` | `/api/publicaciones/compartir/{originalId}` | Deshace/elimina el repost simple que el usuario autenticado (o especificado por query `autorId`) realizó sobre la publicación original. No elimina quote tweets ni la publicación original. |
+| `POST` | `/api/publicaciones/{id}/repost` | Repostea una publicación simple en Neo4j vinculada al usuario autenticado. |
+| `DELETE` | `/api/publicaciones/{id}/repost` | Deshace/elimina el repost simple que el usuario realizó sobre la publicación. |
+| `POST` | `/api/publicaciones/{id}/citar` | Cita una publicación existente creando una nueva publicación en PostgreSQL con comentario propio. |
 | `DELETE` | `/api/publicaciones/{id}` | Elimina una publicación propia por su `id`. Si la solicitud incluye autenticación JWT, valida que el usuario sea el autor de la misma. |
 | `POST` | `/api/publicaciones/{id}/etiquetas` | Etiqueta uno o más usuarios en una publicación existente. Recibe `usuariosIds` en JSON; repetir una etiqueta existente no la duplica. |
 | `POST` | `/api/publicaciones/{publicacionId}/like` | Da like a la publicación indicada al usuario autenticado. No recibe body; el usuario se obtiene del JWT. |

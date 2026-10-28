@@ -106,70 +106,6 @@ namespace ProyectoFinalTPI.Backend.Tests
             Assert.Equal("El usuario indicado no existe.", problema.Detail);
         }
 
-        [Fact]
-        public async Task QueSeDevuelvaCreatedAlCompartirUnaPublicacion()
-        {
-            //Arrange
-            _servicio.IdCreado = 30;
-
-            //Act
-            var result = await _controller.Compartir(new CompartirPublicacionRequest());
-
-            //Assert
-            var respuesta = Assert.IsType<CreatedResult>(result);
-            Assert.Equal(201, respuesta.StatusCode);
-            Assert.Equal("/api/publicaciones/30", respuesta.Location);
-            Assert.Equal(30, JsonSerializer.SerializeToElement(respuesta.Value).GetProperty("id").GetInt32());
-        }
-
-        [Fact]
-        public async Task QueSeEnvienAlServicioLosDatosParaCompartir()
-        {
-            //Arrange
-            var request = new CompartirPublicacionRequest
-            {
-                PublicacionOriginalId = 5, AutorId = 10, Descripcion = "Compartido"
-            };
-
-            //Act
-            await _controller.Compartir(request);
-
-            //Assert
-            Assert.NotNull(_servicio.PublicacionCompartida);
-            Assert.Equal(5, _servicio.PublicacionCompartida.PublicacionOriginalId);
-            Assert.Equal(10, _servicio.PublicacionCompartida.UsuarioId);
-            Assert.Equal("Compartido", _servicio.PublicacionCompartida.Descripcion);
-        }
-
-        [Fact]
-        public async Task QueSeEnvieUnaDescripcionVaciaAlCompartirSiEsNula()
-        {
-            //Arrange
-            var request = new CompartirPublicacionRequest { Descripcion = null! };
-
-            //Act
-            await _controller.Compartir(request);
-
-            //Assert
-            Assert.Equal(string.Empty, _servicio.PublicacionCompartida!.Descripcion);
-        }
-
-        [Fact]
-        public async Task QueSeDevuelvaNotFoundSiNoSePuedeCompartirLaPublicacion()
-        {
-            //Arrange
-            _servicio.Error = new KeyNotFoundException("La publicación no está disponible.");
-
-            //Act
-            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () => await _controller.Compartir(new CompartirPublicacionRequest()));
-
-            //Assert
-            var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
-            var problema = Assert.IsType<ProblemDetails>(respuesta.Value);
-            Assert.Equal(404, respuesta.StatusCode);
-            Assert.Equal(404, problema.Status);
-            Assert.Equal("La publicación no está disponible.", problema.Detail);
-        }
 
         [Fact]
         public async Task QueSeDevuelvaOkAlEliminarPublicacion()
@@ -190,24 +126,6 @@ namespace ProyectoFinalTPI.Backend.Tests
             Assert.Equal(404, respuesta.StatusCode);
         }
 
-        [Fact]
-        public async Task QueSeDevuelvaOkAlEliminarRepost()
-        {
-            var result = await _controller.EliminarRepost(5, 10);
-            var ok = Assert.IsType<OkObjectResult>(result);
-            Assert.Equal(200, ok.StatusCode);
-            Assert.Equal(5, _servicio.IdEliminado);
-            Assert.Equal(10, _servicio.AutorEliminado);
-        }
-
-        [Fact]
-        public async Task QueSeDevuelvaNotFoundAlEliminarRepostInexistente()
-        {
-            _servicio.Error = new KeyNotFoundException("No existe");
-            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () => await _controller.EliminarRepost(99));
-            var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
-            Assert.Equal(404, respuesta.StatusCode);
-        }
 
         [Fact]
         public async Task QueSeDevuelvaOkConLosPinesDelMapa()
@@ -474,7 +392,6 @@ namespace ProyectoFinalTPI.Backend.Tests
 
         [Theory]
         [InlineData("crear")]
-        [InlineData("compartir")]
         [InlineData("mapa")]
         [InlineData("resumen")]
         [InlineData("detalle")]
@@ -487,7 +404,6 @@ namespace ProyectoFinalTPI.Backend.Tests
             var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () => operacion switch
             {
                 "crear" => await _controller.Crear(new CrearPublicacionRequest()),
-                "compartir" => await _controller.Compartir(new CompartirPublicacionRequest()),
                 "mapa" => (await _controller.ObtenerMapa(new PublicacionFiltroDto(), default)).Result,
                 "resumen" => (await _controller.ObtenerResumen(5, default)).Result,
                 "detalle" => (await _controller.ObtenerDetalle(5, default)).Result,
@@ -503,18 +419,15 @@ namespace ProyectoFinalTPI.Backend.Tests
             Assert.DoesNotContain("credenciales internas", JsonSerializer.Serialize(problema));
         }
 
-        [Theory]
-        [InlineData(false)]
-        [InlineData(true)]
-        public async Task QueSeDevuelvaBadRequestSiElServicioRechazaLaCreacionOElCompartido(bool compartir)
+        [Fact]
+        public async Task QueSeDevuelvaBadRequestSiElServicioRechazaLaCreacion()
         {
             //Arrange
             _servicio.Error = new ArgumentException("Datos inválidos");
 
             //Act
-            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () => compartir
-                ? await _controller.Compartir(new CompartirPublicacionRequest())
-                : await _controller.Crear(new CrearPublicacionRequest()));
+            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () =>
+                await _controller.Crear(new CrearPublicacionRequest()));
 
             //Assert
             var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
@@ -581,7 +494,6 @@ namespace ProyectoFinalTPI.Backend.Tests
 
         [Theory]
         [InlineData("crear")]
-        [InlineData("compartir")]
         [InlineData("mapa")]
         [InlineData("resumen")]
         [InlineData("detalle")]
@@ -600,9 +512,6 @@ namespace ProyectoFinalTPI.Backend.Tests
                 {
                     case "crear":
                         await _controller.Crear(new CrearPublicacionRequest());
-                        break;
-                    case "compartir":
-                        await _controller.Compartir(new CompartirPublicacionRequest(), cancelacion.Token);
                         break;
                     case "mapa":
                         await _controller.ObtenerMapa(new PublicacionFiltroDto(), cancelacion.Token);
@@ -643,7 +552,6 @@ namespace ProyectoFinalTPI.Backend.Tests
             public Exception? Error { get; set; }
             public int IdCreado { get; set; } = 1;
             public Publicacion? PublicacionCreada { get; private set; }
-            public Publicacion? PublicacionCompartida { get; private set; }
             public string? NombreArchivoRecibido { get; private set; }
             public byte[]? ArchivoRecibido { get; private set; }
             public ResultadoMapaDto Mapa { get; set; } = new();
@@ -667,12 +575,6 @@ namespace ProyectoFinalTPI.Backend.Tests
                     ArchivoRecibido = copia.ToArray();
                 }
                 return IdCreado;
-            }
-
-            public Task<int> Compartir(Publicacion publicacion, CancellationToken cancellationToken = default)
-            {
-                PublicacionCompartida = publicacion;
-                return Error == null ? Task.FromResult(IdCreado) : Task.FromException<int>(Error);
             }
 
             public Task<ResultadoMapaDto> ObtenerPines(PublicacionFiltroDto filtro, CancellationToken cancellationToken = default)
@@ -731,6 +633,12 @@ namespace ProyectoFinalTPI.Backend.Tests
             public List<Publicacion> ObtenerPublicacionPorCategoria(CategoriaEnum categoria) => throw new NotImplementedException();
             public Task<ResultadoPaginadoDto<PublicacionDetalleDto>> ObtenerFeedSeguidos(int usuarioId, string? cursor, int limite, CancellationToken cancellationToken = default) => throw new NotImplementedException();
             public Task<ResultadoPaginadoDto<PublicacionDetalleDto>> ObtenerPublicacionesParaVos(int usuarioId, string? cursor, int limite, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+            public Task<ResultadoPaginadoDto<PublicacionDetalleDto>> ObtenerPublicacionesPorHashtag(string hashtag, string? cursor, int limite,
+                int? usuarioId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+            public Task<List<TendenciaHashtagDto>> ObtenerTendenciasHashtags(int limite, CancellationToken cancellationToken = default)
+                => throw new NotImplementedException();
+            public Task<List<TendenciaHashtagDto>> BuscarHashtags(string consulta, int limite, CancellationToken cancellationToken = default)
+                => throw new NotImplementedException();
             public Task RegistrarImpresionesFeed(int usuarioId, IReadOnlyCollection<int> publicacionesIds,
                 CancellationToken cancellationToken = default) => Task.CompletedTask;
 
@@ -740,13 +648,6 @@ namespace ProyectoFinalTPI.Backend.Tests
             public Task Eliminar(int id, int? autorId = null, CancellationToken cancellationToken = default)
             {
                 IdEliminado = id;
-                AutorEliminado = autorId;
-                return Error == null ? Task.CompletedTask : Task.FromException(Error);
-            }
-
-            public Task EliminarRepost(int originalId, int? autorId = null, CancellationToken cancellationToken = default)
-            {
-                IdEliminado = originalId;
                 AutorEliminado = autorId;
                 return Error == null ? Task.CompletedTask : Task.FromException(Error);
             }

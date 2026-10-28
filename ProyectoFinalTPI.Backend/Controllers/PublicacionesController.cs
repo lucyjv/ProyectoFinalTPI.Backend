@@ -8,6 +8,7 @@ using ProyectoFinalTPI.Backend.Requests.Publicaciones;
 using ProyectoFinalTPI.Backend.Mappings;
 using ProyectoFinalTPI.Backend.Extensions;
 using ProyectoFinalTPI.Backend.Entidades;
+using ProyectoFinalTPI.Backend.Dtos;
 
 namespace ProyectoFinalTPI.Backend.Controllers
 {
@@ -96,6 +97,54 @@ namespace ProyectoFinalTPI.Backend.Controllers
             return Ok(publicaciones);
         }
 
+        [HttpGet("hashtags/{hashtag}/publicaciones")]
+        [SwaggerOperation(Summary = "Obtiene todas las publicaciones visibles de un hashtag.",
+            Description = "Busca el hashtag en las descripciones, sin crear grupos ni almacenar etiquetas por separado. Orden cronológico y paginación por cursor.")]
+        [SwaggerResponse(StatusCodes.Status200OK, "Página de publicaciones.", typeof(ResultadoPaginadoDto<PublicacionDetalleDto>))]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "El hashtag, cursor o límite no es válido.")]
+        public async Task<ActionResult<ResultadoPaginadoDto<PublicacionDetalleDto>>> ObtenerPorHashtag(
+            string hashtag, [FromQuery] string? cursor = null, [FromQuery] int limite = 20,
+            CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                return Ok(await _publicacionServicio.ObtenerPublicacionesPorHashtag(
+                    hashtag, cursor, limite, User.ObtenerUsuarioId(), cancellationToken));
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { mensaje = ex.Message });
+            }
+        }
+
+        [HttpGet("hashtags/tendencias")]
+        [SwaggerOperation(Summary = "Obtiene los hashtags más usados en los últimos siete días.")]
+        [SwaggerResponse(StatusCodes.Status200OK, "Tendencias semanales.", typeof(List<TendenciaHashtagDto>))]
+        public async Task<ActionResult<List<TendenciaHashtagDto>>> ObtenerTendenciasHashtags(
+            [FromQuery] int limite = 5, CancellationToken cancellationToken = default)
+        {
+            if (limite is < 1 or > 50) return BadRequest(new { mensaje = "El límite debe estar entre 1 y 50." });
+            return Ok(await _publicacionServicio.ObtenerTendenciasHashtags(limite, cancellationToken));
+        }
+
+        [HttpGet("hashtags/buscar")]
+        [SwaggerOperation(Summary = "Busca hashtags existentes por prefijo.")]
+        [SwaggerResponse(StatusCodes.Status200OK, "Hashtags encontrados.", typeof(List<TendenciaHashtagDto>))]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "La búsqueda o límite no es válido.")]
+        public async Task<ActionResult<List<TendenciaHashtagDto>>> BuscarHashtags(
+            [FromQuery] string? q, [FromQuery] int limite = 10,
+            CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                return Ok(await _publicacionServicio.BuscarHashtags(q ?? string.Empty, limite, cancellationToken));
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { mensaje = ex.Message });
+            }
+        }
+
         [HttpPost]
         [SwaggerOperation(
             Summary = "Crea una publicación.",
@@ -125,53 +174,6 @@ namespace ProyectoFinalTPI.Backend.Controllers
                 new { id });
         }
 
-        [HttpPost("compartir")]
-        [SwaggerOperation(
-            Summary = "Comparte una publicación.",
-            Description = "Crea una publicación vinculada a la original, con un comentario opcional. Conserva sus datos multimedia y ubicación. Se utiliza el autor autenticado cuando está disponible; en caso contrario, AutorId."
-        )]
-        [SwaggerResponse(StatusCodes.Status201Created, "Publicación compartida. Devuelve su id y la cabecera Location.")]
-        [SwaggerResponse(StatusCodes.Status400BadRequest, "Los datos para compartir no son válidos.", typeof(ProblemDetails))]
-        [SwaggerResponse(StatusCodes.Status404NotFound, "El autor o la publicación original no existen o no están disponibles.", typeof(ProblemDetails))]
-        [SwaggerResponse(StatusCodes.Status415UnsupportedMediaType, "El formato del cuerpo no es compatible; utilice application/json.", typeof(ProblemDetails))]
-        public async Task<IActionResult> Compartir(
-            [FromBody] CompartirPublicacionRequest request,
-            CancellationToken cancellationToken = default)
-        {
-            var autorIdAutenticado = User.ObtenerUsuarioId();
-            var autorIdFinal = (autorIdAutenticado.HasValue && autorIdAutenticado.Value > 0)
-                ? autorIdAutenticado.Value
-                : request.AutorId;
-
-            var id = await _publicacionServicio.Compartir(
-                request.ToPublicacion(autorIdFinal), cancellationToken);
-
-            return Created(
-                $"/api/publicaciones/{id}",
-                new { id });
-        }
-
-        [HttpDelete("compartir/{originalId:int}")]
-        [SwaggerOperation(
-            Summary = "Elimina un repost.",
-            Description = "Elimina la publicación compartida asociada al identificador original y al autor indicado. Se utiliza el autor autenticado cuando está disponible; en caso contrario, autorId."
-        )]
-        [SwaggerResponse(StatusCodes.Status200OK, "Repost eliminado.")]
-        [SwaggerResponse(StatusCodes.Status400BadRequest, "El identificador de la publicación original no es válido.", typeof(ProblemDetails))]
-        [SwaggerResponse(StatusCodes.Status404NotFound, "El repost no existe o no se pudo eliminar para el autor indicado.", typeof(ProblemDetails))]
-        public async Task<IActionResult> EliminarRepost(
-            int originalId,
-            [FromQuery] int? autorId = null,
-            CancellationToken cancellationToken = default)
-        {
-            var autorIdAutenticado = User.ObtenerUsuarioId();
-            var autorIdFinal = (autorIdAutenticado.HasValue && autorIdAutenticado.Value > 0)
-                ? autorIdAutenticado.Value
-                : autorId;
-
-            await _publicacionServicio.EliminarRepost(originalId, autorIdFinal, cancellationToken);
-            return Ok(new { mensaje = "Repost eliminado con éxito.", id = originalId });
-        }
 
         [HttpPost("{id:int}/repost")]
         [SwaggerOperation(

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Text.RegularExpressions;
 using Neo4j.Driver;
 using ProyectoFinalTPI.Backend.Dtos;
 using ProyectoFinalTPI.Backend.Dtos.Grupo;
@@ -993,6 +994,42 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                 .ToListAsync(cancellationToken);
         }
 
+        public Task<List<int>> ObtenerIdsPorHashtag(string hashtag, CursorCronologicoDto? cursor, int limite,
+            CancellationToken cancellationToken = default)
+        {
+            // El servicio valida el hashtag; solo quedan letras, números y guion bajo.
+            var patron = $@"(^|[[:space:](¿¡.,;:!?])#{hashtag}($|[^[:alnum:]_])";
+            var consulta = _context.Publicaciones.AsNoTracking()
+                .Where(p => !p.EstaOculto && Regex.IsMatch(p.Descripcion, patron, RegexOptions.IgnoreCase));
+
+            if (cursor != null)
+                consulta = consulta.Where(p => p.FechaCreación < cursor.FechaCreacion ||
+                    (p.FechaCreación == cursor.FechaCreacion && p.Id < cursor.Id));
+
+            return consulta.OrderByDescending(p => p.FechaCreación)
+                .ThenByDescending(p => p.Id)
+                .Select(p => p.Id)
+                .Take(limite + 1)
+                .ToListAsync(cancellationToken);
+        }
+
+        public async Task<List<(string Descripcion, int UsuarioId)>> ObtenerDescripcionesParaHashtags(
+            DateTime? desde, CancellationToken cancellationToken = default)
+        {
+            var consulta = _context.Publicaciones.AsNoTracking()
+                .Where(p => !p.EstaOculto);
+
+            if (desde.HasValue)
+            {
+                var hasta = DateTime.UtcNow;
+                consulta = consulta.Where(p => p.FechaCreación >= desde.Value && p.FechaCreación <= hasta);
+            }
+
+            var publicaciones = await consulta.Select(p => new { p.Descripcion, p.UsuarioId })
+                .ToListAsync(cancellationToken);
+            return publicaciones.Select(p => (p.Descripcion, p.UsuarioId)).ToList();
+        }
+
         public async Task<List<PublicacionDetalleDto>> ObtenerPorUsuarioId(int usuarioId, CancellationToken cancellationToken = default)
         {
             return await _context.Publicaciones
@@ -1098,30 +1135,6 @@ namespace ProyectoFinalTPI.Backend.Repositorio
             return true;
         }
 
-        public async Task<bool> EliminarRepost(int originalId, int? autorId = null, CancellationToken cancellationToken = default)
-        {
-            bool eliminado = false;
-            if (autorId.HasValue && autorId.Value > 0)
-            {
-                eliminado = await QuitarRepost(originalId, autorId.Value, cancellationToken);
-            }
-
-            var query = _context.Publicaciones.Where(p => p.PublicacionOriginalId == originalId);
-            if (autorId.HasValue && autorId.Value > 0)
-            {
-                query = query.Where(p => p.UsuarioId == autorId.Value);
-            }
-
-            var repostLegado = await query.OrderByDescending(p => p.FechaCreación).FirstOrDefaultAsync(cancellationToken);
-            if (repostLegado != null)
-            {
-                _context.Publicaciones.Remove(repostLegado);
-                await _context.SaveChangesAsync(cancellationToken);
-                eliminado = true;
-            }
-
-            return eliminado;
-        }
         public async Task<int> ContarPosteosCercanosAlUsuario(int usuarioId, NetTopologySuite.Geometries.Point gpsUsuario, CancellationToken cancellationToken = default)
         {
             return await _context.Publicaciones
