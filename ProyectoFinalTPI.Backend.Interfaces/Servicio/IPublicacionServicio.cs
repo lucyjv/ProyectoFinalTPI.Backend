@@ -36,5 +36,10 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Servicio
         Task<int> Citar(int publicacionId, int usuarioId, string descripcion, CancellationToken cancellationToken = default);
         Task CompletarResumenesReposts(IReadOnlyCollection<PublicacionDetalleDto> publicaciones, int usuarioId,
             CancellationToken cancellationToken = default);
+        Task<GuardadoPublicacionDto> Guardar(int publicacionId, int usuarioId, CancellationToken cancellationToken = default);
+        Task<GuardadoPublicacionDto> QuitarGuardado(int publicacionId, int usuarioId, CancellationToken cancellationToken = default);
+        Task CompletarResumenesGuardados(IReadOnlyCollection<PublicacionDetalleDto> publicaciones, int usuarioId,
+            CancellationToken cancellationToken = default);
+        Task<List<PublicacionDetalleDto>> ObtenerGuardadasPorUsuarioId(int usuarioId, int? usuarioAutenticadoId, CancellationToken cancellationToken = default);
     }
 }

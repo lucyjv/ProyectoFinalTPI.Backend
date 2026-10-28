@@ -55,6 +55,27 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                    count(CASE WHEN usuario.postgresId = $usuarioId THEN 1 END) > 0 AS dioRepost
             """;
 
+        private const string CrearGuardadoQuery = """
+            MERGE (usuario:Usuario {postgresId: $usuarioId})
+            MERGE (publicacion:Publicacion {postgresId: $publicacionId})
+            MERGE (usuario)-[g:GUARDO]->(publicacion)
+            ON CREATE SET g.creadaEn = datetime(),
+                          g.creadaEnUnixMs = timestamp()
+            """;
+
+        private const string QuitarGuardadoQuery = """
+            OPTIONAL MATCH (:Usuario {postgresId: $usuarioId})-[g:GUARDO]->
+                           (:Publicacion {postgresId: $publicacionId})
+            DELETE g
+            RETURN count(g) AS cantidad
+            """;
+
+        private const string ObtenerEstadoGuardadoQuery = """
+            OPTIONAL MATCH (publicacion:Publicacion {postgresId: $publicacionId})
+            OPTIONAL MATCH (usuario:Usuario)-[g:GUARDO]->(publicacion)
+            RETURN count(CASE WHEN usuario.postgresId = $usuarioId THEN 1 END) > 0 AS guardada
+            """;
+
 
         private const string PuntuarPublicacionQuery = """
             MERGE (usuario:Usuario {postgresId: $usuarioId})
@@ -349,6 +370,96 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                     lista.Add((pubId, repId, username, fecha));
                 }
                 return (IReadOnlyList<(int PublicacionId, int ReposteadorId, string ReposteadorUsername, DateTime Fecha)>)lista;
+            });
+        }
+
+        public async Task CrearGuardado(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
+            await session.ExecuteWriteAsync(async transaction =>
+            {
+                await transaction.RunAsync(CrearGuardadoQuery, new { publicacionId, usuarioId });
+            });
+        }
+
+        public async Task<bool> QuitarGuardado(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
+            return await session.ExecuteWriteAsync(async transaction =>
+            {
+                var cursor = await transaction.RunAsync(QuitarGuardadoQuery, new { publicacionId, usuarioId });
+                var registro = await cursor.SingleAsync();
+                return registro["cantidad"].As<int>() > 0;
+            });
+        }
+
+        public async Task<GuardadoPublicacionDto> ObtenerEstadoGuardado(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
+            return await session.ExecuteReadAsync(async transaction =>
+            {
+                var cursor = await transaction.RunAsync(ObtenerEstadoGuardadoQuery, new { publicacionId, usuarioId });
+                var registro = await cursor.SingleAsync();
+
+                return new GuardadoPublicacionDto
+                {
+                    PublicacionId = publicacionId,
+                    Guardada = registro["guardada"].As<bool>()
+                };
+            });
+        }
+
+        public async Task<IReadOnlyDictionary<int, bool>> ObtenerResumenGuardados(
+            IReadOnlyCollection<int> publicacionesIds, int usuarioId, CancellationToken cancellationToken = default)
+        {
+            if (publicacionesIds.Count == 0)
+                return new Dictionary<int, bool>();
+
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
+            return await session.ExecuteReadAsync(async transaction =>
+            {
+                var cursor = await transaction.RunAsync("""
+                    UNWIND $publicacionesIds AS publicacionId
+                    OPTIONAL MATCH (usuario:Usuario {postgresId: $usuarioId})-[g:GUARDO]->
+                                  (:Publicacion {postgresId: publicacionId})
+                    RETURN publicacionId,
+                           count(g) > 0 AS guardada
+                    """, new { publicacionesIds = publicacionesIds.Distinct().ToArray(), usuarioId });
+
+                var resumenes = new Dictionary<int, bool>();
+                await foreach (var registro in cursor)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    resumenes[registro["publicacionId"].As<int>()] = registro["guardada"].As<bool>();
+                }
+                return (IReadOnlyDictionary<int, bool>)resumenes;
+            });
+        }
+
+        public async Task<IReadOnlyList<int>> ObtenerIdsPublicacionesGuardadas(
+            int usuarioId, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
+            return await session.ExecuteReadAsync(async transaction =>
+            {
+                var cursor = await transaction.RunAsync("""
+                    MATCH (usuario:Usuario {postgresId: $usuarioId})-[g:GUARDO]->(p:Publicacion)
+                    RETURN p.postgresId AS publicacionId
+                    ORDER BY coalesce(g.creadaEnUnixMs, 0) DESC
+                    """, new { usuarioId });
+
+                var ids = new List<int>();
+                await foreach (var registro in cursor)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    ids.Add(registro["publicacionId"].As<int>());
+                }
+                return (IReadOnlyList<int>)ids;
             });
         }
 

@@ -98,6 +98,42 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 }
         }
 
+        public async Task CompletarResumenesGuardados(
+            IReadOnlyCollection<PublicacionDetalleDto> publicaciones, int usuarioId,
+            CancellationToken cancellationToken = default)
+        {
+            if (publicaciones.Count == 0 || usuarioId <= 0) return;
+
+            var resumenes = await _publicacionRepositorio.ObtenerResumenGuardados(
+                publicaciones.Select(publicacion => publicacion.Id).Distinct().ToArray(),
+                usuarioId,
+                cancellationToken);
+
+            foreach (var publicacion in publicaciones)
+            {
+                if (resumenes.TryGetValue(publicacion.Id, out var guardada))
+                {
+                    publicacion.Guardada = guardada;
+                }
+            }
+        }
+
+        public async Task<GuardadoPublicacionDto> Guardar(
+            int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
+        {
+            await ValidarInteraccionConPublicacion(publicacionId, usuarioId, cancellationToken);
+            await _publicacionRepositorio.CrearGuardado(publicacionId, usuarioId, cancellationToken);
+            return await _publicacionRepositorio.ObtenerEstadoGuardado(publicacionId, usuarioId, cancellationToken);
+        }
+
+        public async Task<GuardadoPublicacionDto> QuitarGuardado(
+            int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
+        {
+            await ValidarInteraccionConPublicacion(publicacionId, usuarioId, cancellationToken);
+            await _publicacionRepositorio.QuitarGuardado(publicacionId, usuarioId, cancellationToken);
+            return await _publicacionRepositorio.ObtenerEstadoGuardado(publicacionId, usuarioId, cancellationToken);
+        }
+
         public async Task<PuntuacionPublicacionDto> Puntuar(
             int publicacionId, int usuarioId, int puntaje, CancellationToken cancellationToken = default)
         {
@@ -237,6 +273,24 @@ namespace ProyectoFinalTPI.Backend.Servicio
             await CompletarResumenesInteracciones(publicaciones, usuarioAutenticadoId, cancellationToken);
             return publicaciones;
         }
+
+        public async Task<List<PublicacionDetalleDto>> ObtenerGuardadasPorUsuarioId(
+            int usuarioId, int? usuarioAutenticadoId, CancellationToken cancellationToken = default)
+        {
+            ValidarIdUsuario(usuarioId);
+
+            var idsGuardadas = await _publicacionRepositorio.ObtenerIdsPublicacionesGuardadas(usuarioId, cancellationToken);
+            if (idsGuardadas.Count == 0) return new List<PublicacionDetalleDto>();
+
+            var publicaciones = await _publicacionRepositorio.ObtenerPublicacionesPorIds(idsGuardadas, cancellationToken);
+
+            var orden = idsGuardadas.Select((id, index) => (id, index)).ToDictionary(x => x.id, x => x.index);
+            publicaciones = publicaciones.OrderBy(p => orden.TryGetValue(p.Id, out var idx) ? idx : int.MaxValue).ToList();
+
+            await CompletarResumenesInteracciones(publicaciones, usuarioAutenticadoId, cancellationToken);
+            return publicaciones;
+        }
+
         public async Task<ResultadoPaginadoDto<PublicacionDetalleDto>> ObtenerFeedSeguidos(int usuarioId, string? cursor, int limite,
         CancellationToken cancellationToken = default)
         {
@@ -756,6 +810,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
             await CompletarResumenesLikes(publicaciones, usuarioId ?? 0, cancellationToken);
             await CompletarResumenesPuntuaciones(publicaciones, usuarioId, cancellationToken);
             await CompletarResumenesReposts(publicaciones, usuarioId ?? 0, cancellationToken);
+            await CompletarResumenesGuardados(publicaciones, usuarioId ?? 0, cancellationToken);
         }
         private async Task<List<PublicacionDetalleDto>> IncorporarRepostsDeSeguidos(
             List<PublicacionDetalleDto> publicaciones, IReadOnlyCollection<int> autoresIds,

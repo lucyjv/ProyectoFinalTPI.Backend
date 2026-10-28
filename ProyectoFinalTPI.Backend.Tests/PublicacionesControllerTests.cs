@@ -481,6 +481,52 @@ namespace ProyectoFinalTPI.Backend.Tests
         }
 
         [Fact]
+        public async Task QueSePuedaGuardarUnaPublicacion()
+        {
+            var result = await _controller.Guardar(42, 10);
+            var ok = Assert.IsType<OkObjectResult>(result);
+            var dto = Assert.IsType<GuardadoPublicacionDto>(ok.Value);
+            Assert.Equal(42, dto.PublicacionId);
+            Assert.True(dto.Guardada);
+            Assert.Equal(42, _servicio.IdConsultado);
+        }
+
+        [Fact]
+        public async Task QueSePuedaQuitarGuardadoDeUnaPublicacion()
+        {
+            var result = await _controller.QuitarGuardado(42, 10);
+            var ok = Assert.IsType<OkObjectResult>(result);
+            var dto = Assert.IsType<GuardadoPublicacionDto>(ok.Value);
+            Assert.Equal(42, dto.PublicacionId);
+            Assert.False(dto.Guardada);
+            Assert.Equal(42, _servicio.IdConsultado);
+        }
+
+        [Fact]
+        public async Task Guardar_DevuelveUnauthorizedSiNoHayUsuario()
+        {
+            var result = await _controller.Guardar(42, null);
+            Assert.IsType<UnauthorizedObjectResult>(result);
+        }
+
+        [Fact]
+        public async Task QuitarGuardado_DevuelveUnauthorizedSiNoHayUsuario()
+        {
+            var result = await _controller.QuitarGuardado(42, null);
+            Assert.IsType<UnauthorizedObjectResult>(result);
+        }
+
+        [Fact]
+        public async Task QueSePuedanObtenerPublicacionesGuardadasPorUsuario()
+        {
+            var result = await _controller.ObtenerGuardadasPorUsuario(10, CancellationToken.None);
+            var ok = Assert.IsType<OkObjectResult>(result.Result);
+            var lista = Assert.IsType<List<PublicacionDetalleDto>>(ok.Value);
+            Assert.Equal(10, _servicio.IdConsultado);
+            Assert.Single(lista);
+        }
+
+        [Fact]
         public async Task QueSePuedaCitarUnaPublicacion()
         {
             _servicio.IdCreado = 99;
@@ -667,6 +713,29 @@ namespace ProyectoFinalTPI.Backend.Tests
             public Task CompletarResumenesReposts(IReadOnlyCollection<PublicacionDetalleDto> publicaciones, int usuarioId, CancellationToken cancellationToken = default)
             {
                 return Task.CompletedTask;
+            }
+
+            public Task<GuardadoPublicacionDto> Guardar(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
+            {
+                IdConsultado = publicacionId;
+                return Error == null ? Task.FromResult(new GuardadoPublicacionDto { PublicacionId = publicacionId, Guardada = true }) : Task.FromException<GuardadoPublicacionDto>(Error);
+            }
+
+            public Task<GuardadoPublicacionDto> QuitarGuardado(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
+            {
+                IdConsultado = publicacionId;
+                return Error == null ? Task.FromResult(new GuardadoPublicacionDto { PublicacionId = publicacionId, Guardada = false }) : Task.FromException<GuardadoPublicacionDto>(Error);
+            }
+
+            public Task CompletarResumenesGuardados(IReadOnlyCollection<PublicacionDetalleDto> publicaciones, int usuarioId, CancellationToken cancellationToken = default)
+            {
+                return Task.CompletedTask;
+            }
+
+            public Task<List<PublicacionDetalleDto>> ObtenerGuardadasPorUsuarioId(int usuarioId, int? usuarioAutenticadoId, CancellationToken cancellationToken = default)
+            {
+                IdConsultado = usuarioId;
+                return Error == null ? Task.FromResult(new List<PublicacionDetalleDto> { Detalle }) : Task.FromException<List<PublicacionDetalleDto>>(Error);
             }
         }
 
