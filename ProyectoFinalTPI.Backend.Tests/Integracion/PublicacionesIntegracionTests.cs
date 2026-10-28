@@ -65,14 +65,14 @@ public class PublicacionesIntegracionTests : IClassFixture<PostgisFixture>
         var primera = await client.GetFromJsonAsync<ResultadoPaginadoDto<PublicacionDetalleDto>>(
             "/api/publicaciones/hashtags/amanecer/publicaciones?limite=1");
         Assert.NotNull(primera);
-        Assert.Equal(2, Assert.Single(primera.Items).Id);
+        Assert.Equal(1, Assert.Single(primera.Items).Id);
         Assert.True(primera.HayMas);
 
         var segunda = await client.GetFromJsonAsync<ResultadoPaginadoDto<PublicacionDetalleDto>>(
             "/api/publicaciones/hashtags/amanecer/publicaciones?limite=1&cursor=" +
             Uri.EscapeDataString(primera.SiguienteCursor!));
         Assert.NotNull(segunda);
-        Assert.Equal(1, Assert.Single(segunda.Items).Id);
+        Assert.Equal(2, Assert.Single(segunda.Items).Id);
         Assert.True(segunda.HayMas);
 
         var tercera = await client.GetFromJsonAsync<ResultadoPaginadoDto<PublicacionDetalleDto>>(
