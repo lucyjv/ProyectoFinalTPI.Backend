@@ -32,6 +32,7 @@ namespace ProyectoFinalTPI.Backend.Dtos.Publicacion
 
         public int CantidadReposts { get; set; }
         public bool DioRepost { get; set; }
+        public bool Guardada { get; set; }
 
         public int PuntosTotales { get; set; }
         public int? MiPuntuacion { get; set; }

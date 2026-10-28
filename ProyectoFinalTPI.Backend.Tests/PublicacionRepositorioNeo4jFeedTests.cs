@@ -40,6 +40,48 @@ public class PublicacionRepositorioNeo4jFeedTests
     }
 
     [Fact]
+    public async Task CrearGuardadoUsaRelacionGuardoYParametrosCorrectos()
+    {
+        var neo4j = new Neo4jFeedFake();
+        await using var contexto = CrearContexto();
+        var repositorio = new PublicacionRepositorio(contexto, neo4j.Driver);
+
+        await repositorio.CrearGuardado(42, 10);
+
+        Assert.Contains("MERGE (usuario)-[g:GUARDO]->(publicacion)", neo4j.Query);
+        Assert.Contains("SET g.creadaEn", neo4j.Query);
+        Assert.Equal(10, Parametro<int>(neo4j.Parametros, "usuarioId"));
+        Assert.Equal(42, Parametro<int>(neo4j.Parametros, "publicacionId"));
+    }
+
+    [Fact]
+    public async Task ObtenerResumenGuardadosConListaVaciaNoConsultaNeo4j()
+    {
+        var neo4j = new Neo4jFeedFake();
+        await using var contexto = CrearContexto();
+        var repositorio = new PublicacionRepositorio(contexto, neo4j.Driver);
+
+        var resultado = await repositorio.ObtenerResumenGuardados(Array.Empty<int>(), 10);
+
+        Assert.Empty(resultado);
+        Assert.Null(neo4j.Query);
+    }
+
+    [Fact]
+    public async Task ObtenerIdsPublicacionesGuardadasConsultaRelacionGuardo()
+    {
+        var neo4j = new Neo4jFeedFake();
+        await using var contexto = CrearContexto();
+        var repositorio = new PublicacionRepositorio(contexto, neo4j.Driver);
+
+        var resultado = await repositorio.ObtenerIdsPublicacionesGuardadas(10);
+
+        Assert.Contains("MATCH (usuario:Usuario {postgresId: $usuarioId})-[g:GUARDO]->(p:Publicacion)", neo4j.Query);
+        Assert.Contains("ORDER BY coalesce(g.creadaEnUnixMs, 0) DESC", neo4j.Query);
+        Assert.Equal(10, Parametro<int>(neo4j.Parametros, "usuarioId"));
+    }
+
+    [Fact]
     public async Task RecomendacionesConsideranLikesPuntuacionesEtiquetasYVistasRecientes()
     {
         var neo4j = new Neo4jFeedFake();
