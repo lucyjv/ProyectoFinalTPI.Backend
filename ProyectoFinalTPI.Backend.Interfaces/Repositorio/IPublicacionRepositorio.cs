@@ -54,6 +54,12 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Repositorio
             IReadOnlyCollection<int> publicacionesIds, int usuarioId, CancellationToken cancellationToken = default);
         Task<IReadOnlyList<(int PublicacionId, int ReposteadorId, string ReposteadorUsername, DateTime Fecha)>> ObtenerRepostsDeSeguidos(
             IReadOnlyCollection<int> autoresIds, CancellationToken cancellationToken = default);
+        Task CrearGuardado(int publicacionId, int usuarioId, CancellationToken cancellationToken = default);
+        Task<bool> QuitarGuardado(int publicacionId, int usuarioId, CancellationToken cancellationToken = default);
+        Task<GuardadoPublicacionDto> ObtenerEstadoGuardado(int publicacionId, int usuarioId, CancellationToken cancellationToken = default);
+        Task<IReadOnlyDictionary<int, bool>> ObtenerResumenGuardados(
+            IReadOnlyCollection<int> publicacionesIds, int usuarioId, CancellationToken cancellationToken = default);
+        Task<IReadOnlyList<int>> ObtenerIdsPublicacionesGuardadas(int usuarioId, CancellationToken cancellationToken = default);
         Task<int> ContarPosteosConImagenDelUsuario(int usuarioId, CancellationToken cancellationToken = default);
         Task<int> ContarRepostsDeOtrosUsuarios(int usuarioId, CancellationToken cancellationToken = default);
         Task<int> ContarLikesOtorgados(int usuarioId, CancellationToken cancellationToken = default);

@@ -1,11 +1,10 @@
 using Swashbuckle.AspNetCore.Annotations;
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using ProyectoFinalTPI.Backend.Dtos.Auth;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
+using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Extensions;
 
 namespace ProyectoFinalTPI.Backend.Controllers;
@@ -18,11 +17,13 @@ public class AuthController : ControllerBase
     public const string RefreshCookieName = "__Host-Nostalgiar.Refresh";
     private readonly IAuthServicio _authServicio;
     private readonly IWebHostEnvironment _environment;
+    private readonly IUsuarioRepositorio _usuarioRepositorio;
 
-    public AuthController(IAuthServicio authServicio, IWebHostEnvironment environment)
+    public AuthController(IAuthServicio authServicio, IWebHostEnvironment environment, IUsuarioRepositorio usuarioRepositorio)
     {
         _authServicio = authServicio;
         _environment = environment;
+        _usuarioRepositorio = usuarioRepositorio;
     }
 
     [HttpPost("registro")]
@@ -144,19 +145,22 @@ public class AuthController : ControllerBase
     [HttpGet("me")]
     [SwaggerOperation(
         Summary = "Obtiene el usuario autenticado.",
-        Description = "Devuelve identificador, username, email y condición de administrador a partir de los claims del token."
+        Description = "Devuelve los datos actuales de la cuenta autenticada."
     )]
     [SwaggerResponse(StatusCodes.Status200OK, "Datos del usuario autenticado.", typeof(UsuarioAutenticadoDto))]
     [SwaggerResponse(StatusCodes.Status401Unauthorized, "Se requiere una autenticación válida.")]
-    public IActionResult Me()
+    public async Task<IActionResult> Me()
     {
         if (!TryObtenerUsuarioId(out var usuarioId)) return Unauthorized();
+        var usuario = await _usuarioRepositorio.ObtenerPorIdAsync(usuarioId);
+        if (usuario is null) return Unauthorized();
         return Ok(new UsuarioAutenticadoDto
         {
-            UsuarioId = usuarioId,
-            Username = User.FindFirstValue("username") ?? string.Empty,
-            Email = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue(JwtRegisteredClaimNames.Email) ?? string.Empty,
-            EsAdmin = bool.TryParse(User.FindFirstValue("esAdmin"), out var esAdmin) && esAdmin
+            UsuarioId = usuario.Id,
+            Username = usuario.Username,
+            FotoPerfilUrl = usuario.FotoPerfilUrl,
+            Email = usuario.Email,
+            EsAdmin = usuario.EsAdmin
         });
     }
 

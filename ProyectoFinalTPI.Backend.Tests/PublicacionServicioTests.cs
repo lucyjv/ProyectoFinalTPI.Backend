@@ -844,6 +844,101 @@ namespace ProyectoFinalTPI.Backend.Tests
         }
 
         [Fact]
+        public async Task Guardar_ValidaInteraccionYGuardaEnNeo4j()
+        {
+            _usuarios.Existe = true;
+            _repositorio.ExisteVisible = true;
+            _repositorio.EstadoGuardadoRetorno = true;
+
+            var resultado = await _servicio.Guardar(10, 20);
+
+            Assert.Equal(10, resultado.PublicacionId);
+            Assert.True(resultado.Guardada);
+            Assert.Equal(10, _repositorio.PublicacionIdGuardadoCreado);
+            Assert.Equal(20, _repositorio.UsuarioIdGuardadoCreado);
+        }
+
+        [Fact]
+        public async Task Guardar_LanzaExcepcionSiUsuarioNoExiste()
+        {
+            _usuarios.Existe = false;
+            _repositorio.ExisteVisible = true;
+
+            await Assert.ThrowsAsync<KeyNotFoundException>(() => _servicio.Guardar(10, 20));
+        }
+
+        [Fact]
+        public async Task Guardar_LanzaExcepcionSiPublicacionNoExiste()
+        {
+            _usuarios.Existe = true;
+            _repositorio.ExisteVisible = false;
+
+            await Assert.ThrowsAsync<KeyNotFoundException>(() => _servicio.Guardar(10, 20));
+        }
+
+        [Fact]
+        public async Task QuitarGuardado_ValidaInteraccionYEliminaEnNeo4j()
+        {
+            _usuarios.Existe = true;
+            _repositorio.ExisteVisible = true;
+            _repositorio.EstadoGuardadoRetorno = false;
+
+            var resultado = await _servicio.QuitarGuardado(10, 20);
+
+            Assert.Equal(10, resultado.PublicacionId);
+            Assert.False(resultado.Guardada);
+            Assert.Equal(10, _repositorio.PublicacionIdGuardadoQuitado);
+            Assert.Equal(20, _repositorio.UsuarioIdGuardadoQuitado);
+        }
+
+        [Fact]
+        public async Task CompletarResumenesGuardados_AsignaEstadoCorrectamente()
+        {
+            var publicaciones = new List<PublicacionDetalleDto>
+            {
+                new() { Id = 1, Guardada = false },
+                new() { Id = 2, Guardada = false }
+            };
+            _repositorio.ResumenGuardadosRetorno[1] = true;
+            _repositorio.ResumenGuardadosRetorno[2] = false;
+
+            await _servicio.CompletarResumenesGuardados(publicaciones, 10);
+
+            Assert.True(publicaciones[0].Guardada);
+            Assert.False(publicaciones[1].Guardada);
+        }
+
+        [Fact]
+        public async Task CompletarResumenesGuardados_ConUsuarioInvalido_NoModificaNada()
+        {
+            var publicaciones = new List<PublicacionDetalleDto>
+            {
+                new() { Id = 1, Guardada = false }
+            };
+
+            await _servicio.CompletarResumenesGuardados(publicaciones, 0);
+
+            Assert.False(publicaciones[0].Guardada);
+        }
+
+        [Fact]
+        public async Task ObtenerGuardadasPorUsuarioId_DevuelvePublicacionesOrdenadas()
+        {
+            _repositorio.IdsPublicacionesGuardadasRetorno = new[] { 2, 1 };
+            _repositorio.PublicacionesPorIds = new List<PublicacionDetalleDto>
+            {
+                new() { Id = 1, Titulo = "Primero" },
+                new() { Id = 2, Titulo = "Segundo" }
+            };
+
+            var resultado = await _servicio.ObtenerGuardadasPorUsuarioId(10, 10);
+
+            Assert.Equal(2, resultado.Count);
+            Assert.Equal(2, resultado[0].Id);
+            Assert.Equal(1, resultado[1].Id);
+        }
+
+        [Fact]
         public async Task Citar_ValidaExistenciaYGuardaEnPostgres()
         {
             _usuarios.Existe = true;
@@ -1208,6 +1303,53 @@ namespace ProyectoFinalTPI.Backend.Tests
                 IReadOnlyCollection<int> autoresIds, CancellationToken cancellationToken = default)
             {
                 return Task.FromResult<IReadOnlyList<(int PublicacionId, int ReposteadorId, string ReposteadorUsername, DateTime Fecha)>>(RepostsSeguidos);
+            }
+
+            public int? PublicacionIdGuardadoCreado { get; private set; }
+            public int? UsuarioIdGuardadoCreado { get; private set; }
+            public int? PublicacionIdGuardadoQuitado { get; private set; }
+            public int? UsuarioIdGuardadoQuitado { get; private set; }
+            public bool EstadoGuardadoRetorno { get; set; } = true;
+            public Dictionary<int, bool> ResumenGuardadosRetorno { get; set; } = new();
+
+            public Task CrearGuardado(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
+            {
+                PublicacionIdGuardadoCreado = publicacionId;
+                UsuarioIdGuardadoCreado = usuarioId;
+                return Task.CompletedTask;
+            }
+
+            public Task<bool> QuitarGuardado(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
+            {
+                PublicacionIdGuardadoQuitado = publicacionId;
+                UsuarioIdGuardadoQuitado = usuarioId;
+                return Task.FromResult(true);
+            }
+
+            public Task<GuardadoPublicacionDto> ObtenerEstadoGuardado(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
+            {
+                return Task.FromResult(new GuardadoPublicacionDto
+                {
+                    PublicacionId = publicacionId,
+                    Guardada = EstadoGuardadoRetorno
+                });
+            }
+
+            public Task<IReadOnlyDictionary<int, bool>> ObtenerResumenGuardados(
+                IReadOnlyCollection<int> publicacionesIds, int usuarioId, CancellationToken cancellationToken = default)
+            {
+                var dict = publicacionesIds.Distinct().ToDictionary(
+                    id => id,
+                    id => ResumenGuardadosRetorno.TryGetValue(id, out var g) ? g : false);
+                return Task.FromResult<IReadOnlyDictionary<int, bool>>(dict);
+            }
+
+            public IReadOnlyList<int> IdsPublicacionesGuardadasRetorno { get; set; } = Array.Empty<int>();
+
+            public Task<IReadOnlyList<int>> ObtenerIdsPublicacionesGuardadas(
+                int usuarioId, CancellationToken cancellationToken = default)
+            {
+                return Task.FromResult(IdsPublicacionesGuardadasRetorno);
             }
         }
 
