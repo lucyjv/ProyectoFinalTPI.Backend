@@ -185,9 +185,7 @@ namespace ProyectoFinalTPI.Backend.Controllers
 
             var id = await _publicacionServicio.Crear(
                 request.ToPublicacion(autorIdFinal), stream, request.Archivo?.FileName,
-                request.GpsLatitud.HasValue && request.GpsLongitud.HasValue
-                    ? new NetTopologySuite.Geometries.Point(request.GpsLongitud.Value, request.GpsLatitud.Value) { SRID = 4326 }
-                    : null);
+                request.ToUbicacionGps());
 
             return Created(
                 $"/api/publicaciones/{id}",
