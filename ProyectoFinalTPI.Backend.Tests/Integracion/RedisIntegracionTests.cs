@@ -17,16 +17,42 @@ public class RedisIntegracionTests : IAsyncLifetime, IClassFixture<PostgisFixtur
 {
     private readonly IContainer _redis = new ContainerBuilder().WithImage("redis:7.4-alpine").WithPortBinding(6379, true).WithCommand("redis-server", "--appendonly", "yes", "--appendfsync", "always").Build();
     private readonly PostgisFixture _postgres;
-    private string Conexion => $"{_redis.Hostname}:{_redis.GetMappedPublicPort(6379)},abortConnect=false,connectTimeout=1000,syncTimeout=1000,asyncTimeout=1000,connectRetry=1";
+    private string Conexion => $"{_redis.Hostname}:{_redis.GetMappedPublicPort(6379)},abortConnect=false,connectTimeout=5000,syncTimeout=5000,asyncTimeout=5000,connectRetry=1";
     public RedisIntegracionTests(PostgisFixture postgres) => _postgres = postgres;
     public async Task InitializeAsync()
     {
+        await IniciarRedisYEsperarConexion();
+    }
+    private async Task IniciarRedisYEsperarConexion()
+    {
         await _redis.StartAsync();
-        using var conexion = await ConnectionMultiplexer.ConnectAsync(Conexion);
-        await conexion.GetDatabase().PingAsync();
+        var reloj = System.Diagnostics.Stopwatch.StartNew();
+        RedisException? ultimoError = null;
+        while (reloj.Elapsed < TimeSpan.FromSeconds(45))
+        {
+            try
+            {
+                using var conexion = await ConnectionMultiplexer.ConnectAsync(Conexion);
+                await conexion.GetDatabase().PingAsync();
+                return;
+            }
+            catch (RedisException ex) { ultimoError = ex; }
+            await Task.Delay(200);
+        }
+        throw new TimeoutException("Redis no respondió PING desde el host dentro del plazo de arranque.", ultimoError);
     }
     public async Task DisposeAsync() => await _redis.DisposeAsync();
-    private RedisCache Crear(string prefijo) => new(Options.Create(new RedisCacheOptions { Configuration = Conexion, InstanceName = prefijo }));
+    private RedisCache Crear(string prefijo, bool timeoutCorto = false)
+    {
+        var configuracion = ConfigurationOptions.Parse(Conexion);
+        if (timeoutCorto)
+        {
+            configuracion.ConnectTimeout = 1000;
+            configuracion.SyncTimeout = 1000;
+            configuracion.AsyncTimeout = 1000;
+        }
+        return new RedisCache(Options.Create(new RedisCacheOptions { ConfigurationOptions = configuracion, InstanceName = prefijo }));
+    }
 
     [Fact]
     public async Task QueLaSesionSeRecupereDesdeOtroClienteConTtlYRespeteAlPropietario()
@@ -94,7 +120,7 @@ public class RedisIntegracionTests : IAsyncLifetime, IClassFixture<PostgisFixtur
         var creada = new SesionFypRedisRepositorio(cliente).Crear(7, new[] { 8, 3 });
         //Act
         await _redis.StopAsync();
-        await _redis.StartAsync();
+        await IniciarRedisYEsperarConexion();
         using var nuevoCliente = Crear(prefijo);
         var result = new SesionFypRedisRepositorio(nuevoCliente).Obtener(creada.Id, 7);
         //Assert
@@ -109,7 +135,7 @@ public class RedisIntegracionTests : IAsyncLifetime, IClassFixture<PostgisFixtur
     {
         //Arrange
         var prefijo = Guid.NewGuid()+":";
-        using var cliente = Crear(prefijo);
+        using var cliente = Crear(prefijo, timeoutCorto: true);
         var sesiones = new SesionFypRedisRepositorio(cliente);
         var creada = sesiones.Crear(7, new[] { 4, 2 });
         var cache = new CacheLecturasPublicas(cliente, NullLogger<CacheLecturasPublicas>.Instance);
@@ -125,7 +151,7 @@ public class RedisIntegracionTests : IAsyncLifetime, IClassFixture<PostgisFixtur
         var result = await perfil.Obtener(usuario.Id);
         var errorLectura = Record.Exception(() => sesiones.Obtener(creada.Id, 7));
         var errorEscritura = Record.Exception(() => sesiones.Crear(7, new[] { 9 }));
-        await _redis.StartAsync();
+        await IniciarRedisYEsperarConexion();
         using var recuperado = Crear(prefijo);
         var sesionRecuperada = new SesionFypRedisRepositorio(recuperado).Obtener(creada.Id, 7);
         var perfilRecuperado = await new PerfilPublicoConsulta(new OrigenLecturasPublicas(db), new CacheLecturasPublicas(recuperado, NullLogger<CacheLecturasPublicas>.Instance)).Obtener(usuario.Id);
