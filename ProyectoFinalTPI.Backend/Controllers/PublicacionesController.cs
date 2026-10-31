@@ -168,7 +168,7 @@ namespace ProyectoFinalTPI.Backend.Controllers
         [HttpPost]
         [SwaggerOperation(
             Summary = "Crea una publicación.",
-            Description = "Recibe los datos del recuerdo y su ubicación como multipart/form-data. Debe enviarse un archivo o una URL HTTPS, no ambos. El archivo puede ocupar hasta 50 MB. Se utiliza el autor autenticado cuando está disponible; en caso contrario, AutorId."
+            Description = "Recibe los datos del recuerdo y su ubicación como multipart/form-data. La multimedia es opcional salvo que Publicaciones:RequerirMultimedia esté activo. Si se adjunta contenido, debe enviarse un archivo o una URL HTTPS, no ambos. El archivo puede ocupar hasta 50 MB. Se utiliza el autor autenticado cuando está disponible; en caso contrario, AutorId."
         )]
         [SwaggerResponse(StatusCodes.Status201Created, "Publicación creada. Devuelve su id y la cabecera Location.")]
         [SwaggerResponse(StatusCodes.Status400BadRequest, "Los datos del recuerdo, la ubicación o el contenido multimedia no son válidos.", typeof(ProblemDetails))]

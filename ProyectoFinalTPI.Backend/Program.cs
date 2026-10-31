@@ -120,6 +120,8 @@ builder.Services.AddScoped<IAnalizadorRecuerdo>(sp =>
         ? sp.GetRequiredService<AnalizadorRecuerdoGemini>() : new AnalizadorRecuerdoSinProveedor());
 builder.Services.AddScoped<IAnalisisRecuerdosServicio, AnalisisRecuerdosServicio>();
 builder.Services.AddHostedService<AnalisisRecuerdosWorker>();
+builder.Services.Configure<OpcionesPublicacion>(
+    builder.Configuration.GetSection(OpcionesPublicacion.Seccion));
 builder.Services.AddScoped<IPublicacionServicio, PublicacionServicio>();
 builder.Services.AddOptions<FeedRecomendacionesOptions>()
     .Bind(builder.Configuration.GetSection(FeedRecomendacionesOptions.Seccion))

@@ -1267,7 +1267,8 @@ namespace ProyectoFinalTPI.Backend.Repositorio
         public async Task<int> ContarPosteosConImagenDelUsuario(int usuarioId, CancellationToken cancellationToken = default)
         {
             return await _context.Publicaciones
-                .Where(p => p.UsuarioId == usuarioId && !p.EstaOculto && p.TipoMultimedia == MultimediaEnum.Foto)
+                .Where(p => p.UsuarioId == usuarioId && !p.EstaOculto && p.TipoMultimedia == MultimediaEnum.Foto
+                    && !string.IsNullOrWhiteSpace(p.UrlMultimedia))
                 .CountAsync(cancellationToken);
         }
 

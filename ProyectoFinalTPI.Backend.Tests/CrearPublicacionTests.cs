@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Repositorio.Data;
+using ProyectoFinalTPI.Backend.Servicio;
 using Xunit;
 
 namespace ProyectoFinalTPI.Backend.Tests;
@@ -71,7 +72,6 @@ public class CrearPublicacionTests
     [InlineData("AutorId", "0")]
     [InlineData("UrlArchivo", "http://example.com/foto.jpg")]
     [InlineData("UrlArchivo", "invalid")]
-    [InlineData("UrlArchivo", "")]
     public async Task Invalido_devuelve_400_sin_subir_ni_persistir(string campo, string valor)
     {
         await using var factory = new ApiFactory();
@@ -120,6 +120,61 @@ public class CrearPublicacionTests
         await AssertSinEfectos(factory, 1);
     }
 
+    [Theory]
+    [InlineData(false, null)]
+    [InlineData(false, "")]
+    [InlineData(false, "  ")]
+    [InlineData(true, null)]
+    public async Task Multimedia_opcional_persiste_texto_sin_invocar_proveedor_y_se_puede_volver_a_exigir(bool requerida, string? url)
+    {
+        await using var factory = new ApiFactory { RequerirMultimedia = requerida };
+        using var client = factory.CreateClient();
+        await factory.Seed();
+        factory.Media.Falla = true; // Si se intenta subir algo, la prueba falla.
+        using var form = Form(sinMultimedia: true);
+        if (url != null) form.Add(new StringContent(url), "UrlArchivo");
+        using var response = await client.PostAsync("/api/publicaciones", form);
+        if (requerida)
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            Assert.Contains("Debe subir un archivo o indicar una URL", await response.Content.ReadAsStringAsync());
+            await AssertSinEfectos(factory);
+            return;
+        }
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var publicacion = await db.Publicaciones.SingleAsync();
+        Assert.Equal(string.Empty, publicacion.UrlMultimedia);
+        Assert.Equal("Recuerdo", publicacion.Titulo);
+        Assert.Equal(0, factory.Media.Calls);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RequerirMultimediaSigueAceptandoArchivosOEnlacesValidos(bool archivo)
+    {
+        await using var factory = new ApiFactory { RequerirMultimedia = true };
+        using var client = factory.CreateClient();
+        await factory.Seed();
+        using var form = Form(archivo: archivo);
+        Assert.Equal(HttpStatusCode.Created, (await client.PostAsync("/api/publicaciones", form)).StatusCode);
+        Assert.Equal(1, factory.Media.Calls);
+    }
+
+    [Fact]
+    public async Task Archivo_vacio_sigue_siendo_invalido_con_multimedia_opcional()
+    {
+        await using var factory = new ApiFactory();
+        using var client = factory.CreateClient();
+        await factory.Seed();
+        using var form = Form(sinMultimedia: true);
+        form.Add(new ByteArrayContent(Array.Empty<byte>()), "Archivo", "vacio.jpg");
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsync("/api/publicaciones", form)).StatusCode);
+        await AssertSinEfectos(factory);
+    }
+
     private static async Task AssertSinEfectos(ApiFactory factory, int llamadas = 0)
     {
         using var scope = factory.Services.CreateScope();
@@ -129,7 +184,7 @@ public class CrearPublicacionTests
         Assert.Equal(llamadas, factory.Media.Calls);
     }
 
-    private static MultipartFormDataContent Form(bool archivo = false, Dictionary<string, string>? overrides = null)
+    private static MultipartFormDataContent Form(bool archivo = false, Dictionary<string, string>? overrides = null, bool sinMultimedia = false)
     {
         var campos = new Dictionary<string, string>
         {
@@ -137,7 +192,7 @@ public class CrearPublicacionTests
             ["Categoria"] = "0", ["NombreLugar"] = "Buenos Aires", ["Latitud"] = "-34.6037",
             ["Longitud"] = "-58.3816", ["TipoMultimedia"] = "0", ["AutorId"] = "1"
         };
-        if (!archivo) campos["UrlArchivo"] = "https://example.com/foto.jpg";
+        if (!archivo && !sinMultimedia) campos["UrlArchivo"] = "https://example.com/foto.jpg";
         if (overrides != null) foreach (var campo in overrides) campos[campo.Key] = campo.Value;
         var form = new MultipartFormDataContent();
         foreach (var campo in campos) form.Add(new StringContent(campo.Value), campo.Key);
@@ -150,6 +205,7 @@ public class CrearPublicacionTests
     private sealed class ApiFactory : WebApplicationFactory<Program>
     {
         public MediaFake Media { get; } = new();
+        public bool RequerirMultimedia { get; init; }
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Testing");
@@ -161,6 +217,7 @@ public class CrearPublicacionTests
                 services.AddDbContext<ApplicationDbContext>(o => o.UseInMemoryDatabase(nombre));
                 services.RemoveAll<IMultimediaServicio>();
                 services.AddSingleton<IMultimediaServicio>(Media);
+                services.PostConfigure<OpcionesPublicacion>(opciones => opciones.RequerirMultimedia = RequerirMultimedia);
             });
         }
         public async Task Seed()
