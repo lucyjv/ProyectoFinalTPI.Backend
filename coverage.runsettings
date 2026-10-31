@@ -2,11 +2,26 @@
 <RunSettings>
   <DataCollectionRunSettings>
     <DataCollectors>
+      <DataCollector friendlyName="Code Coverage" uri="datacollector://Microsoft/CodeCoverage/2.0">
+        <Configuration>
+          <IncludeTestAssembly>false</IncludeTestAssembly>
+          <CodeCoverage>
+            <ModulePaths>
+              <Include>
+                <ModulePath>.*ProyectoFinalTPI\.Backend(\.[^\\/]*)?\.dll$</ModulePath>
+              </Include>
+              <Exclude>
+                <ModulePath>.*ProyectoFinalTPI\.Backend\.Tests[^\\/]*\.dll$</ModulePath>
+              </Exclude>
+            </ModulePaths>
+          </CodeCoverage>
+        </Configuration>
+      </DataCollector>
       <DataCollector friendlyName="XPlat Code Coverage">
         <Configuration>
           <Format>cobertura</Format>
           <Include>[ProyectoFinalTPI.Backend*]*</Include>
-          <Exclude>[ProyectoFinalTPI.Backend.Tests]*</Exclude>
+          <Exclude>[ProyectoFinalTPI.Backend.Tests*]*</Exclude>
           <IncludeTestAssembly>false</IncludeTestAssembly>
         </Configuration>
       </DataCollector>

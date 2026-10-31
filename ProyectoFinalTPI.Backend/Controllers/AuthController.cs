@@ -1,3 +1,4 @@
+using ProyectoFinalTPI.Backend.Mappings;
 using Swashbuckle.AspNetCore.Annotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -154,14 +155,7 @@ public class AuthController : ControllerBase
         if (!TryObtenerUsuarioId(out var usuarioId)) return Unauthorized();
         var usuario = await _usuarioRepositorio.ObtenerPorIdAsync(usuarioId);
         if (usuario is null) return Unauthorized();
-        return Ok(new UsuarioAutenticadoDto
-        {
-            UsuarioId = usuario.Id,
-            Username = usuario.Username,
-            FotoPerfilUrl = usuario.FotoPerfilUrl,
-            Email = usuario.Email,
-            EsAdmin = usuario.EsAdmin
-        });
+        return Ok(usuario.ToUsuarioAutenticadoDto());
     }
 
     private bool EsSolicitudDelFrontend() =>
