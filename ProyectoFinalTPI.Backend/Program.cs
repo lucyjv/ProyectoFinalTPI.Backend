@@ -175,6 +175,10 @@ if (builder.Configuration.GetValue<bool>("Redis:Habilitado"))
     });
     builder.Services.AddSingleton<ISesionFypRepositorio, SesionFypRedisRepositorio>();
     builder.Services.AddSingleton<CacheLecturasPublicas>();
+    builder.Services.AddSingleton<ICacheLecturasPublicas>(p => p.GetRequiredService<CacheLecturasPublicas>());
+    builder.Services.AddSingleton<IInvalidadorLecturasPublicas>(p => p.GetRequiredService<CacheLecturasPublicas>());
+    builder.Services.AddSingleton<IDetectorCambiosPublicos, DetectorCambiosPublicos>();
+    builder.Services.AddScoped<IOrigenLecturasPublicas, OrigenLecturasPublicas>();
     builder.Services.AddScoped<InvalidacionPublicaInterceptor>();
     builder.Services.AddScoped<IPerfilPublicoConsulta, PerfilPublicoConsulta>();
     builder.Services.AddScoped<IResumenPublicacionConsulta, ResumenPublicacionConsulta>();

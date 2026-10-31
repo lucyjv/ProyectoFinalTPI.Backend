@@ -14,6 +14,8 @@ Requiere el frontend en `../Web/ProyectoFinalTPI`. Ver [configuración y operaci
 
 ## Cobertura de tests
 
+`coverage.runsettings` limita la medición a los ensamblados `ProyectoFinalTPI.Backend*`, excluyendo el proyecto de tests y las bibliotecas externas. Lo utilizan `coverage.ps1` y CI. Para ejecutar manualmente: `dotnet test --settings coverage.runsettings --collect:"XPlat Code Coverage"`. En Visual Studio se puede seleccionar desde Test > Configure Run Settings > Select Solution Wide runsettings File. Si se utiliza otra extensión para mostrar cobertura, configurar ese mismo archivo en la extensión. Volver a generar el informe después de cambiar filtros: los informes anteriores conservan sus resultados.
+
 Coverlet recolecta la cobertura y ReportGenerator genera un informe HTML. Desde la raíz:
 
 ```powershell

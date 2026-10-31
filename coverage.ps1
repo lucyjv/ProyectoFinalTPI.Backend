@@ -4,7 +4,7 @@ $ErrorActionPreference = 'Stop'
 Push-Location $PSScriptRoot
 try {
     $runDirectory = Join-Path 'TestResults' ([Guid]::NewGuid().ToString())
-    $testArguments = @('test', 'ProyectoFinalTPI.Backend.Tests/ProyectoFinalTPI.Backend.Tests.csproj', '--collect:XPlat Code Coverage', '--results-directory', $runDirectory)
+    $testArguments = @('test', 'ProyectoFinalTPI.Backend.Tests/ProyectoFinalTPI.Backend.Tests.csproj', '--settings', 'coverage.runsettings', '--collect:XPlat Code Coverage', '--results-directory', $runDirectory)
     if ($Filter) { $testArguments += @('--filter', $Filter) }
     & dotnet @testArguments
     $testExitCode = $LASTEXITCODE
