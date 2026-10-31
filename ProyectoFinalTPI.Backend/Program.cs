@@ -281,6 +281,16 @@ builder.Services.AddSwaggerGen(options =>
 
 var app = builder.Build();
 
+// Inicialización explícita del entorno local de Compose, antes de iniciar workers o HTTP.
+if (args.Contains("--initialize-docker"))
+{
+    if (!app.Environment.IsDevelopment())
+        throw new InvalidOperationException("--initialize-docker requiere el entorno Development.");
+    await ProyectoFinalTPI.Backend.DockerInitializer.EjecutarAsync(app.Services, app.Environment);
+    await app.DisposeAsync();
+    return;
+}
+
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
@@ -299,7 +309,7 @@ if (!app.Environment.IsDevelopment())
 {
     app.UseHttpsRedirection();
 }
-if (app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment() && builder.Configuration.GetValue("Seed:Habilitado", true))
 {
     ProyectoFinalTPI.Backend.DataSeeder.Seed(app.Services, app.Environment);
 }
