@@ -1,5 +1,17 @@
 # ProyectoFinalTPI.Backend
 
+## Frontend, API y bases con Docker
+
+Desde esta carpeta, con Docker Desktop iniciado:
+
+```powershell
+docker compose up --build -d
+```
+
+Aplicación en http://localhost:3001 y Swagger en http://localhost:5199/swagger.
+Crea PostgreSQL/PostGIS y Neo4j propios, aplica migraciones y carga datos de demostración.
+Requiere el frontend en `../Web/ProyectoFinalTPI`. Ver [configuración y operación](docs/DOCKER.md).
+
 ## Cobertura de tests
 
 Coverlet recolecta la cobertura y ReportGenerator genera un informe HTML. Desde la raíz:
