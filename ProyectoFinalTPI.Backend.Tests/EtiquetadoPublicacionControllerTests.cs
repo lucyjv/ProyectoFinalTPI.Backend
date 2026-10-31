@@ -1,9 +1,9 @@
 using System.Net;
 using System.Text.Encodings.Web;
 using System.Text.Json;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.AspNetCore.Mvc;
+using Moq;
 using ProyectoFinalTPI.Backend.Controllers;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Requests.Publicaciones;
@@ -18,139 +18,156 @@ public class EtiquetadoPublicacionControllerTests
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
     };
 
+    private readonly Mock<IPublicacionServicio> _publicacionServicioMock = new();
+    private readonly Mock<IEtiquetadoPublicacionServicio> _etiquetadoServicioMock = new();
+
+    #region Etiquetado Exitoso
+
     [Fact]
-    public async Task Etiquetar_usuarios_nuevos_devuelve_201_y_cantidad_creada()
+    public async Task QueEtiquetarUsuariosNuevosDevuelvaCreatedYCantidadCreada()
     {
-        var servicio = new EtiquetadoFake { CantidadCreada = 2 };
-        var controller = CrearController(servicio);
+        //Arrange
+        var controller = CrearController();
+        _etiquetadoServicioMock
+            .Setup(s => s.EtiquetarUsuarios(25, It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(2);
+        var request = new EtiquetarUsuariosRequest { UsuariosIds = new List<int> { 10, 20 } };
 
-        var resultado = await MiddlewareTestHelper.Ejecutar(controller.HttpContext, async () => await controller.EtiquetarUsuarios(
-            25,
-            new EtiquetarUsuariosRequest { UsuariosIds = new List<int> { 10, 20 } },
-            CancellationToken.None));
+        //Act
+        var resultado = await MiddlewareTestHelper.Ejecutar(controller.HttpContext, async () =>
+            await controller.EtiquetarUsuarios(25, request, CancellationToken.None));
+
+        //Assert
         var respuesta = Assert.IsType<ObjectResult>(resultado);
-
         Assert.Equal((int)HttpStatusCode.Created, respuesta.StatusCode);
         var contenido = JsonSerializer.Serialize(respuesta.Value, OpcionesJson);
         Assert.Contains("Se etiquetaron los usuarios", contenido);
         Assert.Contains("\"cantidadEtiquetasNuevas\":2", contenido);
-        Assert.Equal(25, servicio.UltimaSolicitud.PublicacionId);
-        Assert.Equal(new[] { 10, 20 }, servicio.UltimaSolicitud.UsuariosIds);
+        _etiquetadoServicioMock.Verify(s => s.EtiquetarUsuarios(
+            25,
+            It.Is<IReadOnlyCollection<int>>(ids => ids.SequenceEqual(new[] { 10, 20 })),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task Etiquetas_existentes_devuelven_200()
+    public async Task QueEtiquetasExistentesDevuelvanOk()
     {
-        var controller = CrearController(new EtiquetadoFake { CantidadCreada = 0 });
+        //Arrange
+        var controller = CrearController();
+        _etiquetadoServicioMock
+            .Setup(s => s.EtiquetarUsuarios(25, It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(0);
+        var request = new EtiquetarUsuariosRequest { UsuariosIds = new List<int> { 10 } };
 
-        var resultado = await MiddlewareTestHelper.Ejecutar(controller.HttpContext, async () => await controller.EtiquetarUsuarios(
-            25,
-            new EtiquetarUsuariosRequest { UsuariosIds = new List<int> { 10 } },
-            CancellationToken.None));
+        //Act
+        var resultado = await MiddlewareTestHelper.Ejecutar(controller.HttpContext, async () =>
+            await controller.EtiquetarUsuarios(25, request, CancellationToken.None));
+
+        //Assert
         var respuesta = Assert.IsType<OkObjectResult>(resultado);
         var contenido = JsonSerializer.Serialize(respuesta.Value, OpcionesJson);
-
         Assert.Equal((int)HttpStatusCode.OK, respuesta.StatusCode);
         Assert.Contains("usuarios ya etiquetados en la publicacion", contenido);
         Assert.Contains("\"cantidadEtiquetasNuevas\":0", contenido);
+        _etiquetadoServicioMock.Verify(s => s.EtiquetarUsuarios(
+            25,
+            It.IsAny<IReadOnlyCollection<int>>(),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
+
+    #endregion
+
+    #region Validaciones y Manejo de Errores
 
     [Theory]
     [InlineData("Debe indicar al menos un usuario para etiquetar", 25, new int[] { })]
     [InlineData("Los IDs de usuarios deben ser mayores que cero.", 25, new int[] { 0 })]
     [InlineData("El ID de la publicación debe ser mayor que cero", 0, new int[] { 10 })]
-    public async Task Entrada_invalida_devuelve_400(
+    public async Task QueEntradaInvalidaDevuelvaBadRequest(
         string mensaje,
         int publicacionId,
         int[] usuariosIds)
     {
-        var servicio = new EtiquetadoFake
-        {
-            Error = new ArgumentException(mensaje)
-        };
-        var controller = CrearController(servicio);
+        //Arrange
+        var controller = CrearController();
+        _etiquetadoServicioMock
+            .Setup(s => s.EtiquetarUsuarios(publicacionId, It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ArgumentException(mensaje));
+        var request = new EtiquetarUsuariosRequest { UsuariosIds = usuariosIds.ToList() };
 
-        var resultado = await MiddlewareTestHelper.Ejecutar(controller.HttpContext, async () => await controller.EtiquetarUsuarios(
-            publicacionId,
-            new EtiquetarUsuariosRequest { UsuariosIds = usuariosIds.ToList() },
-            CancellationToken.None));
+        //Act
+        var resultado = await MiddlewareTestHelper.Ejecutar(controller.HttpContext, async () =>
+            await controller.EtiquetarUsuarios(publicacionId, request, CancellationToken.None));
+
+        //Assert
         var respuesta = Assert.IsType<ObjectResult>(resultado);
         Assert.IsType<ProblemDetails>(respuesta.Value);
-
         Assert.Equal((int)HttpStatusCode.BadRequest, respuesta.StatusCode);
         Assert.Contains(mensaje, JsonSerializer.Serialize(respuesta.Value, OpcionesJson));
-        Assert.True(servicio.FueInvocado);
+        _etiquetadoServicioMock.Verify(s => s.EtiquetarUsuarios(
+            publicacionId,
+            It.IsAny<IReadOnlyCollection<int>>(),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory]
     [InlineData("La publicación no existe o no está disponible.")]
     [InlineData("No se encontraron los usuarios con ID: 99.")]
-    public async Task Entidad_inexistente_devuelve_404_con_mensaje(string mensaje)
+    public async Task QueEntidadInexistenteDevuelvaNotFoundConMensaje(string mensaje)
     {
-        var controller = CrearController(new EtiquetadoFake
-        {
-            Error = new KeyNotFoundException(mensaje)
-        });
+        //Arrange
+        var controller = CrearController();
+        _etiquetadoServicioMock
+            .Setup(s => s.EtiquetarUsuarios(25, It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new KeyNotFoundException(mensaje));
+        var request = new EtiquetarUsuariosRequest { UsuariosIds = new List<int> { 10 } };
 
-        var resultado = await MiddlewareTestHelper.Ejecutar(controller.HttpContext, async () => await controller.EtiquetarUsuarios(
-            25,
-            new EtiquetarUsuariosRequest { UsuariosIds = new List<int> { 10 } },
-            CancellationToken.None));
+        //Act
+        var resultado = await MiddlewareTestHelper.Ejecutar(controller.HttpContext, async () =>
+            await controller.EtiquetarUsuarios(25, request, CancellationToken.None));
+
+        //Assert
         var respuesta = Assert.IsType<ObjectResult>(resultado);
         Assert.IsType<ProblemDetails>(respuesta.Value);
-
         Assert.Equal((int)HttpStatusCode.NotFound, respuesta.StatusCode);
         Assert.Contains(mensaje, JsonSerializer.Serialize(respuesta.Value, OpcionesJson));
     }
 
     [Fact]
-    public async Task Error_inesperado_devuelve_500_sin_exponer_detalles()
+    public async Task QueErrorInesperadoDevuelva500SinExponerDetalles()
     {
-        var controller = CrearController(new EtiquetadoFake
-        {
-            Error = new InvalidOperationException("detalle interno")
-        });
+        //Arrange
+        var controller = CrearController();
+        _etiquetadoServicioMock
+            .Setup(s => s.EtiquetarUsuarios(25, It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("detalle interno"));
+        var request = new EtiquetarUsuariosRequest { UsuariosIds = new List<int> { 10 } };
 
-        var resultado = await MiddlewareTestHelper.Ejecutar(controller.HttpContext, async () => await controller.EtiquetarUsuarios(
-            25,
-            new EtiquetarUsuariosRequest { UsuariosIds = new List<int> { 10 } },
-            CancellationToken.None));
+        //Act
+        var resultado = await MiddlewareTestHelper.Ejecutar(controller.HttpContext, async () =>
+            await controller.EtiquetarUsuarios(25, request, CancellationToken.None));
+
+        //Assert
         var respuesta = Assert.IsType<ObjectResult>(resultado);
         var contenido = JsonSerializer.Serialize(respuesta.Value, OpcionesJson);
-
         Assert.Equal((int)HttpStatusCode.InternalServerError, respuesta.StatusCode);
         Assert.Contains("No se pudo completar la operación", contenido);
         Assert.DoesNotContain("detalle interno", contenido);
     }
 
-    private static PublicacionesController CrearController(EtiquetadoFake servicio)
+    #endregion
+
+    #region Helpers Privados
+
+    private PublicacionesController CrearController()
     {
         return new PublicacionesController(
-            null!,
-            servicio)
+            _publicacionServicioMock.Object,
+            _etiquetadoServicioMock.Object)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
         };
     }
 
-    private sealed class EtiquetadoFake : IEtiquetadoPublicacionServicio
-    {
-        public int CantidadCreada { get; set; }
-        public Exception? Error { get; set; }
-        public (int PublicacionId, int[] UsuariosIds) UltimaSolicitud { get; private set; }
-        public bool FueInvocado { get; private set; }
-
-        public Task<int> EtiquetarUsuarios(
-            int publicacionId,
-            IReadOnlyCollection<int> usuariosIds,
-            CancellationToken cancellationToken = default)
-        {
-            FueInvocado = true;
-            UltimaSolicitud = (publicacionId, usuariosIds.ToArray());
-
-            return Error is null
-                ? Task.FromResult(CantidadCreada)
-                : Task.FromException<int>(Error);
-        }
-    }
+    #endregion
 }

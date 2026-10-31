@@ -13,15 +13,20 @@ namespace ProyectoFinalTPI.Backend.Tests;
 
 public class GruposControllerTests
 {
-    [Fact]
-    public async Task CrearDevuelveCreatedYUsaElUsuarioAutenticado()
-    {
-        var servicio = new Mock<IGrupoServicio>();
-        servicio.Setup(actual => actual.Crear(
-                It.IsAny<Grupo>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new GrupoResumenDto { Id = 12, Nombre = "Amigos" });
-        var controller = CrearController(servicio, 8);
+    private readonly Mock<IGrupoServicio> _grupoServicioMock = new();
 
+    #region Creación de Grupos
+
+    [Fact]
+    public async Task QueCrearDevuelvaCreatedYUsaUsuarioAutenticado()
+    {
+        //Arrange
+        _grupoServicioMock
+            .Setup(actual => actual.Crear(It.IsAny<Grupo>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new GrupoResumenDto { Id = 12, Nombre = "Amigos" });
+        var controller = CrearController(8);
+
+        //Act
         var resultado = await controller.Crear(new CrearGrupoRequest
         {
             Nombre = "Amigos",
@@ -29,96 +34,120 @@ public class GruposControllerTests
             Decada = 1990
         });
 
+        //Assert
         var creado = Assert.IsType<CreatedResult>(resultado);
         Assert.Equal("/api/grupos/12", creado.Location);
-        servicio.Verify(actual => actual.Crear(
+        _grupoServicioMock.Verify(actual => actual.Crear(
             It.Is<Grupo>(grupo => grupo.CreadorId == 8),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task CrearSinAutenticacionDevuelveUnauthorizedYNoLlamaAlServicio()
+    public async Task QueCrearSinAutenticacionDevuelvaUnauthorizedYNoLlameAlServicio()
     {
-        var servicio = new Mock<IGrupoServicio>();
-        var controller = CrearController(servicio);
+        //Arrange
+        var controller = CrearController(null);
 
+        //Act
         var resultado = await controller.Crear(new CrearGrupoRequest { Nombre = "Amigos", Decada = 1990 });
 
+        //Assert
         Assert.IsType<UnauthorizedResult>(resultado);
-        servicio.Verify(actual => actual.Crear(
+        _grupoServicioMock.Verify(actual => actual.Crear(
             It.IsAny<Grupo>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    [Fact]
-    public async Task UnirseUsaElIdDelTokenSinRecibirUsuarioEnElCuerpo()
-    {
-        var servicio = new Mock<IGrupoServicio>();
-        var controller = CrearController(servicio, 21);
+    #endregion
 
+    #region Membresía y Expulsión
+
+    [Fact]
+    public async Task QueUnirseUseElIdDelTokenSinRecibirUsuarioEnElCuerpo()
+    {
+        //Arrange
+        var controller = CrearController(21);
+
+        //Act
         var resultado = await controller.Unirse(4);
 
+        //Assert
         Assert.IsType<NoContentResult>(resultado);
-        servicio.Verify(actual => actual.Unirse(
+        _grupoServicioMock.Verify(actual => actual.Unirse(
             4, 21, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task ExpulsarEnviaCreadorAutenticadoEIntegranteDeLaRuta()
+    public async Task QueExpulsarEnvieCreadorAutenticadoEIntegranteDeLaRuta()
     {
-        var servicio = new Mock<IGrupoServicio>();
-        var controller = CrearController(servicio, 10);
+        //Arrange
+        var controller = CrearController(10);
 
+        //Act
         var resultado = await controller.Expulsar(4, 33);
 
+        //Assert
         Assert.IsType<NoContentResult>(resultado);
-        servicio.Verify(actual => actual.Expulsar(
+        _grupoServicioMock.Verify(actual => actual.Expulsar(
             4, 10, 33, It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    [Fact]
-    public async Task ListadoPublicoPermiteUsuarioAnonimo()
-    {
-        var servicio = new Mock<IGrupoServicio>();
-        servicio.Setup(actual => actual.ObtenerTodos(
-                null, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new GrupoResumenDto { Id = 1, Nombre = "Publico" }]);
-        var controller = CrearController(servicio);
+    #endregion
 
+    #region Listado y Búsqueda
+
+    [Fact]
+    public async Task QueListadoPublicoPermitaUsuarioAnonimo()
+    {
+        //Arrange
+        _grupoServicioMock
+            .Setup(actual => actual.ObtenerTodos(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new GrupoResumenDto { Id = 1, Nombre = "Publico" }]);
+        var controller = CrearController(null);
+
+        //Act
         var resultado = await controller.ObtenerTodos();
 
+        //Assert
         var ok = Assert.IsType<OkObjectResult>(resultado.Result);
         var grupos = Assert.IsAssignableFrom<IReadOnlyList<GrupoResumenDto>>(ok.Value);
         Assert.Single(grupos);
+        _grupoServicioMock.Verify(actual => actual.ObtenerTodos(null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task BuscarEsPublicoYEnviaTextoLimiteYUsuarioAlServicio()
+    public async Task QueBuscarSeaPublicoYEnvieTextoLimiteYUsuarioAlServicio()
     {
-        var servicio = new Mock<IGrupoServicio>();
-        servicio.Setup(actual => actual.Buscar(
-                "viajes", 10, 21, It.IsAny<CancellationToken>()))
+        //Arrange
+        _grupoServicioMock
+            .Setup(actual => actual.Buscar("viajes", 10, 21, It.IsAny<CancellationToken>()))
             .ReturnsAsync([new GrupoResumenDto { Id = 3, Nombre = "Viajes" }]);
-        var controller = CrearController(servicio, 21);
+        var controller = CrearController(21);
 
+        //Act
         var resultado = await controller.Buscar(new BuscarGruposRequest
         {
             Texto = "viajes",
             Limite = 10
         });
 
+        //Assert
         var ok = Assert.IsType<OkObjectResult>(resultado.Result);
         var grupos = Assert.IsAssignableFrom<IReadOnlyList<GrupoResumenDto>>(ok.Value);
         Assert.Single(grupos);
-        servicio.Verify(actual => actual.Buscar(
+        _grupoServicioMock.Verify(actual => actual.Buscar(
             "viajes", 10, 21, It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    private static GruposController CrearController(Mock<IGrupoServicio> servicio, int? usuarioId = null)
+    #endregion
+
+    #region Helpers Privados
+
+    private GruposController CrearController(int? usuarioId)
     {
         var claims = usuarioId.HasValue
             ? new[] { new Claim(ClaimTypes.NameIdentifier, usuarioId.Value.ToString()) }
             : Array.Empty<Claim>();
-        var controller = new GruposController(servicio.Object)
+        return new GruposController(_grupoServicioMock.Object)
         {
             ControllerContext = new ControllerContext
             {
@@ -129,6 +158,7 @@ public class GruposControllerTests
                 }
             }
         };
-        return controller;
     }
+
+    #endregion
 }

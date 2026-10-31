@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using Moq;
+using Moq.Protected;
 using ProyectoFinalTPI.Backend.Dtos.Momento;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Servicio;
@@ -12,27 +13,55 @@ namespace ProyectoFinalTPI.Backend.Tests;
 
 public class AnalizadorRecuerdoGeminiTests : IDisposable
 {
-    private readonly HttpFake _http = new();
-    private readonly Mock<ICatalogoAnalisisRepositorio> _catalogo = new();
+    private readonly Mock<HttpMessageHandler> _httpHandlerMock = new();
+    private readonly Mock<ICatalogoAnalisisRepositorio> _catalogoMock = new();
     private readonly OpcionesGemini _opciones = new() { Habilitado = true, ApiKey = "clave-ficticia-de-test" };
     private readonly ControlCuotaGemini _cuota = new(TimeProvider.System);
     private readonly HttpClient _cliente;
     private readonly AnalizadorRecuerdoGemini _analizador;
     private readonly EntradaAnalisisRecuerdoDto _entrada = new(10, 1, "México 86", "Argentina campeón del mundo 1986", new DateTime(1986, 6, 29));
-    private static PropuestaMomentoDto Propuesta(int id = 0, double confianza = 0.95) =>
-        new(id, "Argentina campeón del mundo 1986", 1986, ["México 86"], confianza, "Argentina campeón del mundo 1986");
+
+    private string _cuerpoRespuesta = "{}";
+    private HttpStatusCode _estadoRespuesta = HttpStatusCode.OK;
+    private string? _cuerpoEnviado;
+    private string? _claveEnviada;
+    private Uri? _urlEnviada;
+    private int _llamadasHttp;
 
     public AnalizadorRecuerdoGeminiTests()
     {
-        _catalogo.Setup(r => r.BuscarCandidatos(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
-        _cliente = new(_http);
-        _analizador = new(_cliente, _catalogo.Object, Options.Create(_opciones), _cuota);
+        _catalogoMock.Setup(r => r.BuscarCandidatos(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
+
+        _httpHandlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .Returns(async (HttpRequestMessage request, CancellationToken ct) =>
+            {
+                _llamadasHttp++;
+                _urlEnviada = request.RequestUri;
+                if (request.Headers.TryGetValues("x-goog-api-key", out var values))
+                {
+                    _claveEnviada = values.FirstOrDefault();
+                }
+                if (request.Content != null)
+                {
+                    _cuerpoEnviado = await request.Content.ReadAsStringAsync(ct);
+                }
+                var respuesta = new HttpResponseMessage(_estadoRespuesta)
+                {
+                    Content = new StringContent(_cuerpoRespuesta, Encoding.UTF8, "application/json")
+                };
+                respuesta.Headers.RetryAfter = new(TimeSpan.FromSeconds(120));
+                return respuesta;
+            });
+
+        _cliente = new HttpClient(_httpHandlerMock.Object);
+        _analizador = new AnalizadorRecuerdoGemini(_cliente, _catalogoMock.Object, Options.Create(_opciones), _cuota);
     }
 
-    private void Responder(params PropuestaMomentoDto[] propuestas) => _http.Cuerpo = JsonSerializer.Serialize(new
-    {
-        candidates = new[] { new { finishReason = "STOP", content = new { parts = new[] { new { text = JsonSerializer.Serialize(new { propuestas }, new JsonSerializerOptions(JsonSerializerDefaults.Web)) } } } } }
-    });
+    #region Configuración y Comunicación HTTP
 
     [Fact]
     public async Task QueSeEnvieLaClavePorHeaderYElRecuerdoComoDatosSeparadosDeLasInstrucciones()
@@ -44,11 +73,11 @@ public class AnalizadorRecuerdoGeminiTests : IDisposable
         var result = await _analizador.Analizar(_entrada, CancellationToken.None);
 
         //Assert
-        Assert.Equal(_opciones.ApiKey, _http.Clave);
-        Assert.Equal("generativelanguage.googleapis.com", _http.Url!.Host);
-        Assert.Empty(_http.Url.Query);
-        Assert.DoesNotContain(_opciones.ApiKey, _http.CuerpoEnviado!);
-        using var cuerpo = JsonDocument.Parse(_http.CuerpoEnviado!);
+        Assert.Equal(_opciones.ApiKey, _claveEnviada);
+        Assert.Equal("generativelanguage.googleapis.com", _urlEnviada!.Host);
+        Assert.Empty(_urlEnviada.Query);
+        Assert.DoesNotContain(_opciones.ApiKey, _cuerpoEnviado!);
+        using var cuerpo = JsonDocument.Parse(_cuerpoEnviado!);
         Assert.True(cuerpo.RootElement.TryGetProperty("systemInstruction", out _));
         Assert.Equal("application/json", cuerpo.RootElement.GetProperty("generationConfig").GetProperty("responseMimeType").GetString());
         Assert.Equal(1986, Assert.Single(result.Propuestas!).Anio);
@@ -56,10 +85,45 @@ public class AnalizadorRecuerdoGeminiTests : IDisposable
     }
 
     [Fact]
+    public async Task QueSePuedaCambiarElModeloPorConfiguracion()
+    {
+        //Arrange
+        _opciones.Modelo = "otro-modelo";
+        Responder();
+
+        //Act
+        await _analizador.Analizar(_entrada, CancellationToken.None);
+
+        //Assert
+        Assert.EndsWith("/otro-modelo:generateContent", _urlEnviada!.AbsolutePath);
+        Assert.Contains("otro-modelo", _analizador.Version);
+    }
+
+    [Fact]
+    public async Task QueNoSeLlameAlProveedorSinClaveNiCuandoSeCancelo()
+    {
+        //Arrange
+        _opciones.ApiKey = "";
+
+        //Act
+        var error = await Assert.ThrowsAsync<ErrorProveedorAnalisis>(() => _analizador.Analizar(_entrada, CancellationToken.None));
+        _opciones.ApiKey = "ficticia";
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _analizador.Analizar(_entrada, new CancellationToken(true)));
+
+        //Assert
+        Assert.True(error.Permanente);
+        Assert.Equal(0, _llamadasHttp);
+    }
+
+    #endregion
+
+    #region Catálogo y Umbrales de Confianza
+
+    [Fact]
     public async Task QueSePuedaElegirUnMomentoDelCatalogoSinCrearOtro()
     {
         //Arrange
-        _catalogo.Setup(r => r.BuscarCandidatos(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _catalogoMock.Setup(r => r.BuscarCandidatos(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([new CandidatoMomentoDto(25, "Argentina campeón 1986", null, null, ["México 86"])]);
         Responder(Propuesta(25));
 
@@ -68,7 +132,7 @@ public class AnalizadorRecuerdoGeminiTests : IDisposable
 
         //Assert
         Assert.Equal(25, Assert.Single(result.Propuestas!).MomentoId);
-        Assert.Contains("Argentina campe", _http.CuerpoEnviado!);
+        Assert.Contains("Argentina campe", _cuerpoEnviado!);
     }
 
     [Fact]
@@ -100,6 +164,10 @@ public class AnalizadorRecuerdoGeminiTests : IDisposable
         Assert.Equal(cantidad, result.Propuestas!.Count);
     }
 
+    #endregion
+
+    #region Validación y Respuestas del Modelo
+
     [Theory]
     [InlineData(0)]
     [InlineData(1)]
@@ -120,7 +188,7 @@ public class AnalizadorRecuerdoGeminiTests : IDisposable
         await Assert.ThrowsAsync<ArgumentException>(() => _analizador.Analizar(_entrada, CancellationToken.None));
 
         //Assert
-        Assert.Equal(1, _http.Llamadas);
+        Assert.Equal(1, _llamadasHttp);
     }
 
     [Theory]
@@ -131,14 +199,51 @@ public class AnalizadorRecuerdoGeminiTests : IDisposable
     public async Task QueUnaRespuestaIncompletaNoSeInterpreteComoAusenciaDeMomentos(string cuerpo)
     {
         //Arrange
-        _http.Cuerpo = cuerpo;
+        _cuerpoRespuesta = cuerpo;
 
         //Act
         await Assert.ThrowsAsync<ArgumentException>(() => _analizador.Analizar(_entrada, CancellationToken.None));
 
         //Assert
-        Assert.Equal(1, _http.Llamadas);
+        Assert.Equal(1, _llamadasHttp);
     }
+
+    [Theory]
+    [InlineData("confianza")]
+    [InlineData("momentoId")]
+    public async Task QueUnCampoObligatorioAusenteNoSeReemplacePorUnValorPredeterminado(string campo)
+    {
+        //Arrange
+        var propuesta = JsonSerializer.SerializeToNode(Propuesta(), new JsonSerializerOptions(JsonSerializerDefaults.Web))!.AsObject();
+        propuesta.Remove(campo);
+        _cuerpoRespuesta = JsonSerializer.Serialize(new { candidates = new[] { new
+        {
+            finishReason = "STOP", content = new { parts = new[] { new { text = JsonSerializer.Serialize(new { propuestas = new[] { propuesta } }) } } }
+        } } });
+
+        //Act
+        await Assert.ThrowsAsync<ArgumentException>(() => _analizador.Analizar(_entrada, CancellationToken.None));
+
+        //Assert
+        Assert.Equal(1, _llamadasHttp);
+    }
+
+    [Fact]
+    public async Task QueUnaRespuestaExcesivaNoSeCargueComoResultadoValido()
+    {
+        //Arrange
+        _cuerpoRespuesta = new string('x', 65537);
+
+        //Act
+        await Assert.ThrowsAsync<ArgumentException>(() => _analizador.Analizar(_entrada, CancellationToken.None));
+
+        //Assert
+        Assert.Equal(1, _llamadasHttp);
+    }
+
+    #endregion
+
+    #region Manejo de Errores y Excepciones
 
     [Theory]
     [InlineData(429, "proveedor_cuota", false)]
@@ -148,8 +253,8 @@ public class AnalizadorRecuerdoGeminiTests : IDisposable
     public async Task QueLosErroresDelProveedorSeanAcotadosYSinTextoPrivado(int status, string codigo, bool permanente)
     {
         //Arrange
-        _http.Estado = (HttpStatusCode)status;
-        _http.Cuerpo = "contenido privado que no debe guardarse";
+        _estadoRespuesta = (HttpStatusCode)status;
+        _cuerpoRespuesta = "contenido privado que no debe guardarse";
 
         //Act
         var result = await Assert.ThrowsAsync<ErrorProveedorAnalisis>(() => _analizador.Analizar(_entrada, CancellationToken.None));
@@ -161,87 +266,23 @@ public class AnalizadorRecuerdoGeminiTests : IDisposable
         if (status == 429) Assert.Equal(TimeSpan.FromSeconds(120), result.ReintentarEn);
     }
 
-    [Fact]
-    public async Task QueSePuedaCambiarElModeloPorConfiguracion()
+    #endregion
+
+    #region Métodos Auxiliares Privados
+
+    private void Responder(params PropuestaMomentoDto[] propuestas) => _cuerpoRespuesta = JsonSerializer.Serialize(new
     {
-        //Arrange
-        _opciones.Modelo = "otro-modelo";
-        Responder();
+        candidates = new[] { new { finishReason = "STOP", content = new { parts = new[] { new { text = JsonSerializer.Serialize(new { propuestas }, new JsonSerializerOptions(JsonSerializerDefaults.Web)) } } } } }
+    });
 
-        //Act
-        await _analizador.Analizar(_entrada, CancellationToken.None);
+    private static PropuestaMomentoDto Propuesta(int id = 0, double confianza = 0.95) =>
+        new(id, "Argentina campeón del mundo 1986", 1986, ["México 86"], confianza, "Argentina campeón del mundo 1986");
 
-        //Assert
-        Assert.EndsWith("/otro-modelo:generateContent", _http.Url!.AbsolutePath);
-        Assert.Contains("otro-modelo", _analizador.Version);
+    public void Dispose()
+    {
+        _cliente.Dispose();
+        _cuota.Dispose();
     }
 
-    [Theory]
-    [InlineData("confianza")]
-    [InlineData("momentoId")]
-    public async Task QueUnCampoObligatorioAusenteNoSeReemplacePorUnValorPredeterminado(string campo)
-    {
-        //Arrange
-        var propuesta = JsonSerializer.SerializeToNode(Propuesta(), new JsonSerializerOptions(JsonSerializerDefaults.Web))!.AsObject();
-        propuesta.Remove(campo);
-        _http.Cuerpo = JsonSerializer.Serialize(new { candidates = new[] { new
-        {
-            finishReason = "STOP", content = new { parts = new[] { new { text = JsonSerializer.Serialize(new { propuestas = new[] { propuesta } }) } } }
-        } } });
-
-        //Act
-        await Assert.ThrowsAsync<ArgumentException>(() => _analizador.Analizar(_entrada, CancellationToken.None));
-
-        //Assert
-        Assert.Equal(1, _http.Llamadas);
-    }
-
-    [Fact]
-    public async Task QueUnaRespuestaExcesivaNoSeCargueComoResultadoValido()
-    {
-        //Arrange
-        _http.Cuerpo = new string('x', 65537);
-
-        //Act
-        await Assert.ThrowsAsync<ArgumentException>(() => _analizador.Analizar(_entrada, CancellationToken.None));
-
-        //Assert
-        Assert.Equal(1, _http.Llamadas);
-    }
-
-    [Fact]
-    public async Task QueNoSeLlameAlProveedorSinClaveNiCuandoSeCancelo()
-    {
-        //Arrange
-        _opciones.ApiKey = "";
-
-        //Act
-        var error = await Assert.ThrowsAsync<ErrorProveedorAnalisis>(() => _analizador.Analizar(_entrada, CancellationToken.None));
-        _opciones.ApiKey = "ficticia";
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _analizador.Analizar(_entrada, new CancellationToken(true)));
-
-        //Assert
-        Assert.True(error.Permanente);
-        Assert.Equal(0, _http.Llamadas);
-    }
-
-    private sealed class HttpFake : HttpMessageHandler
-    {
-        public string Cuerpo = "{}";
-        public string? CuerpoEnviado, Clave;
-        public Uri? Url;
-        public int Llamadas;
-        public HttpStatusCode Estado = HttpStatusCode.OK;
-        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
-        {
-            Llamadas++; Url = request.RequestUri;
-            Clave = request.Headers.GetValues("x-goog-api-key").Single();
-            CuerpoEnviado = await request.Content!.ReadAsStringAsync(ct);
-            var respuesta = new HttpResponseMessage(Estado) { Content = new StringContent(Cuerpo, Encoding.UTF8, "application/json") };
-            respuesta.Headers.RetryAfter = new(TimeSpan.FromSeconds(120));
-            return respuesta;
-        }
-    }
-
-    public void Dispose() { _cliente.Dispose(); _cuota.Dispose(); }
+    #endregion
 }

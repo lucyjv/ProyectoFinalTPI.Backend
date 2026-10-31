@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
 using ProyectoFinalTPI.Backend.Dtos;
 using ProyectoFinalTPI.Backend.Dtos.Publicacion;
@@ -52,7 +52,7 @@ namespace ProyectoFinalTPI.Backend.Tests
         };
 
         [Fact]
-        public async Task FeedGeneralExcluyeIdsInteractuadosAntesDeAplicarElLimite()
+        public async Task QueFeedGeneralExcluyaIdsInteractuadosAntesDeAplicarElLimite()
         {
             _context.Usuarios.Add(usuario);
             _context.Lugares.Add(lugar);

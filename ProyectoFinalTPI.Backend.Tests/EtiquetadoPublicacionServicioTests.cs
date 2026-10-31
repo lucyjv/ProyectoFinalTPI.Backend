@@ -1,9 +1,6 @@
-using System.Reflection;
+using Moq;
 using Neo4j.Driver;
-using ProyectoFinalTPI.Backend.Dtos.Usuario;
-using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
-using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Servicio;
 using Xunit;
 
@@ -11,251 +8,186 @@ namespace ProyectoFinalTPI.Backend.Tests;
 
 public class EtiquetadoPublicacionServicioTests
 {
-    [Fact]
-    public async Task Etiquetar_usuarios_crea_relaciones_en_Neo4j_y_elimina_ids_duplicados()
+    private readonly Mock<IUsuarioRepositorio> _usuarioRepositorioMock = new();
+    private readonly Mock<IPublicacionRepositorio> _publicacionRepositorioMock = new();
+    private readonly Mock<IDriver> _neo4jDriverMock = new();
+    private readonly EtiquetadoPublicacionServicio _servicio;
+
+    public EtiquetadoPublicacionServicioTests()
     {
-        var repositorioUsuarios = new UsuarioRepositorioFake(10, 20);
-        var repositorioPublicaciones = CrearRepositorioPublicaciones(existe: true);
-        var neo4j = new Neo4jDriverFake(relacionesCreadas: 2);
-        var servicio = new EtiquetadoPublicacionServicio(
-            repositorioUsuarios,
-            repositorioPublicaciones,
-            neo4j.Driver);
+        _servicio = new EtiquetadoPublicacionServicio(
+            _usuarioRepositorioMock.Object,
+            _publicacionRepositorioMock.Object,
+            _neo4jDriverMock.Object);
+    }
 
-        var resultado = await servicio.EtiquetarUsuarios(25, new[] { 10, 10, 20 });
+    #region Etiquetado Exitoso
 
+    [Fact]
+    public async Task QueEtiquetarUsuariosCreeRelacionesEnNeo4jYElimineIdsDuplicados()
+    {
+        //Arrange
+        _publicacionRepositorioMock
+            .Setup(r => r.ExistePublicacionVisible(25, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        _usuarioRepositorioMock
+            .Setup(r => r.ObtenerIdsExistentesAsync(It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<int> { 10, 20 });
+
+        string? queryEjecutada = null;
+        object? parametrosEjecutados = null;
+        ConfigurarNeo4j(2, (q, p) =>
+        {
+            queryEjecutada = q;
+            parametrosEjecutados = p;
+        });
+
+        //Act
+        var resultado = await _servicio.EtiquetarUsuarios(25, new[] { 10, 10, 20 });
+
+        //Assert
         Assert.Equal(2, resultado);
-        Assert.Equal("25", neo4j.PublicacionId);
-        Assert.Equal(new[] { 10, 20 }, neo4j.UsuariosIds);
-        Assert.Contains("ETIQUETADO_EN", neo4j.Consulta);
-        Assert.Equal(1, neo4j.CantidadConsultas);
+        Assert.NotNull(queryEjecutada);
+        Assert.Contains("ETIQUETADO_EN", queryEjecutada);
+        Assert.NotNull(parametrosEjecutados);
+
+        var paramTipo = parametrosEjecutados.GetType();
+        var publicacionIdParam = paramTipo.GetProperty("publicacionId")?.GetValue(parametrosEjecutados)?.ToString();
+        var usuariosIdsParam = paramTipo.GetProperty("usuariosIds")?.GetValue(parametrosEjecutados) as IEnumerable<int>;
+
+        Assert.Equal("25", publicacionIdParam);
+        Assert.NotNull(usuariosIdsParam);
+        Assert.Equal(new[] { 10, 20 }, usuariosIdsParam);
     }
 
-    [Fact]
-    public async Task Publicacion_invalida_falla_antes_de_consultar_repositorios()
-    {
-        var usuarios = new UsuarioRepositorioFake(10);
-        var servicio = CrearServicio(usuarios, existePublicacion: true, new Neo4jDriverFake(0).Driver);
+    #endregion
 
+    #region Validaciones de Entrada
+
+    [Fact]
+    public async Task QuePublicacionInvalidaFalleAntesDeConsultarRepositorios()
+    {
+        //Arrange
+        var publicacionIdInvalido = 0;
+
+        //Act
         await Assert.ThrowsAsync<ArgumentException>(
-            () => servicio.EtiquetarUsuarios(0, new[] { 10 }));
+            () => _servicio.EtiquetarUsuarios(publicacionIdInvalido, new[] { 10 }));
 
-        Assert.Equal(0, usuarios.ConsultasIdsExistentes);
+        //Assert
+        _publicacionRepositorioMock.Verify(r => r.ExistePublicacionVisible(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        _usuarioRepositorioMock.Verify(r => r.ObtenerIdsExistentesAsync(It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()), Times.Never);
+        _neo4jDriverMock.VerifyNoOtherCalls();
     }
 
     [Fact]
-    public async Task Lista_vacia_falla_sin_acceder_a_los_repositorios()
+    public async Task QueListaVaciaFalleSinAccederALosRepositorios()
     {
-        var usuarios = new UsuarioRepositorioFake(10);
-        var servicio = CrearServicio(usuarios, existePublicacion: true, new Neo4jDriverFake(0).Driver);
+        //Arrange
+        var publicacionId = 25;
 
+        //Act
         await Assert.ThrowsAsync<ArgumentException>(
-            () => servicio.EtiquetarUsuarios(25, Array.Empty<int>()));
+            () => _servicio.EtiquetarUsuarios(publicacionId, Array.Empty<int>()));
 
-        Assert.Equal(0, usuarios.ConsultasIdsExistentes);
+        //Assert
+        _publicacionRepositorioMock.Verify(r => r.ExistePublicacionVisible(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        _usuarioRepositorioMock.Verify(r => r.ObtenerIdsExistentesAsync(It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()), Times.Never);
+        _neo4jDriverMock.VerifyNoOtherCalls();
     }
 
     [Fact]
-    public async Task ID_de_usuario_invalido_falla_antes_de_consultar_repositorios()
+    public async Task QueIdDeUsuarioInvalidoFalleAntesDeConsultarRepositorios()
     {
-        var usuarios = new UsuarioRepositorioFake(10);
-        var servicio = CrearServicio(usuarios, existePublicacion: true, new Neo4jDriverFake(0).Driver);
+        //Arrange
+        var publicacionId = 25;
 
+        //Act
         await Assert.ThrowsAsync<ArgumentException>(
-            () => servicio.EtiquetarUsuarios(25, new[] { 0 }));
+            () => _servicio.EtiquetarUsuarios(publicacionId, new[] { 0 }));
 
-        Assert.Equal(0, usuarios.ConsultasIdsExistentes);
+        //Assert
+        _publicacionRepositorioMock.Verify(r => r.ExistePublicacionVisible(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        _usuarioRepositorioMock.Verify(r => r.ObtenerIdsExistentesAsync(It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()), Times.Never);
+        _neo4jDriverMock.VerifyNoOtherCalls();
     }
 
-    [Fact]
-    public async Task Publicacion_inexistente_falla_sin_consultar_usuarios_ni_Neo4j()
-    {
-        var usuarios = new UsuarioRepositorioFake(10);
-        var neo4j = new Neo4jDriverFake(0);
-        var servicio = CrearServicio(usuarios, existePublicacion: false, neo4j.Driver);
+    #endregion
 
+    #region Entidades Inexistentes
+
+    [Fact]
+    public async Task QuePublicacionInexistenteFalleSinConsultarUsuariosNiNeo4j()
+    {
+        //Arrange
+        _publicacionRepositorioMock
+            .Setup(r => r.ExistePublicacionVisible(25, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        //Act
         await Assert.ThrowsAsync<KeyNotFoundException>(
-            () => servicio.EtiquetarUsuarios(25, new[] { 10 }));
+            () => _servicio.EtiquetarUsuarios(25, new[] { 10 }));
 
-        Assert.Equal(0, usuarios.ConsultasIdsExistentes);
-        Assert.Equal(0, neo4j.CantidadConsultas);
+        //Assert
+        _publicacionRepositorioMock.Verify(r => r.ExistePublicacionVisible(25, It.IsAny<CancellationToken>()), Times.Once);
+        _usuarioRepositorioMock.Verify(r => r.ObtenerIdsExistentesAsync(It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()), Times.Never);
+        _neo4jDriverMock.VerifyNoOtherCalls();
     }
 
     [Fact]
-    public async Task Usuario_inexistente_falla_sin_crear_relaciones_en_Neo4j()
+    public async Task QueUsuarioInexistenteFalleSinCrearRelacionesEnNeo4j()
     {
-        var usuarios = new UsuarioRepositorioFake(10);
-        var neo4j = new Neo4jDriverFake(0);
-        var servicio = CrearServicio(usuarios, existePublicacion: true, neo4j.Driver);
+        //Arrange
+        _publicacionRepositorioMock
+            .Setup(r => r.ExistePublicacionVisible(25, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
 
+        _usuarioRepositorioMock
+            .Setup(r => r.ObtenerIdsExistentesAsync(It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<int> { 10 });
+
+        //Act
         var exception = await Assert.ThrowsAsync<KeyNotFoundException>(
-            () => servicio.EtiquetarUsuarios(25, new[] { 10, 99 }));
+            () => _servicio.EtiquetarUsuarios(25, new[] { 10, 99 }));
 
+        //Assert
         Assert.Contains("99", exception.Message);
-        Assert.Equal(0, neo4j.CantidadConsultas);
+        _neo4jDriverMock.VerifyNoOtherCalls();
     }
 
-    private static EtiquetadoPublicacionServicio CrearServicio(
-        UsuarioRepositorioFake usuarios,
-        bool existePublicacion,
-        IDriver neo4jDriver)
+    #endregion
+
+    #region Helpers Privados
+
+    private void ConfigurarNeo4j(int relacionesCreadas, Action<string, object>? onRun = null)
     {
-        return new EtiquetadoPublicacionServicio(
-            usuarios,
-            CrearRepositorioPublicaciones(existePublicacion),
-            neo4jDriver);
+        var countersMock = new Mock<ICounters>();
+        countersMock.Setup(c => c.RelationshipsCreated).Returns(relacionesCreadas);
+
+        var summaryMock = new Mock<IResultSummary>();
+        summaryMock.Setup(s => s.Counters).Returns(countersMock.Object);
+
+        var cursorMock = new Mock<IResultCursor>();
+        cursorMock.Setup(c => c.ConsumeAsync()).ReturnsAsync(summaryMock.Object);
+
+        var runnerMock = new Mock<IAsyncQueryRunner>();
+        runnerMock
+            .Setup(r => r.RunAsync(It.IsAny<string>(), It.IsAny<object>()))
+            .Callback<string, object>((query, param) => onRun?.Invoke(query, param))
+            .ReturnsAsync(cursorMock.Object);
+
+        var sessionMock = new Mock<IAsyncSession>();
+        sessionMock
+            .Setup(s => s.ExecuteWriteAsync(
+                It.IsAny<Func<IAsyncQueryRunner, Task<int>>>(),
+                It.IsAny<Action<TransactionConfigBuilder>>()))
+            .Returns<Func<IAsyncQueryRunner, Task<int>>, Action<TransactionConfigBuilder>>((work, _) => work(runnerMock.Object));
+
+        _neo4jDriverMock
+            .Setup(d => d.AsyncSession())
+            .Returns(sessionMock.Object);
     }
 
-    private static IPublicacionRepositorio CrearRepositorioPublicaciones(bool existe)
-    {
-        return TestDispatchProxy<IPublicacionRepositorio>.Create((metodo, _) =>
-            metodo.Name == nameof(IPublicacionRepositorio.ExistePublicacionVisible)
-                ? Task.FromResult(existe)
-                : throw new NotSupportedException($"No se esperaba llamar a {metodo.Name}."));
-    }
-
-    private sealed class UsuarioRepositorioFake : IUsuarioRepositorio
-    {
-            public Task<Usuario_Interactivo?> ObtenerYUsuarioInteractivoPorIdAsync(int id) => Task.FromResult<Usuario_Interactivo?>(null);
-
-        private readonly HashSet<int> _idsExistentes;
-
-        public UsuarioRepositorioFake(params int[] idsExistentes)
-        {
-            _idsExistentes = idsExistentes.ToHashSet();
-        }
-
-        public int ConsultasIdsExistentes { get; private set; }
-
-        public Task<List<int>> ObtenerIdsExistentesAsync(
-            IReadOnlyCollection<int> ids,
-            CancellationToken cancellationToken = default)
-        {
-            ConsultasIdsExistentes++;
-            return Task.FromResult(ids.Where(_idsExistentes.Contains).ToList());
-        }
-
-        public Task<Usuario?> ObtenerPorIdAsync(int id) =>
-            Task.FromResult<Usuario?>(null);
-
-        public Task<bool> ExisteUsuario(int id, CancellationToken cancellationToken = default) =>
-            Task.FromResult(_idsExistentes.Contains(id));
-
-        public Task<List<AutorResumenDto>> ObtenerUsuariosPorIdsAsync(
-            IReadOnlyCollection<int> ids,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(new List<AutorResumenDto>());
-
-        public Task<Usuario?> ObtenerPorEmailAsync(string email, CancellationToken cancellationToken = default) =>
-            throw new NotImplementedException();
-
-        public Task<bool> ExistePorEmailAsync(string email, CancellationToken cancellationToken = default) =>
-            throw new NotImplementedException();
-
-        public Task<bool> ExistePorUsernameAsync(string username, CancellationToken cancellationToken = default) =>
-            throw new NotImplementedException();
-
-        public Task AgregarAsync(Usuario usuario, CancellationToken cancellationToken = default) =>
-            throw new NotImplementedException();
-
-        public Task ActualizarAsync(Usuario usuario, CancellationToken cancellationToken = default) =>
-            throw new NotImplementedException();
-
-        public Task<Usuario?> ObtenerPorUsernameAsync(string username, CancellationToken cancellationToken = default) =>
-            throw new NotImplementedException();
-
-        public Task<List<AutorResumenDto>> BuscarPorUsernameAsync(string texto, int limite, CancellationToken cancellationToken = default) =>
-            throw new NotImplementedException();
-
-        public Task<int> ContarPublicacionesVisiblesAsync(int usuarioId, CancellationToken cancellationToken = default) =>
-            Task.FromResult(0);
-    }
-
-    private sealed class Neo4jDriverFake
-    {
-        public Neo4jDriverFake(int relacionesCreadas)
-        {
-            var cursor = TestDispatchProxy<IResultCursor>.Create((metodo, _) =>
-                metodo.Name == nameof(IResultCursor.ConsumeAsync)
-                    ? Task.FromResult(CrearResumen(relacionesCreadas))
-                    : throw new NotSupportedException($"No se esperaba llamar a {metodo.Name}."));
-
-            var queryRunner = TestDispatchProxy<IAsyncQueryRunner>.Create((metodo, argumentos) =>
-            {
-                if (metodo.Name != nameof(IAsyncQueryRunner.RunAsync))
-                {
-                    throw new NotSupportedException($"No se esperaba llamar a {metodo.Name}.");
-                }
-
-                Consulta = (string)argumentos![0]!;
-                var parametros = argumentos[1]!;
-                var tipoParametros = parametros.GetType();
-                PublicacionId = tipoParametros.GetProperty("publicacionId")!
-                    .GetValue(parametros)!.ToString();
-                UsuariosIds = ((IEnumerable<int>)tipoParametros
-                    .GetProperty("usuariosIds")!
-                    .GetValue(parametros)!).ToArray();
-                CantidadConsultas++;
-
-                return Task.FromResult(cursor);
-            });
-
-            var session = TestDispatchProxy<IAsyncSession>.Create((metodo, argumentos) =>
-            {
-                if (metodo.Name == nameof(IAsyncSession.ExecuteWriteAsync))
-                {
-                    var callback = (Func<IAsyncQueryRunner, Task<int>>)argumentos![0]!;
-                    return callback(queryRunner);
-                }
-
-                if (metodo.Name == nameof(IAsyncDisposable.DisposeAsync))
-                {
-                    return ValueTask.CompletedTask;
-                }
-
-                throw new NotSupportedException($"No se esperaba llamar a {metodo.Name}.");
-            });
-
-            Driver = TestDispatchProxy<IDriver>.Create((metodo, _) =>
-                metodo.Name == nameof(IDriver.AsyncSession)
-                    ? session
-                    : throw new NotSupportedException($"No se esperaba llamar a {metodo.Name}."));
-        }
-
-        public IDriver Driver { get; }
-        public string Consulta { get; private set; } = string.Empty;
-        public string? PublicacionId { get; private set; }
-        public int[] UsuariosIds { get; private set; } = Array.Empty<int>();
-        public int CantidadConsultas { get; private set; }
-
-        private static IResultSummary CrearResumen(int relacionesCreadas)
-        {
-            var counters = TestDispatchProxy<ICounters>.Create((metodo, _) =>
-                metodo.Name == "get_RelationshipsCreated"
-                    ? relacionesCreadas
-                    : throw new NotSupportedException($"No se esperaba consultar {metodo.Name}."));
-
-            return TestDispatchProxy<IResultSummary>.Create((metodo, _) =>
-                metodo.Name == "get_Counters"
-                    ? counters
-                    : throw new NotSupportedException($"No se esperaba consultar {metodo.Name}."));
-        }
-    }
-}
-
-public class TestDispatchProxy<T> : DispatchProxy where T : class
-{
-    private Func<MethodInfo, object?[]?, object?>? _handler;
-
-    public static T Create(Func<MethodInfo, object?[]?, object?> handler)
-    {
-        var proxy = DispatchProxy.Create<T, TestDispatchProxy<T>>();
-        ((TestDispatchProxy<T>)(object)proxy)._handler = handler;
-        return proxy;
-    }
-
-    protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
-    {
-        return _handler!(targetMethod!, args);
-    }
+    #endregion
 }

@@ -8,26 +8,51 @@ namespace ProyectoFinalTPI.Backend.Tests;
 
 public class MomentoServicioTests
 {
-    private readonly MomentoRepositorioFake _repositorio = new();
-    private readonly Mock<IPublicacionRepositorio> _publicaciones = new(MockBehavior.Strict);
+    private readonly Mock<IMomentoRepositorio> _momentoRepositorioMock = new();
+    private readonly Mock<IPublicacionRepositorio> _publicacionRepositorioMock = new();
     private readonly MomentoServicio _servicio;
     private Publicacion? _publicacion = new() { Id = 10, UsuarioId = 7 };
 
     public MomentoServicioTests()
     {
-        _publicaciones.Setup(p => p.ObtenerPorId(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+        _publicacionRepositorioMock
+            .Setup(p => p.ObtenerPorId(It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .Returns((int id, CancellationToken ct) => Task.FromResult<Publicacion?>(_publicacion));
-        _servicio = new MomentoServicio(_repositorio, _publicaciones.Object);
+
+        _momentoRepositorioMock
+            .Setup(m => m.ObtenerPorId(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((int id, CancellationToken ct) => new Momento { Id = id, Nombre = "Mundial" });
+
+        _momentoRepositorioMock
+            .Setup(m => m.Crear(It.IsAny<Momento>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(25);
+
+        _momentoRepositorioMock
+            .Setup(m => m.GuardarAsociacion(It.IsAny<PublicacionMomento>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        _servicio = new MomentoServicio(_momentoRepositorioMock.Object, _publicacionRepositorioMock.Object);
     }
+
+    #region Creación de Momentos y Validaciones
 
     [Fact]
     public async Task QueSePuedaCrearUnMomentoConNombreDescripcionYFechas()
     {
         //Arrange
+        Momento? momentoCreado = null;
+        _momentoRepositorioMock
+            .Setup(m => m.Crear(It.IsAny<Momento>(), It.IsAny<CancellationToken>()))
+            .Callback<Momento, CancellationToken>((m, _) => momentoCreado = m)
+            .ReturnsAsync(25);
+
         var momento = new Momento
         {
-            Nombre = "  Mundial de México 1986  ", Descripcion = "  Un acontecimiento colectivo  ",
-            FechaInicio = new DateOnly(1986, 5, 31), FechaFin = new DateOnly(1986, 6, 29), MomentoPadreId = 2
+            Nombre = "  Mundial de México 1986  ",
+            Descripcion = "  Un acontecimiento colectivo  ",
+            FechaInicio = new DateOnly(1986, 5, 31),
+            FechaFin = new DateOnly(1986, 6, 29),
+            MomentoPadreId = 2
         };
         var desde = DateTime.UtcNow;
         using var cancelacion = new CancellationTokenSource();
@@ -37,14 +62,14 @@ public class MomentoServicioTests
 
         //Assert
         Assert.Equal(25, result);
-        Assert.NotNull(_repositorio.Creado);
-        Assert.Equal("Mundial de México 1986", _repositorio.Creado.Nombre);
-        Assert.Equal("Un acontecimiento colectivo", _repositorio.Creado.Descripcion);
-        Assert.Equal(momento.FechaInicio, _repositorio.Creado.FechaInicio);
-        Assert.Equal(momento.FechaFin, _repositorio.Creado.FechaFin);
-        Assert.Equal(2, _repositorio.Creado.MomentoPadreId);
-        Assert.InRange(_repositorio.Creado.FechaCreacion, desde, DateTime.UtcNow);
-        Assert.Equal(cancelacion.Token, _repositorio.TokenRecibido);
+        Assert.NotNull(momentoCreado);
+        Assert.Equal("Mundial de México 1986", momentoCreado.Nombre);
+        Assert.Equal("Un acontecimiento colectivo", momentoCreado.Descripcion);
+        Assert.Equal(momento.FechaInicio, momentoCreado.FechaInicio);
+        Assert.Equal(momento.FechaFin, momentoCreado.FechaFin);
+        Assert.Equal(2, momentoCreado.MomentoPadreId);
+        Assert.InRange(momentoCreado.FechaCreacion, desde, DateTime.UtcNow);
+        _momentoRepositorioMock.Verify(m => m.Crear(It.IsAny<Momento>(), cancelacion.Token), Times.Once);
     }
 
     [Theory]
@@ -61,7 +86,7 @@ public class MomentoServicioTests
 
         //Assert
         Assert.Contains("nombre", result.Message);
-        Assert.Null(_repositorio.Creado);
+        _momentoRepositorioMock.Verify(m => m.Crear(It.IsAny<Momento>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Theory]
@@ -70,33 +95,48 @@ public class MomentoServicioTests
     public async Task QueNoSeCreeUnMomentoConTextosDemasiadoLargos(bool nombre)
     {
         //Arrange
-        var momento = new Momento { Nombre = nombre ? new string('a', 201) : "Mundial", Descripcion = nombre ? "" : new string('a', 2001) };
+        var momento = new Momento
+        {
+            Nombre = nombre ? new string('a', 201) : "Mundial",
+            Descripcion = nombre ? "" : new string('a', 2001)
+        };
 
         //Act
         await Assert.ThrowsAsync<ArgumentException>(() => _servicio.Crear(momento));
 
         //Assert
-        Assert.Null(_repositorio.Creado);
+        _momentoRepositorioMock.Verify(m => m.Crear(It.IsAny<Momento>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
     public async Task QueNoSeCreeUnMomentoConFechasInvertidas()
     {
         //Arrange
-        var momento = new Momento { Nombre = "Mundial", FechaInicio = new DateOnly(1986, 6, 29), FechaFin = new DateOnly(1986, 5, 31) };
+        var momento = new Momento
+        {
+            Nombre = "Mundial",
+            FechaInicio = new DateOnly(1986, 6, 29),
+            FechaFin = new DateOnly(1986, 5, 31)
+        };
 
         //Act
         var result = await Assert.ThrowsAsync<ArgumentException>(() => _servicio.Crear(momento));
 
         //Assert
         Assert.Contains("fecha", result.Message);
-        Assert.Null(_repositorio.Creado);
+        _momentoRepositorioMock.Verify(m => m.Crear(It.IsAny<Momento>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
     public async Task QueSePermitanFechasIgualesOAusentes()
     {
         //Arrange
+        Momento? ultimoMomentoCreado = null;
+        _momentoRepositorioMock
+            .Setup(m => m.Crear(It.IsAny<Momento>(), It.IsAny<CancellationToken>()))
+            .Callback<Momento, CancellationToken>((m, _) => ultimoMomentoCreado = m)
+            .ReturnsAsync(25);
+
         var fecha = new DateOnly(1986, 6, 29);
         var momento = new Momento { Nombre = "La final", FechaInicio = fecha, FechaFin = fecha };
 
@@ -105,10 +145,10 @@ public class MomentoServicioTests
         await _servicio.Crear(new Momento { Nombre = "Sin fecha precisa" });
 
         //Assert
-        Assert.NotNull(_repositorio.Creado);
-        Assert.Null(_repositorio.Creado.FechaInicio);
-        Assert.Null(_repositorio.Creado.FechaFin);
-        Assert.Equal(2, _repositorio.Creaciones);
+        Assert.NotNull(ultimoMomentoCreado);
+        Assert.Null(ultimoMomentoCreado.FechaInicio);
+        Assert.Null(ultimoMomentoCreado.FechaFin);
+        _momentoRepositorioMock.Verify(m => m.Crear(It.IsAny<Momento>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 
     [Fact]
@@ -122,8 +162,12 @@ public class MomentoServicioTests
 
         //Assert
         Assert.Contains("anidadas", result.Message);
-        Assert.Null(_repositorio.Creado);
+        _momentoRepositorioMock.Verify(m => m.Crear(It.IsAny<Momento>(), It.IsAny<CancellationToken>()), Times.Never);
     }
+
+    #endregion
+
+    #region Modificación de Jerarquía y Alias
 
     [Theory]
     [InlineData(0, 2)]
@@ -138,7 +182,7 @@ public class MomentoServicioTests
         await Assert.ThrowsAsync<ArgumentException>(() => _servicio.CambiarPadre(id, padre));
 
         //Assert
-        Assert.Null(_repositorio.IdCambioPadre);
+        _momentoRepositorioMock.Verify(m => m.CambiarPadre(It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Theory]
@@ -153,25 +197,29 @@ public class MomentoServicioTests
         await _servicio.CambiarPadre(1, padreId, cancelacion.Token);
 
         //Assert
-        Assert.Equal(1, _repositorio.IdCambioPadre);
-        Assert.Equal(padreId, _repositorio.PadreSolicitado);
-        Assert.Equal(cancelacion.Token, _repositorio.TokenRecibido);
+        _momentoRepositorioMock.Verify(m => m.CambiarPadre(1, padreId, cancelacion.Token), Times.Once);
     }
 
     [Fact]
     public async Task QueSeNormalicenTildesMayusculasYEspaciosDeLosAlias()
     {
         //Arrange
+        MomentoAlias? aliasAgregado = null;
+        _momentoRepositorioMock
+            .Setup(m => m.AgregarAlias(It.IsAny<MomentoAlias>(), It.IsAny<CancellationToken>()))
+            .Callback<MomentoAlias, CancellationToken>((a, _) => aliasAgregado = a)
+            .Returns(Task.CompletedTask);
         var texto = "  MÉXICO   86  ";
 
         //Act
         await _servicio.AgregarAlias(1, texto);
 
         //Assert
-        Assert.NotNull(_repositorio.AliasAgregado);
-        Assert.Equal(1, _repositorio.AliasAgregado.MomentoId);
-        Assert.Equal("MÉXICO   86", _repositorio.AliasAgregado.Texto);
-        Assert.Equal("mexico 86", _repositorio.AliasAgregado.TextoNormalizado);
+        Assert.NotNull(aliasAgregado);
+        Assert.Equal(1, aliasAgregado.MomentoId);
+        Assert.Equal("MÉXICO   86", aliasAgregado.Texto);
+        Assert.Equal("mexico 86", aliasAgregado.TextoNormalizado);
+        _momentoRepositorioMock.Verify(m => m.AgregarAlias(It.IsAny<MomentoAlias>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory]
@@ -187,13 +235,22 @@ public class MomentoServicioTests
         await Assert.ThrowsAsync<ArgumentException>(() => _servicio.AgregarAlias(id, texto!));
 
         //Assert
-        Assert.Null(_repositorio.AliasAgregado);
+        _momentoRepositorioMock.Verify(m => m.AgregarAlias(It.IsAny<MomentoAlias>(), It.IsAny<CancellationToken>()), Times.Never);
     }
+
+    #endregion
+
+    #region Asociación Automática de Momentos
 
     [Fact]
     public async Task QueSePuedaAsociarAutomaticamenteUnRecuerdoAUnMomento()
     {
         //Arrange
+        PublicacionMomento? asociacionGuardada = null;
+        _momentoRepositorioMock
+            .Setup(m => m.GuardarAsociacion(It.IsAny<PublicacionMomento>(), It.IsAny<CancellationToken>()))
+            .Callback<PublicacionMomento, CancellationToken>((a, _) => asociacionGuardada = a)
+            .ReturnsAsync(true);
         using var cancelacion = new CancellationTokenSource();
 
         //Act
@@ -201,21 +258,23 @@ public class MomentoServicioTests
 
         //Assert
         Assert.True(result);
-        Assert.NotNull(_repositorio.AsociacionGuardada);
-        Assert.Equal(10, _repositorio.AsociacionGuardada.PublicacionId);
-        Assert.Equal(1, _repositorio.AsociacionGuardada.MomentoId);
-        Assert.Equal(OrigenAsociacionMomento.Automatico, _repositorio.AsociacionGuardada.Origen);
-        Assert.Equal(EstadoAsociacionMomento.Activo, _repositorio.AsociacionGuardada.Estado);
-        Assert.Equal(0.95, _repositorio.AsociacionGuardada.Confianza);
-        Assert.Equal("v1", _repositorio.AsociacionGuardada.VersionAnalisis);
-        Assert.Equal(cancelacion.Token, _repositorio.TokenRecibido);
+        Assert.NotNull(asociacionGuardada);
+        Assert.Equal(10, asociacionGuardada.PublicacionId);
+        Assert.Equal(1, asociacionGuardada.MomentoId);
+        Assert.Equal(OrigenAsociacionMomento.Automatico, asociacionGuardada.Origen);
+        Assert.Equal(EstadoAsociacionMomento.Activo, asociacionGuardada.Estado);
+        Assert.Equal(0.95, asociacionGuardada.Confianza);
+        Assert.Equal("v1", asociacionGuardada.VersionAnalisis);
+        _momentoRepositorioMock.Verify(m => m.GuardarAsociacion(It.IsAny<PublicacionMomento>(), cancelacion.Token), Times.Once);
     }
 
     [Fact]
     public async Task QueSeInformeCuandoUnaDecisionDelAutorImpideLaAsociacionAutomatica()
     {
         //Arrange
-        _repositorio.GuardadoPermitido = false;
+        _momentoRepositorioMock
+            .Setup(m => m.GuardarAsociacion(It.IsAny<PublicacionMomento>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
 
         //Act
         var result = await _servicio.AsociarAutomaticamente(10, 1, 0.9, "v1");
@@ -238,8 +297,8 @@ public class MomentoServicioTests
         await Assert.ThrowsAsync<ArgumentException>(() => _servicio.AsociarAutomaticamente(10, 1, confianza, version));
 
         //Assert
-        Assert.Null(_repositorio.AsociacionGuardada);
-        _publicaciones.Verify(p => p.ObtenerPorId(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        _momentoRepositorioMock.Verify(m => m.GuardarAsociacion(It.IsAny<PublicacionMomento>(), It.IsAny<CancellationToken>()), Times.Never);
+        _publicacionRepositorioMock.Verify(p => p.ObtenerPorId(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Theory]
@@ -248,6 +307,11 @@ public class MomentoServicioTests
     public async Task QueSeAceptenLosLimitesDeConfianza(double confianza)
     {
         //Arrange
+        PublicacionMomento? asociacionGuardada = null;
+        _momentoRepositorioMock
+            .Setup(m => m.GuardarAsociacion(It.IsAny<PublicacionMomento>(), It.IsAny<CancellationToken>()))
+            .Callback<PublicacionMomento, CancellationToken>((a, _) => asociacionGuardada = a)
+            .ReturnsAsync(true);
         var version = "v1";
 
         //Act
@@ -255,21 +319,24 @@ public class MomentoServicioTests
 
         //Assert
         Assert.True(result);
-        Assert.Equal(confianza, _repositorio.AsociacionGuardada!.Confianza);
+        Assert.NotNull(asociacionGuardada);
+        Assert.Equal(confianza, asociacionGuardada.Confianza);
     }
 
     [Fact]
     public async Task QueNoSeAsocieUnRecuerdoAUnMomentoInexistente()
     {
         //Arrange
-        _repositorio.MomentoDisponible = null;
+        _momentoRepositorioMock
+            .Setup(m => m.ObtenerPorId(99, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Momento?)null);
 
         //Act
         var result = await Assert.ThrowsAsync<KeyNotFoundException>(() => _servicio.AsociarAutomaticamente(10, 99, 0.9, "v1"));
 
         //Assert
         Assert.Contains("momento", result.Message);
-        Assert.Null(_repositorio.AsociacionGuardada);
+        _momentoRepositorioMock.Verify(m => m.GuardarAsociacion(It.IsAny<PublicacionMomento>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Theory]
@@ -284,7 +351,7 @@ public class MomentoServicioTests
         await Assert.ThrowsAsync<KeyNotFoundException>(() => _servicio.AsociarAutomaticamente(10, 1, 0.9, "v1"));
 
         //Assert
-        Assert.Null(_repositorio.AsociacionGuardada);
+        _momentoRepositorioMock.Verify(m => m.GuardarAsociacion(It.IsAny<PublicacionMomento>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -298,25 +365,33 @@ public class MomentoServicioTests
 
         //Assert
         Assert.Contains("original", result.Message);
-        Assert.Null(_repositorio.AsociacionGuardada);
+        _momentoRepositorioMock.Verify(m => m.GuardarAsociacion(It.IsAny<PublicacionMomento>(), It.IsAny<CancellationToken>()), Times.Never);
     }
+
+    #endregion
+
+    #region Asociación por Autor y Consultas
 
     [Fact]
     public async Task QueElAutorPuedaAsociarSuRecuerdoSinConfianzaDeIA()
     {
         //Arrange
+        PublicacionMomento? asociacionGuardada = null;
+        _momentoRepositorioMock
+            .Setup(m => m.GuardarAsociacion(It.IsAny<PublicacionMomento>(), It.IsAny<CancellationToken>()))
+            .Callback<PublicacionMomento, CancellationToken>((a, _) => asociacionGuardada = a)
+            .ReturnsAsync(true);
         var usuarioId = 7;
 
         //Act
         await _servicio.AsociarPorAutor(10, 1, usuarioId);
 
         //Assert
-        var result = _repositorio.AsociacionGuardada;
-        Assert.NotNull(result);
-        Assert.Equal(OrigenAsociacionMomento.Autor, result.Origen);
-        Assert.Equal(EstadoAsociacionMomento.Activo, result.Estado);
-        Assert.Null(result.Confianza);
-        Assert.Null(result.VersionAnalisis);
+        Assert.NotNull(asociacionGuardada);
+        Assert.Equal(OrigenAsociacionMomento.Autor, asociacionGuardada.Origen);
+        Assert.Equal(EstadoAsociacionMomento.Activo, asociacionGuardada.Estado);
+        Assert.Null(asociacionGuardada.Confianza);
+        Assert.Null(asociacionGuardada.VersionAnalisis);
     }
 
     [Fact]
@@ -329,61 +404,25 @@ public class MomentoServicioTests
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => _servicio.AsociarPorAutor(10, 1, otroUsuario));
 
         //Assert
-        Assert.Null(_repositorio.AsociacionGuardada);
+        _momentoRepositorioMock.Verify(m => m.GuardarAsociacion(It.IsAny<PublicacionMomento>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
     public async Task QueSePuedanConsultarLosMomentosDeUnRecuerdoVisible()
     {
         //Arrange
-        _repositorio.MomentosPublicacion.Add(new Momento { Id = 1, Nombre = "Mundial" });
+        var momentos = new List<Momento> { new() { Id = 1, Nombre = "Mundial" } };
+        _momentoRepositorioMock
+            .Setup(m => m.ObtenerMomentosPublicacion(10, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(momentos);
 
         //Act
         var result = await _servicio.ObtenerMomentosPublicacion(10);
 
         //Assert
         Assert.Equal(1, Assert.Single(result).Id);
-        Assert.Equal(10, _repositorio.PublicacionConsultada);
+        _momentoRepositorioMock.Verify(m => m.ObtenerMomentosPublicacion(10, It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    private sealed class MomentoRepositorioFake : IMomentoRepositorio
-    {
-        public Momento? Creado, MomentoDisponible = new() { Id = 1, Nombre = "Mundial" };
-        public int Creaciones;
-        public int? IdCambioPadre, PadreSolicitado, PublicacionConsultada;
-        public MomentoAlias? AliasAgregado;
-        public PublicacionMomento? AsociacionGuardada;
-        public bool GuardadoPermitido = true;
-        public CancellationToken TokenRecibido;
-        public List<Momento> MomentosPublicacion = new();
-
-        public Task<int> Crear(Momento momento, CancellationToken ct = default)
-        {
-            Creado = momento; Creaciones++; TokenRecibido = ct;
-            return Task.FromResult(25);
-        }
-        public Task<Momento?> ObtenerPorId(int id, CancellationToken ct = default) => Task.FromResult(MomentoDisponible);
-        public Task<List<Momento>> ObtenerHijos(int id, CancellationToken ct = default) => Task.FromResult(new List<Momento>());
-        public Task CambiarPadre(int id, int? padreId, CancellationToken ct = default)
-        {
-            IdCambioPadre = id; PadreSolicitado = padreId; TokenRecibido = ct;
-            return Task.CompletedTask;
-        }
-        public Task AgregarAlias(MomentoAlias alias, CancellationToken ct = default)
-        {
-            AliasAgregado = alias; TokenRecibido = ct;
-            return Task.CompletedTask;
-        }
-        public Task<PublicacionMomento?> ObtenerAsociacion(int publicacionId, int momentoId, CancellationToken ct = default) => Task.FromResult<PublicacionMomento?>(null);
-        public Task<bool> GuardarAsociacion(PublicacionMomento asociacion, CancellationToken ct = default)
-        {
-            AsociacionGuardada = asociacion; TokenRecibido = ct;
-            return Task.FromResult(GuardadoPermitido);
-        }
-        public Task<List<Momento>> ObtenerMomentosPublicacion(int publicacionId, CancellationToken ct = default)
-        {
-            PublicacionConsultada = publicacionId;
-            return Task.FromResult(MomentosPublicacion);
-        }
-    }
+    #endregion
 }
