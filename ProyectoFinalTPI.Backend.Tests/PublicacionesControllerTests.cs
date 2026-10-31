@@ -630,6 +630,52 @@ namespace ProyectoFinalTPI.Backend.Tests
         }
 
         [Fact]
+        public async Task QueSePuedaGuardarUnaPublicacion()
+        {
+            var result = await _controller.Guardar(42, 10);
+            var ok = Assert.IsType<OkObjectResult>(result);
+            var dto = Assert.IsType<GuardadoPublicacionDto>(ok.Value);
+            Assert.Equal(42, dto.PublicacionId);
+            Assert.True(dto.Guardada);
+            Assert.Equal(42, _servicio.IdConsultado);
+        }
+
+        [Fact]
+        public async Task QueSePuedaQuitarGuardadoDeUnaPublicacion()
+        {
+            var result = await _controller.QuitarGuardado(42, 10);
+            var ok = Assert.IsType<OkObjectResult>(result);
+            var dto = Assert.IsType<GuardadoPublicacionDto>(ok.Value);
+            Assert.Equal(42, dto.PublicacionId);
+            Assert.False(dto.Guardada);
+            Assert.Equal(42, _servicio.IdConsultado);
+        }
+
+        [Fact]
+        public async Task Guardar_DevuelveUnauthorizedSiNoHayUsuario()
+        {
+            var result = await _controller.Guardar(42, null);
+            Assert.IsType<UnauthorizedObjectResult>(result);
+        }
+
+        [Fact]
+        public async Task QuitarGuardado_DevuelveUnauthorizedSiNoHayUsuario()
+        {
+            var result = await _controller.QuitarGuardado(42, null);
+            Assert.IsType<UnauthorizedObjectResult>(result);
+        }
+
+        [Fact]
+        public async Task QueSePuedanObtenerPublicacionesGuardadasPorUsuario()
+        {
+            var result = await _controller.ObtenerGuardadasPorUsuario(10, CancellationToken.None);
+            var ok = Assert.IsType<OkObjectResult>(result.Result);
+            var lista = Assert.IsType<List<PublicacionDetalleDto>>(ok.Value);
+            Assert.Equal(10, _servicio.IdConsultado);
+            Assert.Single(lista);
+        }
+
+        [Fact]
         public async Task QueSePuedaCitarUnaPublicacion()
         {
             //Arrange

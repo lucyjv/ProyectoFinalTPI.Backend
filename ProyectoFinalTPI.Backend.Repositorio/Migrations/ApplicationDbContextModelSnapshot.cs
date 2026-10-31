@@ -818,6 +818,9 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Property<DateTime>("FechaCreacion")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("FotoPerfilUrl")
+                        .HasColumnType("text");
+
                     b.Property<string>("Username")
                         .IsRequired()
                         .HasColumnType("text");
@@ -1161,6 +1164,11 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Navigation("Recuerdos");
                 });
 
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Logro", b =>
+                {
+                    b.Navigation("LogrosUsuarios");
+                });
+
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Momento", b =>
                 {
                     b.Navigation("Alias");
@@ -1168,11 +1176,6 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Navigation("Hijos");
 
                     b.Navigation("Publicaciones");
-                });
-
-            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Logro", b =>
-                {
-                    b.Navigation("LogrosUsuarios");
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Publicacion", b =>

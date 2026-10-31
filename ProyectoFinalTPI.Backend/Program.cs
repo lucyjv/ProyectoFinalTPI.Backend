@@ -1,3 +1,4 @@
+using ProyectoFinalTPI.Backend.Repositorio.Cache;
 using System.Text;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -67,11 +68,14 @@ builder.Services.AddControllersWithViews(options =>
     options.ValueProviderFactories.Insert(0, new ProyectoFinalTPI.Backend.Requests.InvariantFormValueProviderFactory());
 });
 
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
+builder.Services.AddDbContext<ApplicationDbContext>((provider, options) =>
+{
+    if (builder.Configuration.GetValue<bool>("Redis:Habilitado")) options.AddInterceptors(provider.GetRequiredService<InvalidacionPublicaInterceptor>());
     options.UseNpgsql(
         builder.Configuration.GetConnectionString("PostgresConnection"),
         npgsqlOptions => npgsqlOptions.UseNetTopologySuite()
-    ));
+    );
+});
 
 builder.Services.AddSingleton<IDriver>(provider =>
 {
@@ -144,6 +148,7 @@ builder.Services.AddScoped<IUsuarioRepositorio, UsuarioRepositorio>();
 builder.Services.AddScoped<ISesionUsuarioRepositorio, SesionUsuarioRepositorio>();
 builder.Services.AddScoped<ISeguimientoServicio, SeguimientoServicio>();
 builder.Services.AddScoped<IMultimediaServicio, MultimediaServicio>();
+builder.Services.AddScoped<IFotoPerfilAlmacenamiento, FotoPerfilCloudinaryAlmacenamiento>();
 builder.Services.AddScoped<IInteresServicio, InteresServicio>();
 builder.Services.AddScoped<ILogroServicio, LogroServicio>();
 builder.Services.AddScoped<ILogrosUsuariosRepositorio, LogrosUsuariosRepositorio>();
@@ -158,9 +163,30 @@ builder.Services.AddHttpClient("GooglePhotos", client => client.Timeout = TimeSp
 builder.Services.AddSingleton<GooglePhotosService>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<GooglePhotosService>());
 
-builder.Services.AddSingleton<
-    ISesionFypRepositorio,
-    SesionFypRepositorio>();
+if (builder.Configuration.GetValue<bool>("Redis:Habilitado"))
+{
+    var conexionRedis = builder.Configuration["Redis:ConnectionString"];
+    if (string.IsNullOrWhiteSpace(conexionRedis))
+        throw new InvalidOperationException("Redis:ConnectionString es obligatoria cuando Redis está habilitado.");
+    builder.Services.AddStackExchangeRedisCache(options =>
+    {
+        options.Configuration = conexionRedis;
+        options.InstanceName = "nostalgiar:v1:";
+    });
+    builder.Services.AddSingleton<ISesionFypRepositorio, SesionFypRedisRepositorio>();
+    builder.Services.AddSingleton<CacheLecturasPublicas>();
+    builder.Services.AddSingleton<ICacheLecturasPublicas>(p => p.GetRequiredService<CacheLecturasPublicas>());
+    builder.Services.AddSingleton<IInvalidadorLecturasPublicas>(p => p.GetRequiredService<CacheLecturasPublicas>());
+    builder.Services.AddSingleton<IDetectorCambiosPublicos, DetectorCambiosPublicos>();
+    builder.Services.AddScoped<IOrigenLecturasPublicas, OrigenLecturasPublicas>();
+    builder.Services.AddScoped<InvalidacionPublicaInterceptor>();
+    builder.Services.AddScoped<IPerfilPublicoConsulta, PerfilPublicoConsulta>();
+    builder.Services.AddScoped<IResumenPublicacionConsulta, ResumenPublicacionConsulta>();
+}
+else
+{
+    builder.Services.AddSingleton<ISesionFypRepositorio, SesionFypRepositorio>();
+}
 
 // Auth
 builder.Services.AddScoped<IAuthServicio, AuthServicio>();
@@ -280,6 +306,16 @@ builder.Services.AddSwaggerGen(options =>
 
 var app = builder.Build();
 
+// Inicialización explícita del entorno local de Compose, antes de iniciar workers o HTTP.
+if (args.Contains("--initialize-docker"))
+{
+    if (!app.Environment.IsDevelopment())
+        throw new InvalidOperationException("--initialize-docker requiere el entorno Development.");
+    await ProyectoFinalTPI.Backend.DockerInitializer.EjecutarAsync(app.Services, app.Environment);
+    await app.DisposeAsync();
+    return;
+}
+
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
@@ -298,7 +334,7 @@ if (!app.Environment.IsDevelopment())
 {
     app.UseHttpsRedirection();
 }
-if (app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment() && builder.Configuration.GetValue("Seed:Habilitado", true))
 {
     ProyectoFinalTPI.Backend.DataSeeder.Seed(app.Services, app.Environment);
 }

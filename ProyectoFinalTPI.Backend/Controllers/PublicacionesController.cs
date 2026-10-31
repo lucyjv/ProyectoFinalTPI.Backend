@@ -77,6 +77,10 @@ namespace ProyectoFinalTPI.Backend.Controllers
                 [detalle], usuarioIdActual ?? 0, cancellationToken);
             await _publicacionServicio.CompletarResumenesPuntuaciones(
                 [detalle], usuarioIdActual, cancellationToken);
+            await _publicacionServicio.CompletarResumenesReposts(
+                [detalle], usuarioIdActual ?? 0, cancellationToken);
+            await _publicacionServicio.CompletarResumenesGuardados(
+                [detalle], usuarioIdActual ?? 0, cancellationToken);
 
             return Ok(detalle);
         }
@@ -93,6 +97,22 @@ namespace ProyectoFinalTPI.Backend.Controllers
             CancellationToken cancellationToken)
         {
             var publicaciones = await _publicacionServicio.ObtenerPorUsuarioId(
+                usuarioId, User.ObtenerUsuarioId(), cancellationToken);
+            return Ok(publicaciones);
+        }
+
+        [HttpGet("usuario/{usuarioId:int}/guardadas")]
+        [SwaggerOperation(
+            Summary = "Obtiene las publicaciones guardadas por un usuario.",
+            Description = "Devuelve el listado de publicaciones guardadas por el usuario indicado, con información de likes, reposts y puntuaciones."
+        )]
+        [SwaggerResponse(StatusCodes.Status200OK, "Listado de publicaciones guardadas del usuario.", typeof(List<PublicacionDetalleDto>))]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "El identificador del usuario no es válido.", typeof(ProblemDetails))]
+        public async Task<ActionResult<List<PublicacionDetalleDto>>> ObtenerGuardadasPorUsuario(
+            int usuarioId,
+            CancellationToken cancellationToken)
+        {
+            var publicaciones = await _publicacionServicio.ObtenerGuardadasPorUsuarioId(
                 usuarioId, User.ObtenerUsuarioId(), cancellationToken);
             return Ok(publicaciones);
         }
@@ -224,6 +244,58 @@ namespace ProyectoFinalTPI.Backend.Controllers
                 return Unauthorized(new { mensaje = "Debés iniciar sesión para quitar el repost." });
 
             var resultado = await _publicacionServicio.QuitarRepost(id, autorIdFinal.Value, cancellationToken);
+            return Ok(resultado);
+        }
+
+        [HttpPost("{id:int}/guardar")]
+        [SwaggerOperation(
+            Summary = "Guarda una publicación para el usuario.",
+            Description = "Crea la relación de guardado en Neo4j. Utiliza el usuario autenticado cuando está disponible."
+        )]
+        [SwaggerResponse(StatusCodes.Status200OK, "Publicación guardada.", typeof(GuardadoPublicacionDto))]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "El identificador no es válido.", typeof(ProblemDetails))]
+        [SwaggerResponse(StatusCodes.Status401Unauthorized, "No se pudo identificar al usuario.", typeof(ProblemDetails))]
+        [SwaggerResponse(StatusCodes.Status404NotFound, "La publicación o el usuario no existen.", typeof(ProblemDetails))]
+        public async Task<IActionResult> Guardar(
+            int id,
+            [FromQuery] int? usuarioId = null,
+            CancellationToken cancellationToken = default)
+        {
+            var autorIdAutenticado = User.ObtenerUsuarioId();
+            var autorIdFinal = (autorIdAutenticado.HasValue && autorIdAutenticado.Value > 0)
+                ? autorIdAutenticado.Value
+                : usuarioId;
+
+            if (!autorIdFinal.HasValue || autorIdFinal.Value <= 0)
+                return Unauthorized(new { mensaje = "Debés iniciar sesión para guardar una publicación." });
+
+            var resultado = await _publicacionServicio.Guardar(id, autorIdFinal.Value, cancellationToken);
+            return Ok(resultado);
+        }
+
+        [HttpDelete("{id:int}/guardar")]
+        [SwaggerOperation(
+            Summary = "Elimina una publicación guardada.",
+            Description = "Elimina la relación de guardado en Neo4j."
+        )]
+        [SwaggerResponse(StatusCodes.Status200OK, "Guardado eliminado.", typeof(GuardadoPublicacionDto))]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "El identificador no es válido.", typeof(ProblemDetails))]
+        [SwaggerResponse(StatusCodes.Status401Unauthorized, "No se pudo identificar al usuario.", typeof(ProblemDetails))]
+        [SwaggerResponse(StatusCodes.Status404NotFound, "La publicación o el usuario no existen.", typeof(ProblemDetails))]
+        public async Task<IActionResult> QuitarGuardado(
+            int id,
+            [FromQuery] int? usuarioId = null,
+            CancellationToken cancellationToken = default)
+        {
+            var autorIdAutenticado = User.ObtenerUsuarioId();
+            var autorIdFinal = (autorIdAutenticado.HasValue && autorIdAutenticado.Value > 0)
+                ? autorIdAutenticado.Value
+                : usuarioId;
+
+            if (!autorIdFinal.HasValue || autorIdFinal.Value <= 0)
+                return Unauthorized(new { mensaje = "Debés iniciar sesión para quitar el guardado." });
+
+            var resultado = await _publicacionServicio.QuitarGuardado(id, autorIdFinal.Value, cancellationToken);
             return Ok(resultado);
         }
 
