@@ -12,14 +12,146 @@ namespace ProyectoFinalTPI.Backend.Tests;
 
 public class NotificacionesControllerTests
 {
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    private readonly Mock<INotificacionServicio> _servicioMock = new();
 
-    private static NotificacionesController CrearController(
-        INotificacionServicio servicio, int usuarioId = 1)
+    #region Obtener Notificaciones
+
+    [Fact]
+    public async Task QueObtenerNotificacionesDevuelva200ConLista()
     {
-        var controller = new NotificacionesController(servicio);
+        //Arrange
+        _servicioMock
+            .Setup(s => s.ObtenerNotificacionesAsync(1, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(NotificacionesFalsas());
 
-        // Simular usuario autenticado con claim "sub" = usuarioId
+        var controller = CrearController(usuarioId: 1);
+
+        //Act
+        var resultado = await controller.ObtenerNotificaciones(CancellationToken.None);
+
+        //Assert
+        var ok = Assert.IsType<OkObjectResult>(resultado);
+        var lista = Assert.IsAssignableFrom<IEnumerable<NotificacionDto>>(ok.Value);
+        Assert.Equal(2, lista.Count());
+    }
+
+    [Fact]
+    public async Task QueObtenerNotificacionesInvoqueServicioConIdDeUsuarioAutenticado()
+    {
+        //Arrange
+        _servicioMock
+            .Setup(s => s.ObtenerNotificacionesAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<NotificacionDto>());
+
+        var controller = CrearController(usuarioId: 42);
+
+        //Act
+        await controller.ObtenerNotificaciones(CancellationToken.None);
+
+        //Assert
+        _servicioMock.Verify(s => s.ObtenerNotificacionesAsync(42, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task QueObtenerNotificacionesDevuelva200CuandoLaListaEstaVacia()
+    {
+        //Arrange
+        _servicioMock
+            .Setup(s => s.ObtenerNotificacionesAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<NotificacionDto>());
+
+        var controller = CrearController();
+
+        //Act
+        var resultado = await controller.ObtenerNotificaciones(CancellationToken.None);
+
+        //Assert
+        var ok = Assert.IsType<OkObjectResult>(resultado);
+        var lista = Assert.IsAssignableFrom<IEnumerable<NotificacionDto>>(ok.Value);
+        Assert.Empty(lista);
+    }
+
+    #endregion
+
+    #region Marcar Como Leída
+
+    [Fact]
+    public async Task QueMarcarComoLeidaDevuelva204CuandoExisteNotificacion()
+    {
+        //Arrange
+        var controller = CrearController(usuarioId: 1);
+
+        //Act
+        var resultado = await controller.MarcarComoLeida(notificacionId: 5, CancellationToken.None);
+
+        //Assert
+        Assert.IsType<NoContentResult>(resultado);
+    }
+
+    [Fact]
+    public async Task QueMarcarComoLeidaInvoqueServicioConIdsCorrectos()
+    {
+        //Arrange
+        var controller = CrearController(usuarioId: 10);
+
+        //Act
+        await controller.MarcarComoLeida(notificacionId: 99, CancellationToken.None);
+
+        //Assert
+        _servicioMock.Verify(s => s.MarcarComoLeidaAsync(99, 10, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task QueMarcarComoLeidaPropagueKeyNotFoundCuandoNoExisteNotificacion()
+    {
+        //Arrange
+        _servicioMock
+            .Setup(s => s.MarcarComoLeidaAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new KeyNotFoundException("La notificación no existe."));
+
+        var controller = CrearController();
+
+        //Act & Assert
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => controller.MarcarComoLeida(999, CancellationToken.None));
+    }
+
+    #endregion
+
+    #region Marcar Todas Como Leídas
+
+    [Fact]
+    public async Task QueMarcarTodasComoLeidasDevuelva204()
+    {
+        //Arrange
+        var controller = CrearController(usuarioId: 1);
+
+        //Act
+        var resultado = await controller.MarcarTodasComoLeidas(CancellationToken.None);
+
+        //Assert
+        Assert.IsType<NoContentResult>(resultado);
+    }
+
+    [Fact]
+    public async Task QueMarcarTodasComoLeidasInvoqueServicioConIdDeUsuarioAutenticado()
+    {
+        //Arrange
+        var controller = CrearController(usuarioId: 7);
+
+        //Act
+        await controller.MarcarTodasComoLeidas(CancellationToken.None);
+
+        //Assert
+        _servicioMock.Verify(s => s.MarcarTodasComoLeidasAsync(7, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    #endregion
+
+    #region Métodos Auxiliares Privados
+
+    private NotificacionesController CrearController(int usuarioId = 1)
+    {
+        var controller = new NotificacionesController(_servicioMock.Object);
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, usuarioId.ToString())
@@ -40,127 +172,5 @@ public class NotificacionesControllerTests
         new() { Id = 2, Tipo = TipoNotificacion.MensajeChat,   Leida = false }
     ];
 
-    // ── ObtenerNotificaciones ────────────────────────────────────────────────
-
-    [Fact]
-    public async Task ObtenerNotificaciones_devuelve_200_con_lista()
-    {
-        var servicioMock = new Mock<INotificacionServicio>();
-        servicioMock
-            .Setup(s => s.ObtenerNotificacionesAsync(1, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(NotificacionesFalsas());
-
-        var controller = CrearController(servicioMock.Object, usuarioId: 1);
-
-        var resultado = await controller.ObtenerNotificaciones(CancellationToken.None);
-
-        var ok = Assert.IsType<OkObjectResult>(resultado);
-        var lista = Assert.IsAssignableFrom<IEnumerable<NotificacionDto>>(ok.Value);
-        Assert.Equal(2, lista.Count());
-    }
-
-    [Fact]
-    public async Task ObtenerNotificaciones_llama_al_servicio_con_id_del_usuario_autenticado()
-    {
-        var servicioMock = new Mock<INotificacionServicio>();
-        servicioMock
-            .Setup(s => s.ObtenerNotificacionesAsync(
-                It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<NotificacionDto>());
-
-        var controller = CrearController(servicioMock.Object, usuarioId: 42);
-
-        await controller.ObtenerNotificaciones(CancellationToken.None);
-
-        servicioMock.Verify(s => s.ObtenerNotificacionesAsync(
-            42, It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task ObtenerNotificaciones_lista_vacia_devuelve_200()
-    {
-        var servicioMock = new Mock<INotificacionServicio>();
-        servicioMock
-            .Setup(s => s.ObtenerNotificacionesAsync(
-                It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<NotificacionDto>());
-
-        var controller = CrearController(servicioMock.Object);
-
-        var resultado = await controller.ObtenerNotificaciones(CancellationToken.None);
-
-        var ok = Assert.IsType<OkObjectResult>(resultado);
-        var lista = Assert.IsAssignableFrom<IEnumerable<NotificacionDto>>(ok.Value);
-        Assert.Empty(lista);
-    }
-
-    // ── MarcarComoLeida ──────────────────────────────────────────────────────
-
-    [Fact]
-    public async Task MarcarComoLeida_devuelve_204_cuando_existe_la_notificacion()
-    {
-        var servicioMock = new Mock<INotificacionServicio>();
-        var controller = CrearController(servicioMock.Object, usuarioId: 1);
-
-        var resultado = await controller.MarcarComoLeida(
-            notificacionId: 5, CancellationToken.None);
-
-        Assert.IsType<NoContentResult>(resultado);
-    }
-
-    [Fact]
-    public async Task MarcarComoLeida_llama_al_servicio_con_ids_correctos()
-    {
-        var servicioMock = new Mock<INotificacionServicio>();
-        var controller = CrearController(servicioMock.Object, usuarioId: 10);
-
-        await controller.MarcarComoLeida(
-            notificacionId: 99, CancellationToken.None);
-
-        servicioMock.Verify(s => s.MarcarComoLeidaAsync(
-            99, 10, It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task MarcarComoLeida_cuando_servicio_lanza_KeyNotFound_el_middleware_devuelve_404()
-    {
-        // El middleware ManejoExcepcionesMiddleware convierte KeyNotFoundException → 404.
-        // Aquí solo verificamos que el controller NO atrapa la excepción
-        // (es decir, la deja propagar para que el middleware la maneje).
-        var servicioMock = new Mock<INotificacionServicio>();
-        servicioMock
-            .Setup(s => s.MarcarComoLeidaAsync(
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new KeyNotFoundException("La notificación no existe."));
-
-        var controller = CrearController(servicioMock.Object);
-
-        await Assert.ThrowsAsync<KeyNotFoundException>(
-            () => controller.MarcarComoLeida(999, CancellationToken.None));
-    }
-
-    // ── MarcarTodasComoLeidas ────────────────────────────────────────────────
-
-    [Fact]
-    public async Task MarcarTodasComoLeidas_devuelve_204()
-    {
-        var servicioMock = new Mock<INotificacionServicio>();
-        var controller = CrearController(servicioMock.Object, usuarioId: 1);
-
-        var resultado = await controller.MarcarTodasComoLeidas(CancellationToken.None);
-
-        Assert.IsType<NoContentResult>(resultado);
-    }
-
-    [Fact]
-    public async Task MarcarTodasComoLeidas_llama_al_servicio_con_id_del_usuario_autenticado()
-    {
-        var servicioMock = new Mock<INotificacionServicio>();
-        var controller = CrearController(servicioMock.Object, usuarioId: 7);
-
-        await controller.MarcarTodasComoLeidas(CancellationToken.None);
-
-        servicioMock.Verify(s => s.MarcarTodasComoLeidasAsync(
-            7, It.IsAny<CancellationToken>()), Times.Once);
-    }
+    #endregion
 }

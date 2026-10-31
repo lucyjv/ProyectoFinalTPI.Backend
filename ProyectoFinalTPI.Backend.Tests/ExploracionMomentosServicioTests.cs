@@ -9,39 +9,58 @@ namespace ProyectoFinalTPI.Backend.Tests;
 
 public class ExploracionMomentosServicioTests
 {
-    private readonly RepositorioFake _repositorio = new();
-    private readonly Mock<IRelacionRecuerdosRepositorio> _relaciones = new(MockBehavior.Strict);
+    private readonly Mock<IExploracionMomentosRepositorio> _repositorioMock = new();
+    private readonly Mock<IRelacionRecuerdosRepositorio> _relacionesMock = new();
     private readonly ExploracionMomentosServicio _servicio;
     private int? _original = 10;
+    private MomentoDetalleDto? _detalle = new() { Id = 1 };
+    private MomentosPublicacionDto _estado = new() { PublicacionId = 10 };
 
     public ExploracionMomentosServicioTests()
     {
-        _relaciones.Setup(r => r.ObtenerOriginalVisible(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+        _relacionesMock.Setup(r => r.ObtenerOriginalVisible(It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .Returns((int id, CancellationToken ct) => Task.FromResult(_original));
-        _servicio = new(_repositorio, _relaciones.Object);
+
+        _repositorioMock.Setup(r => r.ObtenerDetalle(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Returns((int id, CancellationToken ct) => Task.FromResult<MomentoDetalleDto?>(_detalle));
+
+        _repositorioMock.Setup(r => r.ObtenerEstado(It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+            .Returns((int id, int? uid, CancellationToken ct) => Task.FromResult<MomentosPublicacionDto?>(_estado));
+
+        _repositorioMock.Setup(r => r.Corregir(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<bool>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Returns((int id, int uid, IReadOnlyCollection<int> mids, bool perm, long v, CancellationToken ct) => Task.FromResult(_estado));
+
+        _servicio = new(_repositorioMock.Object, _relacionesMock.Object);
     }
+
+    #region Búsqueda de Momentos
 
     [Fact]
     public async Task QueSeNormaliceLaBusquedaYSePuedaContinuarLaPagina()
     {
         //Arrange
-        _repositorio.ResultadosBusqueda.AddRange(new[] { new MomentoResumenDto { Id = 1 }, new MomentoResumenDto { Id = 2 }, new MomentoResumenDto { Id = 3 } });
+        var pagina1 = new List<MomentoResumenDto> { new() { Id = 1 }, new() { Id = 2 }, new() { Id = 3 } };
+        var pagina2 = new List<MomentoResumenDto>();
         using var cancelacion = new CancellationTokenSource();
+
+        _repositorioMock
+            .Setup(r => r.Buscar("méxico", "mexico", null, 3, cancelacion.Token))
+            .ReturnsAsync(pagina1);
+
+        _repositorioMock
+            .Setup(r => r.Buscar("méxico", "mexico", 2, 3, cancelacion.Token))
+            .ReturnsAsync(pagina2);
 
         //Act
         var primera = await _servicio.Buscar("  MÉXICO  ", null, 2, cancelacion.Token);
-        _repositorio.ResultadosBusqueda.Clear();
         var segunda = await _servicio.Buscar("méxico", primera.SiguienteCursor, 2, cancelacion.Token);
 
         //Assert
         Assert.Equal(new[] { 1, 2 }, primera.Items.Select(m => m.Id));
         Assert.True(primera.HayMas);
         Assert.False(segunda.HayMas);
-        Assert.Equal("méxico", _repositorio.Texto);
-        Assert.Equal("mexico", _repositorio.Normalizado);
-        Assert.Equal(2, _repositorio.DespuesId);
-        Assert.Equal(3, _repositorio.Limite);
-        Assert.Equal(cancelacion.Token, _repositorio.Token);
+        _repositorioMock.Verify(r => r.Buscar("méxico", "mexico", null, 3, cancelacion.Token), Times.Once);
+        _repositorioMock.Verify(r => r.Buscar("méxico", "mexico", 2, 3, cancelacion.Token), Times.Once);
     }
 
     [Theory]
@@ -56,7 +75,7 @@ public class ExploracionMomentosServicioTests
         await Assert.ThrowsAsync<ArgumentException>(() => _servicio.Buscar(texto, null, limite, CancellationToken.None));
 
         //Assert
-        Assert.Null(_repositorio.Texto);
+        _repositorioMock.Verify(r => r.Buscar(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -69,7 +88,7 @@ public class ExploracionMomentosServicioTests
         await Assert.ThrowsAsync<ArgumentException>(() => _servicio.Buscar(texto, null, 20, CancellationToken.None));
 
         //Assert
-        Assert.Null(_repositorio.Texto);
+        _repositorioMock.Verify(r => r.Buscar(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Theory]
@@ -85,34 +104,39 @@ public class ExploracionMomentosServicioTests
         await Assert.ThrowsAsync<ArgumentException>(() => _servicio.Buscar(texto, cursor, 20, CancellationToken.None));
 
         //Assert
-        Assert.Null(_repositorio.Texto);
+        _repositorioMock.Verify(r => r.Buscar(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
     public async Task QueNoSeReutiliceElCursorEnOtraBusqueda()
     {
         //Arrange
-        _repositorio.ResultadosBusqueda.AddRange(new[] { new MomentoResumenDto { Id = 1 }, new MomentoResumenDto { Id = 2 } });
+        var pagina1 = new List<MomentoResumenDto> { new() { Id = 1 }, new() { Id = 2 } };
+        _repositorioMock
+            .Setup(r => r.Buscar("mundial", "mundial", null, 2, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(pagina1);
+
         var primera = await _servicio.Buscar("Mundial", null, 1, CancellationToken.None);
 
-        //Act
+        //Act & Assert
         await Assert.ThrowsAsync<ArgumentException>(() => _servicio.Buscar("Otro", primera.SiguienteCursor, 1, CancellationToken.None));
-
-        //Assert
-        Assert.Equal("mundial", _repositorio.Texto);
     }
+
+    #endregion
+
+    #region Detalle y Publicaciones del Momento
 
     [Fact]
     public async Task QueSeDevuelvaNotFoundSiElMomentoNoExiste()
     {
         //Arrange
-        _repositorio.Detalle = null;
+        _detalle = null;
 
         //Act
         await Assert.ThrowsAsync<KeyNotFoundException>(() => _servicio.ObtenerDetalle(99, CancellationToken.None));
 
         //Assert
-        Assert.Equal(99, _repositorio.IdConsultado);
+        _repositorioMock.Verify(r => r.ObtenerDetalle(99, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -120,20 +144,28 @@ public class ExploracionMomentosServicioTests
     {
         //Arrange
         var fecha = new DateTime(1986, 6, 29, 12, 0, 0, DateTimeKind.Utc);
-        _repositorio.Publicaciones.AddRange(new[] { new PublicacionResumenDto { Id = 12, Fecha = fecha }, new PublicacionResumenDto { Id = 11, Fecha = fecha } });
+        var publicaciones1 = new List<PublicacionResumenDto> { new() { Id = 12, Fecha = fecha }, new() { Id = 11, Fecha = fecha } };
+        _repositorioMock
+            .Setup(r => r.ObtenerPublicaciones(1, true, null, 2, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(publicaciones1);
+
+        CursorExploracionMomentoDto? cursorSegundaLlamada = null;
+        _repositorioMock
+            .Setup(r => r.ObtenerPublicaciones(1, true, It.IsNotNull<CursorExploracionMomentoDto>(), 2, It.IsAny<CancellationToken>()))
+            .Callback<int, bool, CursorExploracionMomentoDto?, int, CancellationToken>((_, _, cursor, _, _) => cursorSegundaLlamada = cursor)
+            .ReturnsAsync(new List<PublicacionResumenDto>());
 
         //Act
         var primera = await _servicio.ObtenerPublicaciones(1, true, null, 1, CancellationToken.None);
-        _repositorio.Publicaciones.Clear();
         await _servicio.ObtenerPublicaciones(1, true, primera.SiguienteCursor, 1, CancellationToken.None);
 
         //Assert
         Assert.Equal(12, Assert.Single(primera.Items).Id);
-        Assert.NotNull(_repositorio.CursorPublicaciones);
-        Assert.Equal(fecha, _repositorio.CursorPublicaciones.Fecha);
-        Assert.Equal(12, _repositorio.CursorPublicaciones.Id);
-        Assert.Equal(1, _repositorio.CursorPublicaciones.Ambito);
-        Assert.True(_repositorio.CursorPublicaciones.Descendientes);
+        Assert.NotNull(cursorSegundaLlamada);
+        Assert.Equal(fecha, cursorSegundaLlamada.Fecha);
+        Assert.Equal(12, cursorSegundaLlamada.Id);
+        Assert.Equal(1, cursorSegundaLlamada.Ambito);
+        Assert.True(cursorSegundaLlamada.Descendientes);
     }
 
     [Theory]
@@ -143,15 +175,23 @@ public class ExploracionMomentosServicioTests
     {
         //Arrange
         var fecha = DateTime.UtcNow;
-        _repositorio.Publicaciones.AddRange(new[] { new PublicacionResumenDto { Id = 12, Fecha = fecha }, new PublicacionResumenDto { Id = 11, Fecha = fecha } });
+        var publicaciones = new List<PublicacionResumenDto> { new() { Id = 12, Fecha = fecha }, new() { Id = 11, Fecha = fecha } };
+        _repositorioMock
+            .Setup(r => r.ObtenerPublicaciones(1, true, null, 2, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(publicaciones);
+
         var primera = await _servicio.ObtenerPublicaciones(1, true, null, 1, CancellationToken.None);
 
         //Act
         await Assert.ThrowsAsync<ArgumentException>(() => _servicio.ObtenerPublicaciones(id, descendientes, primera.SiguienteCursor, 1, CancellationToken.None));
 
         //Assert
-        Assert.Null(_repositorio.CursorPublicaciones);
+        _repositorioMock.Verify(r => r.ObtenerPublicaciones(id, descendientes, It.IsAny<CursorExploracionMomentoDto?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
+
+    #endregion
+
+    #region Estado y Corrección de Momentos
 
     [Fact]
     public async Task QueSeObtengaElEstadoDelOriginalCuandoSeConsultaUnRepost()
@@ -163,9 +203,8 @@ public class ExploracionMomentosServicioTests
         var result = await _servicio.ObtenerEstado(25, 7, CancellationToken.None);
 
         //Assert
-        Assert.Same(_repositorio.Estado, result);
-        Assert.Equal(10, _repositorio.IdConsultado);
-        Assert.Equal(7, _repositorio.UsuarioConsultado);
+        Assert.Same(_estado, result);
+        _repositorioMock.Verify(r => r.ObtenerEstado(10, 7, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -178,7 +217,7 @@ public class ExploracionMomentosServicioTests
         await Assert.ThrowsAsync<KeyNotFoundException>(() => _servicio.ObtenerEstado(99, null, CancellationToken.None));
 
         //Assert
-        Assert.Null(_repositorio.IdConsultado);
+        _repositorioMock.Verify(r => r.ObtenerEstado(It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -191,13 +230,14 @@ public class ExploracionMomentosServicioTests
         var result = await _servicio.Corregir(10, 7, Array.Empty<int>(), false, 3, cancelacion.Token);
 
         //Assert
-        Assert.Same(_repositorio.Estado, result);
-        Assert.Equal(10, _repositorio.IdConsultado);
-        Assert.Equal(7, _repositorio.UsuarioConsultado);
-        Assert.Empty(_repositorio.IdsSeleccionados!);
-        Assert.False(_repositorio.Permitir);
-        Assert.Equal(3, _repositorio.Version);
-        Assert.Equal(cancelacion.Token, _repositorio.Token);
+        Assert.Same(_estado, result);
+        _repositorioMock.Verify(r => r.Corregir(
+            10,
+            7,
+            It.Is<IReadOnlyCollection<int>>(c => c.Count == 0),
+            false,
+            3,
+            cancelacion.Token), Times.Once);
     }
 
     [Theory]
@@ -213,7 +253,7 @@ public class ExploracionMomentosServicioTests
         await Assert.ThrowsAsync<ArgumentException>(() => _servicio.Corregir(id, usuarioId, ids, true, version, CancellationToken.None));
 
         //Assert
-        Assert.Null(_repositorio.IdsSeleccionados);
+        _repositorioMock.Verify(r => r.Corregir(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<bool>(), It.IsAny<long>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Theory]
@@ -229,7 +269,7 @@ public class ExploracionMomentosServicioTests
         await Assert.ThrowsAsync<ArgumentException>(() => _servicio.Corregir(10, 7, ids, true, version, CancellationToken.None));
 
         //Assert
-        Assert.Null(_repositorio.IdsSeleccionados);
+        _repositorioMock.Verify(r => r.Corregir(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<bool>(), It.IsAny<long>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -242,38 +282,8 @@ public class ExploracionMomentosServicioTests
         await Assert.ThrowsAsync<ArgumentException>(() => _servicio.Corregir(10, 7, ids, true, 0, CancellationToken.None));
 
         //Assert
-        Assert.Null(_repositorio.IdsSeleccionados);
+        _repositorioMock.Verify(r => r.Corregir(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<bool>(), It.IsAny<long>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    private sealed class RepositorioFake : IExploracionMomentosRepositorio
-    {
-        public string? Texto, Normalizado;
-        public int? IdConsultado, UsuarioConsultado, DespuesId;
-        public int Limite;
-        public long Version;
-        public bool Permitir;
-        public CancellationToken Token;
-        public IReadOnlyCollection<int>? IdsSeleccionados;
-        public MomentoDetalleDto? Detalle = new() { Id = 1 };
-        public MomentosPublicacionDto Estado = new() { PublicacionId = 10 };
-        public List<MomentoResumenDto> ResultadosBusqueda = new();
-        public List<PublicacionResumenDto> Publicaciones = new();
-        public CursorExploracionMomentoDto? CursorPublicaciones;
-
-        public Task<List<MomentoResumenDto>> Buscar(string texto, string normalizado, int? despuesId, int limite, CancellationToken ct)
-        {
-            Texto = texto; Normalizado = normalizado; DespuesId = despuesId; Limite = limite; Token = ct;
-            return Task.FromResult(ResultadosBusqueda.ToList());
-        }
-        public Task<MomentoDetalleDto?> ObtenerDetalle(int id, CancellationToken ct) { IdConsultado = id; return Task.FromResult(Detalle); }
-        public Task<List<PublicacionResumenDto>> ObtenerPublicaciones(int id, bool descendientes, CursorExploracionMomentoDto? cursor, int limite, CancellationToken ct)
-        { CursorPublicaciones = cursor; return Task.FromResult(Publicaciones.ToList()); }
-        public Task<MomentosPublicacionDto?> ObtenerEstado(int id, int? usuarioId, CancellationToken ct)
-        { IdConsultado = id; UsuarioConsultado = usuarioId; return Task.FromResult<MomentosPublicacionDto?>(Estado); }
-        public Task<MomentosPublicacionDto> Corregir(int id, int usuarioId, IReadOnlyCollection<int> momentoIds, bool permitirAutomaticos, long version, CancellationToken ct)
-        {
-            IdConsultado = id; UsuarioConsultado = usuarioId; IdsSeleccionados = momentoIds; Permitir = permitirAutomaticos; Version = version; Token = ct;
-            return Task.FromResult(Estado);
-        }
-    }
+    #endregion
 }

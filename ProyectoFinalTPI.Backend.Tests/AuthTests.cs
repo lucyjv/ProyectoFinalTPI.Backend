@@ -11,19 +11,18 @@ using Moq;
 using ProyectoFinalTPI.Backend.Dtos.Auth;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
+using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Repositorio.Data;
 using ProyectoFinalTPI.Backend.Servicio;
 using Xunit;
 
 namespace ProyectoFinalTPI.Backend.Tests;
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Tests UNITARIOS — prueban AuthServicio directamente con dependencias mockeadas
-// ──────────────────────────────────────────────────────────────────────────────
 public class AuthServicioTests
 {
     private readonly Mock<IUsuarioRepositorio> _repositorioMock = new();
     private readonly Mock<ISesionUsuarioRepositorio> _sesionesMock = new();
+    private readonly Mock<IUsuarioServicio> _usuarioServicioMock = new();
     private readonly IConfiguration _configuracion;
 
     public AuthServicioTests()
@@ -36,17 +35,18 @@ public class AuthServicioTests
                 ["Jwt:Audiencia"] = "nostalgia-frontend"
             })
             .Build();
+
         _sesionesMock
             .Setup(r => r.AgregarAsync(It.IsAny<SesionUsuario>(), default))
             .Returns(Task.CompletedTask);
     }
 
-    private AuthServicio CrearServicio() => new(_repositorioMock.Object, _sesionesMock.Object, _configuracion,
-        Mock.Of<ProyectoFinalTPI.Backend.Interfaces.Servicio.IUsuarioServicio>());
+    #region Registro
 
     [Fact]
-    public async Task Registro_hashea_la_contraseña_antes_de_persistir()
+    public async Task QueSeHasheeLaContraseniaAntesDePersistir()
     {
+        //Arrange
         _repositorioMock
             .Setup(r => r.ExistePorEmailAsync("test@example.com", default))
             .ReturnsAsync(false);
@@ -60,39 +60,38 @@ public class AuthServicioTests
             .Callback<Usuario, CancellationToken>((u, _) => usuarioGuardado = u)
             .Returns(Task.CompletedTask);
 
-        await CrearServicio().RegistrarAsync(new RegistroDto
-        {
-            Username = "testuser",
-            Email = "test@example.com",
-            Contraseña = "contraseña123"
-        });
+        var dto = CrearRegistroDto("testuser", "test@example.com", "contraseña123");
 
+        //Act
+        await CrearServicio().RegistrarAsync(dto);
+
+        //Assert
         Assert.NotNull(usuarioGuardado);
         Assert.NotEqual("contraseña123", usuarioGuardado.Contraseña);
         Assert.Matches(@"^\$2[ab]\$", usuarioGuardado.Contraseña);
     }
 
     [Fact]
-    public async Task Registro_con_email_duplicado_lanza_excepcion()
+    public async Task QueFalleElRegistroConEmailDuplicado()
     {
+        //Arrange
         _repositorioMock
             .Setup(r => r.ExistePorEmailAsync("duplicado@example.com", default))
             .ReturnsAsync(true);
 
+        var dto = CrearRegistroDto("testuser", "duplicado@example.com", "contraseña123");
+
+        //Act & Assert
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            CrearServicio().RegistrarAsync(new RegistroDto
-            {
-                Username = "testuser",
-                Email = "duplicado@example.com",
-                Contraseña = "contraseña123"
-            }));
+            CrearServicio().RegistrarAsync(dto));
 
         _repositorioMock.Verify(r => r.AgregarAsync(It.IsAny<Usuario>(), default), Times.Never);
     }
 
     [Fact]
-    public async Task Registro_con_username_duplicado_lanza_excepcion()
+    public async Task QueFalleElRegistroConUsernameDuplicado()
     {
+        //Arrange
         _repositorioMock
             .Setup(r => r.ExistePorEmailAsync("nuevo@example.com", default))
             .ReturnsAsync(false);
@@ -100,32 +99,28 @@ public class AuthServicioTests
             .Setup(r => r.ExistePorUsernameAsync("duplicado", default))
             .ReturnsAsync(true);
 
+        var dto = CrearRegistroDto("duplicado", "nuevo@example.com", "contraseña123");
+
+        //Act & Assert
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            CrearServicio().RegistrarAsync(new RegistroDto
-            {
-                Username = "duplicado",
-                Email = "nuevo@example.com",
-                Contraseña = "contraseña123"
-            }));
+            CrearServicio().RegistrarAsync(dto));
 
         _repositorioMock.Verify(r => r.AgregarAsync(It.IsAny<Usuario>(), default), Times.Never);
     }
 
     [Fact]
-    public async Task Registro_con_username_duplicado_no_consulta_existencia_de_username_si_el_email_ya_existe()
+    public async Task QueNoSeConsulteUsernameSiEmailYaEstaDuplicado()
     {
-        // Si el email ya está duplicado, cortamos antes de consultar el username.
+        //Arrange
         _repositorioMock
             .Setup(r => r.ExistePorEmailAsync("duplicado@example.com", default))
             .ReturnsAsync(true);
 
+        var dto = CrearRegistroDto("cualquiera", "duplicado@example.com", "contraseña123");
+
+        //Act & Assert
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            CrearServicio().RegistrarAsync(new RegistroDto
-            {
-                Username = "cualquiera",
-                Email = "duplicado@example.com",
-                Contraseña = "contraseña123"
-            }));
+            CrearServicio().RegistrarAsync(dto));
 
         _repositorioMock.Verify(
             r => r.ExistePorUsernameAsync(It.IsAny<string>(), default),
@@ -133,8 +128,9 @@ public class AuthServicioTests
     }
 
     [Fact]
-    public async Task Registro_con_username_duplicado_mensaje_identifica_el_campo()
+    public async Task QueElMensajeDeErrorIdentifiqueElCampoCuandoUsernameEstaDuplicado()
     {
+        //Arrange
         _repositorioMock
             .Setup(r => r.ExistePorEmailAsync("nuevo@example.com", default))
             .ReturnsAsync(false);
@@ -142,20 +138,20 @@ public class AuthServicioTests
             .Setup(r => r.ExistePorUsernameAsync("duplicado", default))
             .ReturnsAsync(true);
 
-        var excepcion = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            CrearServicio().RegistrarAsync(new RegistroDto
-            {
-                Username = "duplicado",
-                Email = "nuevo@example.com",
-                Contraseña = "contraseña123"
-            }));
+        var dto = CrearRegistroDto("duplicado", "nuevo@example.com", "contraseña123");
 
+        //Act
+        var excepcion = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            CrearServicio().RegistrarAsync(dto));
+
+        //Assert
         Assert.Contains("nombre de usuario", excepcion.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public async Task Registro_exitoso_devuelve_token_jwt_valido()
+    public async Task QueElRegistroExitosoDevuelvaTokenJwtValido()
     {
+        //Arrange
         _repositorioMock
             .Setup(r => r.ExistePorEmailAsync(It.IsAny<string>(), default))
             .ReturnsAsync(false);
@@ -166,13 +162,12 @@ public class AuthServicioTests
             .Setup(r => r.AgregarAsync(It.IsAny<Usuario>(), default))
             .Returns(Task.CompletedTask);
 
-        var resultado = await CrearServicio().RegistrarAsync(new RegistroDto
-        {
-            Username = "testuser",
-            Email = "test@example.com",
-            Contraseña = "contraseña123"
-        });
+        var dto = CrearRegistroDto("testuser", "test@example.com", "contraseña123");
 
+        //Act
+        var resultado = await CrearServicio().RegistrarAsync(dto);
+
+        //Assert
         Assert.False(string.IsNullOrEmpty(resultado.Respuesta.Token));
         var handler = new JwtSecurityTokenHandler();
         Assert.True(handler.CanReadToken(resultado.Respuesta.Token));
@@ -182,69 +177,81 @@ public class AuthServicioTests
         Assert.False(string.IsNullOrWhiteSpace(resultado.RefreshToken));
     }
 
+    #endregion
+
+    #region Login
+
     [Fact]
-    public async Task Login_con_email_inexistente_lanza_unauthorized()
+    public async Task QueFalleElLoginConEmailInexistente()
     {
+        //Arrange
         _repositorioMock
             .Setup(r => r.ObtenerPorEmailAsync("noexiste@example.com", default))
             .ReturnsAsync((Usuario?)null);
 
+        var dto = CrearLoginDto("noexiste@example.com", "contraseña123");
+
+        //Act & Assert
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
-            CrearServicio().LoginAsync(new LoginDto
-            {
-                Email = "noexiste@example.com",
-                Contraseña = "contraseña123"
-            }));
+            CrearServicio().LoginAsync(dto));
     }
 
     [Fact]
-    public async Task Login_con_contraseña_incorrecta_lanza_unauthorized()
+    public async Task QueFalleElLoginConContraseniaIncorrecta()
     {
+        //Arrange
         var hashCorrecto = BCrypt.Net.BCrypt.HashPassword("contraseña_correcta");
         _repositorioMock
             .Setup(r => r.ObtenerPorEmailAsync("test@example.com", default))
             .ReturnsAsync(new Usuario_Personal
             {
-                Id = 1, Username = "testuser",
+                Id = 1,
+                Username = "testuser",
                 Email = "test@example.com",
                 Contraseña = hashCorrecto
             });
 
+        var dto = CrearLoginDto("test@example.com", "contraseña_incorrecta");
+
+        //Act & Assert
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
-            CrearServicio().LoginAsync(new LoginDto
-            {
-                Email = "test@example.com",
-                Contraseña = "contraseña_incorrecta"
-            }));
+            CrearServicio().LoginAsync(dto));
     }
 
     [Fact]
-    public async Task Login_exitoso_devuelve_datos_del_usuario()
+    public async Task QueElLoginExitosoDevuelvaDatosDelUsuario()
     {
+        //Arrange
         var hash = BCrypt.Net.BCrypt.HashPassword("contraseña123");
         _repositorioMock
             .Setup(r => r.ObtenerPorEmailAsync("test@example.com", default))
             .ReturnsAsync(new Usuario_Personal
             {
-                Id = 5, Username = "testuser",
+                Id = 5,
+                Username = "testuser",
                 Email = "test@example.com",
                 Contraseña = hash
             });
 
-        var resultado = await CrearServicio().LoginAsync(new LoginDto
-        {
-            Email = "test@example.com",
-            Contraseña = "contraseña123"
-        });
+        var dto = CrearLoginDto("test@example.com", "contraseña123");
 
+        //Act
+        var resultado = await CrearServicio().LoginAsync(dto);
+
+        //Assert
         Assert.Equal(5, resultado.Respuesta.UsuarioId);
         Assert.Equal("testuser", resultado.Respuesta.Username);
         Assert.False(string.IsNullOrEmpty(resultado.Respuesta.Token));
     }
 
+    #endregion
+
+    #region Sesiones y Refresh
+
     [Fact]
-    public async Task Refresh_rota_el_token_y_el_anterior_deja_de_ser_valido()
+    public async Task QueElRefreshRoteElTokenEInvalideElAnterior()
     {
+        //Arrange
         var usuario = new Usuario_Personal
         {
             Id = 5,
@@ -262,11 +269,7 @@ public class AuthServicioTests
             .Callback<SesionUsuario, CancellationToken>((valor, _) => sesion = valor)
             .Returns(Task.CompletedTask);
 
-        var login = await CrearServicio().LoginAsync(new LoginDto
-        {
-            Email = "test@example.com",
-            Contraseña = "contraseña123"
-        });
+        var login = await CrearServicio().LoginAsync(CrearLoginDto("test@example.com", "contraseña123"));
         Assert.NotNull(sesion);
 
         _sesionesMock
@@ -282,16 +285,19 @@ public class AuthServicioTests
             })
             .ReturnsAsync(true);
 
+        //Act
         var renovada = await CrearServicio().RenovarAsync(login.RefreshToken);
 
+        //Assert
         Assert.NotEqual(login.RefreshToken, renovada.RefreshToken);
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             CrearServicio().RenovarAsync(login.RefreshToken));
     }
 
     [Fact]
-    public async Task Logout_revoca_la_sesion_persistida()
+    public async Task QueElLogoutRevoqueLaSesionPersistida()
     {
+        //Arrange
         var usuario = new Usuario_Personal
         {
             Id = 5,
@@ -308,35 +314,50 @@ public class AuthServicioTests
             .Setup(r => r.AgregarAsync(It.IsAny<SesionUsuario>(), default))
             .Callback<SesionUsuario, CancellationToken>((valor, _) => sesion = valor)
             .Returns(Task.CompletedTask);
-        var login = await CrearServicio().LoginAsync(new LoginDto
-        {
-            Email = "test@example.com",
-            Contraseña = "contraseña123"
-        });
+
+        var login = await CrearServicio().LoginAsync(CrearLoginDto("test@example.com", "contraseña123"));
         Assert.NotNull(sesion);
         _sesionesMock
             .Setup(r => r.ObtenerPorIdAsync(sesion.Id, default))
             .ReturnsAsync(sesion);
 
+        //Act
         await CrearServicio().CerrarSesionAsync(login.RefreshToken);
 
+        //Assert
         _sesionesMock.Verify(
             r => r.RevocarAsync(sesion, It.IsAny<DateTime>(), default),
             Times.Once);
     }
+
+    #endregion
+
+    #region Métodos Auxiliares Privados
+
+    private AuthServicio CrearServicio() =>
+        new(_repositorioMock.Object, _sesionesMock.Object, _configuracion, _usuarioServicioMock.Object);
+
+    private static RegistroDto CrearRegistroDto(string username, string email, string password) =>
+        new() { Username = username, Email = email, Contraseña = password };
+
+    private static LoginDto CrearLoginDto(string email, string password) =>
+        new() { Email = email, Contraseña = password };
+
+    #endregion
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Tests de INTEGRACION — prueban el flujo HTTP completo (validaciones, codigos)
-// ──────────────────────────────────────────────────────────────────────────────
 public class AuthIntegracionTests
 {
+    #region Registro HTTP
+
     [Fact]
-    public async Task Registro_exitoso_devuelve_201()
+    public async Task QueElRegistroExitosoDevuelva201()
     {
+        //Arrange
         await using var factory = new AuthFactory();
         using var client = factory.CreateClient();
 
+        //Act
         var response = await client.PostAsJsonAsync("/api/auth/registro", new
         {
             Username = "testuser",
@@ -344,6 +365,7 @@ public class AuthIntegracionTests
             Contraseña = "contraseña123"
         });
 
+        //Assert
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var body = await response.Content.ReadFromJsonAsync<AuthRespuesta>();
         Assert.NotNull(body);
@@ -356,8 +378,9 @@ public class AuthIntegracionTests
     }
 
     [Fact]
-    public async Task Registro_con_email_duplicado_devuelve_409()
+    public async Task QueElRegistroConEmailDuplicadoDevuelva409()
     {
+        //Arrange
         await using var factory = new AuthFactory();
         using var client = factory.CreateClient();
 
@@ -368,6 +391,7 @@ public class AuthIntegracionTests
             Contraseña = "contraseña123"
         });
 
+        //Act
         var response = await client.PostAsJsonAsync("/api/auth/registro", new
         {
             Username = "otrouser",
@@ -375,12 +399,14 @@ public class AuthIntegracionTests
             Contraseña = "otracontraseña123"
         });
 
+        //Assert
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
     }
 
     [Fact]
-    public async Task Registro_con_username_duplicado_devuelve_409()
+    public async Task QueElRegistroConUsernameDuplicadoDevuelva409()
     {
+        //Arrange
         await using var factory = new AuthFactory();
         using var client = factory.CreateClient();
 
@@ -391,6 +417,7 @@ public class AuthIntegracionTests
             Contraseña = "contraseña123"
         });
 
+        //Act
         var response = await client.PostAsJsonAsync("/api/auth/registro", new
         {
             Username = "testuser",
@@ -398,12 +425,14 @@ public class AuthIntegracionTests
             Contraseña = "contraseña456"
         });
 
+        //Assert
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
     }
 
     [Fact]
-    public async Task Registro_con_username_duplicado_en_distinto_case_devuelve_409()
+    public async Task QueElRegistroConUsernameDuplicadoEnDistintoCaseDevuelva409()
     {
+        //Arrange
         await using var factory = new AuthFactory();
         using var client = factory.CreateClient();
 
@@ -414,6 +443,7 @@ public class AuthIntegracionTests
             Contraseña = "contraseña123"
         });
 
+        //Act
         var response = await client.PostAsJsonAsync("/api/auth/registro", new
         {
             Username = "testuser",
@@ -421,6 +451,7 @@ public class AuthIntegracionTests
             Contraseña = "contraseña456"
         });
 
+        //Assert
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
     }
 
@@ -431,12 +462,14 @@ public class AuthIntegracionTests
     [InlineData("user", "", "contraseña123")]
     [InlineData("user", "test@example.com", "corta")]
     [InlineData("user", "test@example.com", "")]
-    public async Task Registro_con_datos_invalidos_devuelve_400(
+    public async Task QueElRegistroConDatosInvalidosDevuelva400(
         string username, string email, string contraseña)
     {
+        //Arrange
         await using var factory = new AuthFactory();
         using var client = factory.CreateClient();
 
+        //Act
         var response = await client.PostAsJsonAsync("/api/auth/registro", new
         {
             Username = username,
@@ -444,12 +477,18 @@ public class AuthIntegracionTests
             Contraseña = contraseña
         });
 
+        //Assert
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    #endregion
+
+    #region Login y Sesiones HTTP
+
     [Fact]
-    public async Task Login_exitoso_devuelve_200()
+    public async Task QueElLoginExitosoDevuelva200()
     {
+        //Arrange
         await using var factory = new AuthFactory();
         using var client = factory.CreateClient();
 
@@ -460,12 +499,14 @@ public class AuthIntegracionTests
             Contraseña = "contraseña123"
         });
 
+        //Act
         var response = await client.PostAsJsonAsync("/api/auth/login", new
         {
             Email = "test@example.com",
             Contraseña = "contraseña123"
         });
 
+        //Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = await response.Content.ReadFromJsonAsync<AuthRespuesta>();
         Assert.NotNull(body);
@@ -473,8 +514,9 @@ public class AuthIntegracionTests
     }
 
     [Fact]
-    public async Task Refresh_rota_cookie_y_logout_impide_volver_a_usarla()
+    public async Task QueElRefreshRoteCookieYLogoutImpidaVolverAUsarla()
     {
+        //Arrange
         await using var factory = new AuthFactory();
         using var client = factory.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions
         {
@@ -488,6 +530,7 @@ public class AuthIntegracionTests
         });
         var primeraCookie = Assert.Single(registro.Headers.GetValues("Set-Cookie")).Split(';')[0];
 
+        //Act & Assert - Refresh
         using var refreshRequest = new HttpRequestMessage(HttpMethod.Post, "/api/auth/refresh");
         refreshRequest.Headers.Add("Cookie", primeraCookie);
         var refresh = await client.SendAsync(refreshRequest);
@@ -495,18 +538,21 @@ public class AuthIntegracionTests
         var segundaCookie = Assert.Single(refresh.Headers.GetValues("Set-Cookie")).Split(';')[0];
         Assert.NotEqual(primeraCookie, segundaCookie);
 
+        //Act & Assert - Logout
         using var logoutRequest = new HttpRequestMessage(HttpMethod.Post, "/api/auth/logout");
         logoutRequest.Headers.Add("Cookie", segundaCookie);
         Assert.Equal(HttpStatusCode.NoContent, (await client.SendAsync(logoutRequest)).StatusCode);
 
+        //Act & Assert - Refresh revocado
         using var refreshRevocadoRequest = new HttpRequestMessage(HttpMethod.Post, "/api/auth/refresh");
         refreshRevocadoRequest.Headers.Add("Cookie", segundaCookie);
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.SendAsync(refreshRevocadoRequest)).StatusCode);
     }
 
     [Fact]
-    public async Task Login_con_contraseña_incorrecta_devuelve_401()
+    public async Task QueElLoginConContraseniaIncorrectaDevuelva401()
     {
+        //Arrange
         await using var factory = new AuthFactory();
         using var client = factory.CreateClient();
 
@@ -517,27 +563,32 @@ public class AuthIntegracionTests
             Contraseña = "contraseña123"
         });
 
+        //Act
         var response = await client.PostAsJsonAsync("/api/auth/login", new
         {
             Email = "test@example.com",
             Contraseña = "contraseña_incorrecta"
         });
 
+        //Assert
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     [Fact]
-    public async Task Login_con_email_inexistente_devuelve_401()
+    public async Task QueElLoginConEmailInexistenteDevuelva401()
     {
+        //Arrange
         await using var factory = new AuthFactory();
         using var client = factory.CreateClient();
 
+        //Act
         var response = await client.PostAsJsonAsync("/api/auth/login", new
         {
             Email = "noexiste@example.com",
             Contraseña = "contraseña123"
         });
 
+        //Assert
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
@@ -545,19 +596,26 @@ public class AuthIntegracionTests
     [InlineData("", "contraseña123")]
     [InlineData("no-es-email", "contraseña123")]
     [InlineData("test@example.com", "")]
-    public async Task Login_con_datos_invalidos_devuelve_400(string email, string contraseña)
+    public async Task QueElLoginConDatosInvalidosDevuelva400(string email, string contraseña)
     {
+        //Arrange
         await using var factory = new AuthFactory();
         using var client = factory.CreateClient();
 
+        //Act
         var response = await client.PostAsJsonAsync("/api/auth/login", new
         {
             Email = email,
             Contraseña = contraseña
         });
 
+        //Assert
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
+
+    #endregion
+
+    #region Clases Auxiliares
 
     private sealed class AuthFactory : Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program>
     {
@@ -584,4 +642,6 @@ public class AuthIntegracionTests
     }
 
     private record AuthRespuesta(string Token, int UsuarioId, string Username, string Email, bool EsAdmin);
+
+    #endregion
 }

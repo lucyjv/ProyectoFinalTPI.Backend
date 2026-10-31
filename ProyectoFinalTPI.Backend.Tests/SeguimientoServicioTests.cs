@@ -1,5 +1,5 @@
 using Moq;
-using ProyectoFinalTPI.Backend.Entidades;
+using Neo4j.Driver;
 using ProyectoFinalTPI.Backend.Dtos.Usuario;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
@@ -10,157 +10,138 @@ namespace ProyectoFinalTPI.Backend.Tests;
 
 public class SeguimientoServicioTests
 {
-    [Fact]
-    public async Task Seguirse_a_si_mismo_devuelve_auto_seguimiento_sin_consultar_usuarios()
+    private readonly Mock<IUsuarioRepositorio> _usuarioRepositorioMock = new();
+    private readonly Mock<IDriver> _driverMock = new();
+    private readonly Mock<ILogroServicio> _logroServicioMock = new();
+    private readonly Mock<INotificacionServicio> _notificacionServicioMock = new();
+    private readonly SeguimientoServicio _servicio;
+
+    public SeguimientoServicioTests()
     {
-        var repositorio = new UsuarioRepositorioFake(10);
-        var servicio = new SeguimientoServicio(repositorio, null!, Mock.Of<ILogroServicio>(), Mock.Of<INotificacionServicio>());
+        _servicio = new SeguimientoServicio(
+            _usuarioRepositorioMock.Object,
+            _driverMock.Object,
+            _logroServicioMock.Object,
+            _notificacionServicioMock.Object);
+    }
 
-        var resultado = await servicio.SeguirUsuario(10, 10);
+    #region Seguir Usuario
 
+    [Fact]
+    public async Task QueSeguirseASiMismoDevuelvaAutoSeguimientoSinConsultarUsuarios()
+    {
+        //Arrange
+        ConfigurarUsuariosExistentes(10);
+
+        //Act
+        var resultado = await _servicio.SeguirUsuario(10, 10);
+
+        //Assert
         Assert.Equal(ResultadoSeguimiento.AutoSeguimiento, resultado);
-        Assert.Empty(repositorio.IdsConsultados);
+        _usuarioRepositorioMock.Verify(r => r.ExisteUsuario(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Theory]
     [InlineData(10, 20)]
     [InlineData(20, 10)]
-    public async Task Si_falta_cualquiera_de_los_usuarios_devuelve_no_encontrado(
+    public async Task QueSiFaltaCualquieraDeLosUsuariosDevuelvaUsuarioNoEncontradoAlSeguir(
         int idUsuarioExistente,
         int idUsuarioInexistente)
     {
-        var repositorio = new UsuarioRepositorioFake(idUsuarioExistente);
-        var servicio = new SeguimientoServicio(repositorio, null!, Mock.Of<ILogroServicio>(), Mock.Of<INotificacionServicio>());
+        //Arrange
+        ConfigurarUsuariosExistentes(idUsuarioExistente);
 
-        var resultado = await servicio.SeguirUsuario(10, 20);
+        //Act
+        var resultado = await _servicio.SeguirUsuario(10, 20);
 
+        //Assert
         Assert.Equal(ResultadoSeguimiento.UsuarioNoEncontrado, resultado);
-        Assert.Equal(new[] { 10, 20 }, repositorio.IdsConsultados);
-        Assert.Contains(idUsuarioInexistente, repositorio.IdsConsultados);
+        _usuarioRepositorioMock.Verify(r => r.ExisteUsuario(idUsuarioExistente, It.IsAny<CancellationToken>()), Times.Once);
+        _usuarioRepositorioMock.Verify(r => r.ExisteUsuario(idUsuarioInexistente, It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    #endregion
+
+    #region Dejar de Seguir
+
     [Fact]
-    public async Task Dejar_de_seguirse_a_si_mismo_devuelve_auto_seguimiento_sin_consultar_usuarios()
+    public async Task QueDejarDeSeguirseASiMismoDevuelvaAutoSeguimientoSinConsultarUsuarios()
     {
-        var repositorio = new UsuarioRepositorioFake(10);
-        var servicio = new SeguimientoServicio(repositorio, null!, Mock.Of<ILogroServicio>(), Mock.Of<INotificacionServicio>());
+        //Arrange
+        ConfigurarUsuariosExistentes(10);
 
-        var resultado = await servicio.DejarDeSeguirUsuario(10, 10);
+        //Act
+        var resultado = await _servicio.DejarDeSeguirUsuario(10, 10);
 
+        //Assert
         Assert.Equal(ResultadoSeguimiento.AutoSeguimiento, resultado);
-        Assert.Empty(repositorio.IdsConsultados);
+        _usuarioRepositorioMock.Verify(r => r.ExisteUsuario(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Theory]
     [InlineData(10, 20)]
     [InlineData(20, 10)]
-    public async Task Al_dejar_de_seguir_si_falta_un_usuario_devuelve_no_encontrado(
+    public async Task QueSiFaltaCualquieraDeLosUsuariosDevuelvaUsuarioNoEncontradoAlDejarDeSeguir(
         int idUsuarioExistente,
         int idUsuarioInexistente)
     {
-        var repositorio = new UsuarioRepositorioFake(idUsuarioExistente);
-        var servicio = new SeguimientoServicio(repositorio, null!, Mock.Of<ILogroServicio>(), Mock.Of<INotificacionServicio>());
+        //Arrange
+        ConfigurarUsuariosExistentes(idUsuarioExistente);
 
-        var resultado = await servicio.DejarDeSeguirUsuario(10, 20);
+        //Act
+        var resultado = await _servicio.DejarDeSeguirUsuario(10, 20);
 
+        //Assert
         Assert.Equal(ResultadoSeguimiento.UsuarioNoEncontrado, resultado);
-        Assert.Equal(new[] { 10, 20 }, repositorio.IdsConsultados);
-        Assert.Contains(idUsuarioInexistente, repositorio.IdsConsultados);
+        _usuarioRepositorioMock.Verify(r => r.ExisteUsuario(idUsuarioExistente, It.IsAny<CancellationToken>()), Times.Once);
+        _usuarioRepositorioMock.Verify(r => r.ExisteUsuario(idUsuarioInexistente, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    #endregion
+
+    #region Listado de Seguidos y Seguidores
+
+    [Fact]
+    public async Task QueListarSeguidosDevuelvaNullSiUsuarioNoExisteSinAccederANeo4j()
+    {
+        //Arrange
+        ConfigurarUsuariosExistentes();
+
+        //Act
+        var resultado = await _servicio.ListarSeguidos(99);
+
+        //Assert
+        Assert.Null(resultado);
+        _usuarioRepositorioMock.Verify(r => r.ExisteUsuario(99, It.IsAny<CancellationToken>()), Times.Once);
+        _driverMock.VerifyNoOtherCalls();
     }
 
     [Fact]
-    public async Task Listar_seguidos_devuelve_null_si_el_usuario_no_existe_sin_acceder_a_Neo4j()
+    public async Task QueListarSeguidoresDevuelvaNullSiUsuarioNoExisteSinAccederANeo4j()
     {
-        var repositorio = new UsuarioRepositorioFake();
-        var servicio = new SeguimientoServicio(repositorio, null!, Mock.Of<ILogroServicio>(), Mock.Of<INotificacionServicio>());
+        //Arrange
+        ConfigurarUsuariosExistentes();
 
-        var resultado = await servicio.ListarSeguidos(99);
+        //Act
+        var resultado = await _servicio.ListarSeguidores(99);
 
+        //Assert
         Assert.Null(resultado);
-        Assert.Equal(new[] { 99 }, repositorio.IdsConsultados);
+        _usuarioRepositorioMock.Verify(r => r.ExisteUsuario(99, It.IsAny<CancellationToken>()), Times.Once);
+        _driverMock.VerifyNoOtherCalls();
     }
 
-    [Fact]
-    public async Task Listar_seguidores_devuelve_null_si_el_usuario_no_existe_sin_acceder_a_Neo4j()
+    #endregion
+
+    #region Helpers Privados
+
+    private void ConfigurarUsuariosExistentes(params int[] idsExistentes)
     {
-        var repositorio = new UsuarioRepositorioFake();
-        var servicio = new SeguimientoServicio(repositorio, null!, Mock.Of<ILogroServicio>(), Mock.Of<INotificacionServicio>());
-
-        var resultado = await servicio.ListarSeguidores(99);
-
-        Assert.Null(resultado);
-        Assert.Equal(new[] { 99 }, repositorio.IdsConsultados);
+        var set = idsExistentes.ToHashSet();
+        _usuarioRepositorioMock
+            .Setup(r => r.ExisteUsuario(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((int id, CancellationToken _) => set.Contains(id));
     }
 
-    private sealed class UsuarioRepositorioFake : IUsuarioRepositorio
-    {
-            public Task<Usuario_Interactivo?> ObtenerYUsuarioInteractivoPorIdAsync(int id) => Task.FromResult<Usuario_Interactivo?>(null);
-
-        private readonly HashSet<int> _idsExistentes;
-
-        public UsuarioRepositorioFake(params int[] idsExistentes)
-        {
-            _idsExistentes = idsExistentes.ToHashSet();
-        }
-
-        public List<int> IdsConsultados { get; } = new();
-
-        public Task<Usuario?> ObtenerPorIdAsync(int id)
-        {
-            Usuario? usuario = _idsExistentes.Contains(id)
-                ? new Usuario { Id = id }
-                : null;
-
-            return Task.FromResult(usuario);
-        }
-
-        public Task<List<AutorResumenDto>> ObtenerUsuariosPorIdsAsync(
-            IReadOnlyCollection<int> ids,
-            CancellationToken cancellationToken = default)
-        {
-            return Task.FromResult(ids
-                .Where(_idsExistentes.Contains)
-                .Select(id => new AutorResumenDto { Id = id, Username = $"usuario_{id}" })
-                .ToList());
-        }
-
-        public Task<List<int>> ObtenerIdsExistentesAsync(
-            IReadOnlyCollection<int> ids,
-            CancellationToken cancellationToken = default)
-        {
-            return Task.FromResult(ids.Where(_idsExistentes.Contains).ToList());
-        }
-
-        public Task<bool> ExisteUsuario(
-            int id,
-            CancellationToken cancellationToken = default)
-        {
-            IdsConsultados.Add(id);
-            return Task.FromResult(_idsExistentes.Contains(id));
-        }
-
-        public Task<Usuario?> ObtenerPorEmailAsync(string email, CancellationToken cancellationToken = default) =>
-            throw new NotImplementedException();
-
-        public Task<bool> ExistePorEmailAsync(string email, CancellationToken cancellationToken = default) =>
-            throw new NotImplementedException();
-
-        public Task<bool> ExistePorUsernameAsync(string username, CancellationToken cancellationToken = default) =>
-            throw new NotImplementedException();
-
-        public Task AgregarAsync(Usuario usuario, CancellationToken cancellationToken = default) =>
-            throw new NotImplementedException();
-
-        public Task ActualizarAsync(Usuario usuario, CancellationToken cancellationToken = default) =>
-            throw new NotImplementedException();
-
-        public Task<Usuario?> ObtenerPorUsernameAsync(string username, CancellationToken cancellationToken = default) =>
-            throw new NotImplementedException();
-
-        public Task<List<AutorResumenDto>> BuscarPorUsernameAsync(string texto, int limite, CancellationToken cancellationToken = default) =>
-            throw new NotImplementedException();
-
-        public Task<int> ContarPublicacionesVisiblesAsync(int usuarioId, CancellationToken cancellationToken = default) =>
-            Task.FromResult(0);
-    }
+    #endregion
 }

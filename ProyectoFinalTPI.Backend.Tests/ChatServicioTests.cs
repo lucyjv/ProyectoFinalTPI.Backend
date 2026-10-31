@@ -10,25 +10,35 @@ namespace ProyectoFinalTPI.Backend.Tests;
 
 public class ChatServicioTests
 {
-    // ──────────────────────────────────────────────
-    // EnviarMensajeAsync
-    // ──────────────────────────────────────────────
+    private readonly Mock<IMensajeChatRepositorio> _mensajeChatRepositorioMock = new();
+    private readonly Mock<INotificacionServicio> _notificacionServicioMock = new();
+    private readonly ChatServicio _servicio;
+
+    public ChatServicioTests()
+    {
+        _servicio = new ChatServicio(_mensajeChatRepositorioMock.Object, _notificacionServicioMock.Object);
+    }
+
+    #region Enviar Mensaje
 
     [Fact]
-    public async Task EnviarMensaje_llama_a_repositorio_con_datos_correctos()
+    public async Task QueEnviarMensajeLlameARepositorioConDatosCorrectos()
     {
-        var repositorioMock = new Mock<IMensajeChatRepositorio>();
-        var servicio = new ChatServicio(repositorioMock.Object, Mock.Of<INotificacionServicio>());
+        //Arrange
+        var emisorId = 1;
+        var emisorUsername = "usuarioA";
+        var destinatarioId = 2;
+        var contenido = "Hola!";
 
-        await servicio.EnviarMensajeAsync(
-            emisorId: 1,
-            emisorUsername: "usuarioA",
-            destinatarioId: 2,
-            contenido: "Hola!");
+        //Act
+        await _servicio.EnviarMensajeAsync(
+            emisorId: emisorId,
+            emisorUsername: emisorUsername,
+            destinatarioId: destinatarioId,
+            contenido: contenido);
 
-        // Verificar que GuardarAsync fue llamado exactamente una vez
-        // con los valores correctos en la entidad
-        repositorioMock.Verify(r => r.GuardarAsync(
+        //Assert
+        _mensajeChatRepositorioMock.Verify(r => r.GuardarAsync(
             It.Is<MensajeChat>(m =>
                 m.EmisorId == 1 &&
                 m.DestinatarioId == 2 &&
@@ -37,17 +47,22 @@ public class ChatServicioTests
     }
 
     [Fact]
-    public async Task EnviarMensaje_devuelve_dto_con_datos_del_mensaje()
+    public async Task QueEnviarMensajeDevuelvaDtoConDatosDelMensaje()
     {
-        var repositorioMock = new Mock<IMensajeChatRepositorio>();
-        var servicio = new ChatServicio(repositorioMock.Object, Mock.Of<INotificacionServicio>());
+        //Arrange
+        var emisorId = 1;
+        var emisorUsername = "usuarioA";
+        var destinatarioId = 2;
+        var contenido = "Hola!";
 
-        var resultado = await servicio.EnviarMensajeAsync(
-            emisorId: 1,
-            emisorUsername: "usuarioA",
-            destinatarioId: 2,
-            contenido: "Hola!");
+        //Act
+        var resultado = await _servicio.EnviarMensajeAsync(
+            emisorId: emisorId,
+            emisorUsername: emisorUsername,
+            destinatarioId: destinatarioId,
+            contenido: contenido);
 
+        //Assert
         Assert.Equal(1, resultado.EmisorId);
         Assert.Equal("usuarioA", resultado.EmisorUsername);
         Assert.Equal(2, resultado.DestinatarioId);
@@ -55,47 +70,45 @@ public class ChatServicioTests
     }
 
     [Fact]
-    public async Task EnviarMensaje_fija_fecha_expiracion_en_7_dias()
+    public async Task QueEnviarMensajeFijeFechaExpiracionEnSieteDias()
     {
-        var repositorioMock = new Mock<IMensajeChatRepositorio>();
-        var servicio = new ChatServicio(repositorioMock.Object, Mock.Of<INotificacionServicio>());
-
+        //Arrange
         var antes = DateTime.UtcNow;
-        await servicio.EnviarMensajeAsync(1, "usuarioA", 2, "Hola!");
+
+        //Act
+        await _servicio.EnviarMensajeAsync(1, "usuarioA", 2, "Hola!");
         var despues = DateTime.UtcNow;
 
-        // Capturar la entidad que se pasó al repositorio
-        repositorioMock.Verify(r => r.GuardarAsync(
+        //Assert
+        _mensajeChatRepositorioMock.Verify(r => r.GuardarAsync(
             It.Is<MensajeChat>(m =>
-                // La expiración debe ser FechaEnvio + 7 días (con margen de 1 segundo)
                 m.FechaExpiracion >= antes.AddDays(7) &&
                 m.FechaExpiracion <= despues.AddDays(7).AddSeconds(1)
             )), Times.Once);
     }
 
     [Fact]
-    public async Task EnviarMensaje_fecha_envio_es_utc_reciente()
+    public async Task QueEnviarMensajeFechaEnvioSeaUtcReciente()
     {
-        var repositorioMock = new Mock<IMensajeChatRepositorio>();
-        var servicio = new ChatServicio(repositorioMock.Object, Mock.Of<INotificacionServicio>());
-
+        //Arrange
         var antes = DateTime.UtcNow;
-        var resultado = await servicio.EnviarMensajeAsync(1, "usuarioA", 2, "Hola!");
+
+        //Act
+        var resultado = await _servicio.EnviarMensajeAsync(1, "usuarioA", 2, "Hola!");
         var despues = DateTime.UtcNow;
 
+        //Assert
         Assert.InRange(resultado.FechaEnvio, antes, despues);
     }
 
-    // ──────────────────────────────────────────────
-    // ObtenerHistorialAsync
-    // ──────────────────────────────────────────────
+    #endregion
+
+    #region Obtener Historial
 
     [Fact]
-    public async Task ObtenerHistorial_devuelve_mensajes_mapeados_a_dto()
+    public async Task QueObtenerHistorialDevuelvaMensajesMapeadosADto()
     {
-        var repositorioMock = new Mock<IMensajeChatRepositorio>();
-
-        // Preparar datos falsos que devuelve el repositorio
+        //Arrange
         var emisorFalso = new Usuario { Id = 1, Username = "usuarioA" };
         var mensajesFalsos = new List<MensajeChat>
         {
@@ -117,77 +130,77 @@ public class ChatServicioTests
             }
         };
 
-        repositorioMock
+        _mensajeChatRepositorioMock
             .Setup(r => r.ObtenerHistorialAsync(1, 2))
             .ReturnsAsync(mensajesFalsos);
 
-        var servicio = new ChatServicio(repositorioMock.Object, Mock.Of<INotificacionServicio>());
+        //Act
+        var resultado = (await _servicio.ObtenerHistorialAsync(1, 2)).ToList();
 
-        var resultado = (await servicio.ObtenerHistorialAsync(1, 2)).ToList();
-
+        //Assert
         Assert.Equal(2, resultado.Count);
         Assert.Equal("Primer mensaje", resultado[0].Contenido);
         Assert.Equal("usuarioA", resultado[0].EmisorUsername);
         Assert.Equal("Segundo mensaje", resultado[1].Contenido);
+        _mensajeChatRepositorioMock.Verify(r => r.ObtenerHistorialAsync(1, 2), Times.Once);
     }
 
     [Fact]
-    public async Task ObtenerHistorial_repositorio_sin_mensajes_devuelve_lista_vacia()
+    public async Task QueObtenerHistorialSinMensajesDevuelvaListaVacia()
     {
-        var repositorioMock = new Mock<IMensajeChatRepositorio>();
-        repositorioMock
+        //Arrange
+        _mensajeChatRepositorioMock
             .Setup(r => r.ObtenerHistorialAsync(It.IsAny<int>(), It.IsAny<int>()))
             .ReturnsAsync(new List<MensajeChat>());
 
-        var servicio = new ChatServicio(repositorioMock.Object, Mock.Of<INotificacionServicio>());
+        //Act
+        var resultado = await _servicio.ObtenerHistorialAsync(1, 2);
 
-        var resultado = await servicio.ObtenerHistorialAsync(1, 2);
-
+        //Assert
         Assert.Empty(resultado);
     }
 
     [Fact]
-    public async Task ObtenerHistorial_llama_al_repositorio_con_los_ids_correctos()
+    public async Task QueObtenerHistorialLlameAlRepositorioConLosIdsCorrectos()
     {
-        var repositorioMock = new Mock<IMensajeChatRepositorio>();
-        repositorioMock
+        //Arrange
+        _mensajeChatRepositorioMock
             .Setup(r => r.ObtenerHistorialAsync(It.IsAny<int>(), It.IsAny<int>()))
             .ReturnsAsync(new List<MensajeChat>());
 
-        var servicio = new ChatServicio(repositorioMock.Object, Mock.Of<INotificacionServicio>());
+        //Act
+        await _servicio.ObtenerHistorialAsync(usuarioAId: 5, usuarioBId: 7);
 
-        await servicio.ObtenerHistorialAsync(usuarioAId: 5, usuarioBId: 7);
-
-        repositorioMock.Verify(r => r.ObtenerHistorialAsync(5, 7), Times.Once);
+        //Assert
+        _mensajeChatRepositorioMock.Verify(r => r.ObtenerHistorialAsync(5, 7), Times.Once);
     }
 
     [Fact]
-    public async Task ObtenerHistorial_emisor_null_usa_string_vacio_para_username()
+    public async Task QueObtenerHistorialConEmisorNullUseStringVacioParaUsername()
     {
-        var repositorioMock = new Mock<IMensajeChatRepositorio>();
-
-        // Simular un mensaje cuyo Emisor no fue cargado (navigation property null)
+        //Arrange
         var mensajesSinNavigation = new List<MensajeChat>
         {
             new() {
                 Id = 1,
                 EmisorId = 1,
-                Emisor = null!, // navigation property no cargada
+                Emisor = null!,
                 DestinatarioId = 2,
                 Contenido = "Mensaje",
                 FechaEnvio = DateTime.UtcNow
             }
         };
 
-        repositorioMock
+        _mensajeChatRepositorioMock
             .Setup(r => r.ObtenerHistorialAsync(1, 2))
             .ReturnsAsync(mensajesSinNavigation);
 
-        var servicio = new ChatServicio(repositorioMock.Object, Mock.Of<INotificacionServicio>());
+        //Act
+        var resultado = (await _servicio.ObtenerHistorialAsync(1, 2)).ToList();
 
-        var resultado = (await servicio.ObtenerHistorialAsync(1, 2)).ToList();
-
-        // No debe lanzar NullReferenceException
+        //Assert
         Assert.Equal(string.Empty, resultado[0].EmisorUsername);
     }
+
+    #endregion
 }

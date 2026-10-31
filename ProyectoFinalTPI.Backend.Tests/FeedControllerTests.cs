@@ -11,24 +11,27 @@ namespace ProyectoFinalTPI.Backend.Tests;
 
 public class FeedControllerTests
 {
-    private readonly Mock<IPublicacionServicio> _servicio = new();
+    private readonly Mock<IPublicacionServicio> _servicioMock = new();
     private readonly FeedController _controller;
 
     public FeedControllerTests()
     {
-        _controller = new FeedController(_servicio.Object)
+        _controller = new FeedController(_servicioMock.Object)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
         };
     }
 
+    #region Registro de Impresiones
+
     [Fact]
-    public async Task RegistrarImpresionesUsaElUsuarioDelTokenYDevuelveNoContent()
+    public async Task QueRegistrarImpresionesUseElUsuarioDelTokenYDevuelveNoContent()
     {
+        //Arrange
         Autenticar(10);
         int? usuarioRecibido = null;
         int[]? idsRecibidos = null;
-        _servicio.Setup(servicio => servicio.RegistrarImpresionesFeed(
+        _servicioMock.Setup(servicio => servicio.RegistrarImpresionesFeed(
                 It.IsAny<int>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()))
             .Callback<int, IReadOnlyCollection<int>, CancellationToken>((usuarioId, ids, _) =>
             {
@@ -37,63 +40,86 @@ public class FeedControllerTests
             })
             .Returns(Task.CompletedTask);
 
-        var resultado = await _controller.RegistrarImpresiones(
-            new RegistrarImpresionesFeedRequest { PublicacionesIds = new[] { 2, 3 } });
+        var request = new RegistrarImpresionesFeedRequest { PublicacionesIds = new[] { 2, 3 } };
 
+        //Act
+        var resultado = await _controller.RegistrarImpresiones(request);
+
+        //Assert
         Assert.IsType<NoContentResult>(resultado);
         Assert.Equal(10, usuarioRecibido);
         Assert.Equal(new[] { 2, 3 }, idsRecibidos);
     }
 
     [Fact]
-    public async Task RegistrarImpresionesSinTokenDevuelveUnauthorized()
+    public async Task QueRegistrarImpresionesSinTokenDevuelvaUnauthorized()
     {
-        var resultado = await _controller.RegistrarImpresiones(
-            new RegistrarImpresionesFeedRequest { PublicacionesIds = new[] { 2 } });
+        //Arrange
+        var request = new RegistrarImpresionesFeedRequest { PublicacionesIds = new[] { 2 } };
 
+        //Act
+        var resultado = await _controller.RegistrarImpresiones(request);
+
+        //Assert
         Assert.IsType<UnauthorizedObjectResult>(resultado);
-        _servicio.Verify(servicio => servicio.RegistrarImpresionesFeed(
+        _servicioMock.Verify(servicio => servicio.RegistrarImpresionesFeed(
             It.IsAny<int>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task RegistrarImpresionesSinBodyDevuelveBadRequest()
+    public async Task QueRegistrarImpresionesSinBodyDevuelvaBadRequest()
     {
+        //Arrange
         Autenticar(10);
 
+        //Act
         var resultado = await _controller.RegistrarImpresiones(null!);
 
+        //Assert
         Assert.IsType<BadRequestObjectResult>(resultado);
-        _servicio.Verify(servicio => servicio.RegistrarImpresionesFeed(
+        _servicioMock.Verify(servicio => servicio.RegistrarImpresionesFeed(
             It.IsAny<int>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task RegistrarImpresionesConListaInvalidaDevuelveBadRequest()
+    public async Task QueRegistrarImpresionesConListaInvalidaDevuelvaBadRequest()
     {
+        //Arrange
         Autenticar(10);
-        _servicio.Setup(servicio => servicio.RegistrarImpresionesFeed(
+        _servicioMock.Setup(servicio => servicio.RegistrarImpresionesFeed(
                 10, It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new ArgumentException("Lista inválida"));
 
-        var resultado = await _controller.RegistrarImpresiones(new RegistrarImpresionesFeedRequest());
+        var request = new RegistrarImpresionesFeedRequest();
 
+        //Act
+        var resultado = await _controller.RegistrarImpresiones(request);
+
+        //Assert
         Assert.IsType<BadRequestObjectResult>(resultado);
     }
 
     [Fact]
-    public async Task RegistrarImpresionesConUsuarioInexistenteDevuelveNotFound()
+    public async Task QueRegistrarImpresionesConUsuarioInexistenteDevuelvaNotFound()
     {
+        //Arrange
         Autenticar(10);
-        _servicio.Setup(servicio => servicio.RegistrarImpresionesFeed(
+        _servicioMock.Setup(servicio => servicio.RegistrarImpresionesFeed(
                 10, It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new KeyNotFoundException("Usuario inexistente"));
 
-        var resultado = await _controller.RegistrarImpresiones(
-            new RegistrarImpresionesFeedRequest { PublicacionesIds = new[] { 2 } });
+        var request = new RegistrarImpresionesFeedRequest { PublicacionesIds = new[] { 2 } };
 
+        //Act
+        var resultado = await _controller.RegistrarImpresiones(request);
+
+        //Assert
         Assert.IsType<NotFoundObjectResult>(resultado);
     }
+
+    #endregion
+
+    #region Métodos Auxiliares Privados
 
     private void Autenticar(int usuarioId)
     {
@@ -102,4 +128,6 @@ public class FeedControllerTests
             new Claim(ClaimTypes.NameIdentifier, usuarioId.ToString())
         }, "Test"));
     }
+
+    #endregion
 }

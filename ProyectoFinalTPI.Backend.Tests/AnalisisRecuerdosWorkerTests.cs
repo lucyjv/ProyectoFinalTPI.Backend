@@ -1,7 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using ProyectoFinalTPI.Backend.Dtos.Momento;
+using Moq;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Services;
 using ProyectoFinalTPI.Backend.Servicio;
@@ -11,16 +11,35 @@ namespace ProyectoFinalTPI.Backend.Tests;
 
 public class AnalisisRecuerdosWorkerTests
 {
+    #region Creación y Liberación de Scopes
+
     [Fact]
     public async Task QueCadaCicloCreeYLibereSuPropioScope()
     {
         //Arrange
-        var instancias = new List<ProcesadorFake>();
+        var mocks = new List<Mock<IAnalisisRecuerdosServicio>>();
+        var tokensRecibidos = new List<CancellationToken>();
+        var disposables = new List<Mock<IDisposable>>();
+
         var servicios = new ServiceCollection();
-        servicios.AddScoped<IAnalisisRecuerdosServicio>(_ => { var servicio = new ProcesadorFake(); instancias.Add(servicio); return servicio; });
+        servicios.AddScoped<IAnalisisRecuerdosServicio>(_ =>
+        {
+            var mock = new Mock<IAnalisisRecuerdosServicio>();
+            var disp = mock.As<IDisposable>();
+
+            mock.Setup(m => m.ProcesarUno(It.IsAny<CancellationToken>()))
+                .Callback<CancellationToken>(ct => tokensRecibidos.Add(ct))
+                .ReturnsAsync(false);
+
+            disp.Setup(d => d.Dispose());
+
+            mocks.Add(mock);
+            disposables.Add(disp);
+            return mock.Object;
+        });
+
         await using var provider = servicios.BuildServiceProvider();
-        using var worker = new AnalisisRecuerdosWorker(provider.GetRequiredService<IServiceScopeFactory>(),
-            Options.Create(new OpcionesAnalisisRecuerdos()), TimeProvider.System, NullLogger<AnalisisRecuerdosWorker>.Instance);
+        using var worker = CrearWorker(provider.GetRequiredService<IServiceScopeFactory>(), habilitado: true);
         using var cancelacion = new CancellationTokenSource();
 
         //Act
@@ -28,18 +47,23 @@ public class AnalisisRecuerdosWorkerTests
         await worker.EjecutarCiclo(cancelacion.Token);
 
         //Assert
-        Assert.Equal(2, instancias.Count);
-        Assert.NotSame(instancias[0], instancias[1]);
-        Assert.All(instancias, s => { Assert.True(s.Liberado); Assert.Equal(cancelacion.Token, s.Token); });
+        Assert.Equal(2, mocks.Count);
+        Assert.NotSame(mocks[0].Object, mocks[1].Object);
+        Assert.All(tokensRecibidos, t => Assert.Equal(cancelacion.Token, t));
+        disposables[0].Verify(d => d.Dispose(), Times.Once);
+        disposables[1].Verify(d => d.Dispose(), Times.Once);
     }
+
+    #endregion
+
+    #region Control de Ciclo de Vida del Worker
 
     [Fact]
     public async Task QueElWorkerDeshabilitadoNoConsumaLaCola()
     {
         //Arrange
         await using var provider = new ServiceCollection().BuildServiceProvider();
-        using var worker = new AnalisisRecuerdosWorker(provider.GetRequiredService<IServiceScopeFactory>(),
-            Options.Create(new OpcionesAnalisisRecuerdos { Habilitado = false }), TimeProvider.System, NullLogger<AnalisisRecuerdosWorker>.Instance);
+        using var worker = CrearWorker(provider.GetRequiredService<IServiceScopeFactory>(), habilitado: false);
 
         //Act
         await worker.StartAsync(CancellationToken.None);
@@ -49,12 +73,18 @@ public class AnalisisRecuerdosWorkerTests
         Assert.True(worker.ExecuteTask!.IsCompletedSuccessfully);
     }
 
-    private sealed class ProcesadorFake : IAnalisisRecuerdosServicio, IDisposable
+    #endregion
+
+    #region Métodos Auxiliares Privados
+
+    private static AnalisisRecuerdosWorker CrearWorker(IServiceScopeFactory scopeFactory, bool habilitado)
     {
-        public bool Liberado;
-        public CancellationToken Token;
-        public Task<bool> ProcesarUno(CancellationToken ct) { Token = ct; return Task.FromResult(false); }
-        public Task<EstadoAnalisisRecuerdoDto> ObtenerEstado(int id, CancellationToken ct) => throw new NotSupportedException();
-        public void Dispose() => Liberado = true;
+        return new AnalisisRecuerdosWorker(
+            scopeFactory,
+            Options.Create(new OpcionesAnalisisRecuerdos { Habilitado = habilitado }),
+            TimeProvider.System,
+            NullLogger<AnalisisRecuerdosWorker>.Instance);
     }
+
+    #endregion
 }

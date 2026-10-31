@@ -17,45 +17,38 @@ namespace ProyectoFinalTPI.Backend.Tests;
 
 public class ChatTests
 {
-    // ──────────────────────────────────────────────
-    // ENVÍO DE MENSAJES
-    // ──────────────────────────────────────────────
+    #region Envío y Recepción de Mensajes
 
     [Fact]
-    public async Task Enviar_mensaje_cuando_destinatario_esta_conectado_entrega_mensaje()
+    public async Task QueElEnvioDeMensajeConDestinatarioConectadoEntregueElMensaje()
     {
+        //Arrange
         await using var factory = new ChatFactory();
-
-        // Registrar dos usuarios y obtener sus tokens
         var (tokenA, idA) = await RegistrarYObtenerToken(factory, "usuarioA", "a@test.com");
         var (tokenB, idB) = await RegistrarYObtenerToken(factory, "usuarioB", "b@test.com");
 
-        // Conectar ambos al hub
         await using var connA = CrearConexion(factory, tokenA);
         await using var connB = CrearConexion(factory, tokenB);
 
         await connA.StartAsync();
         await connB.StartAsync();
-        // El handshake del cliente puede terminar antes de OnConnectedAsync.
-        // Una invocación confirma que B ya está registrado antes del envío de A.
         await connB.InvokeAsync<List<MensajeChatRespuesta>>("ObtenerHistorial", idA);
 
-        // Preparar receptor: B espera recibir un mensaje
         var tcs = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
         connB.On<object>("RecibirMensaje", msg => tcs.TrySetResult(msg));
 
-        // A envía un mensaje a B
+        //Act
         await connA.InvokeAsync("EnviarMensaje", idB, "Hola desde A");
 
-        // Esperamos máximo 5 segundos a que B reciba el mensaje
+        //Assert
         await tcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
     }
 
     [Fact]
-    public async Task Enviar_mensaje_cuando_destinatario_esta_conectado_persiste_en_bd()
+    public async Task QueElEnvioDeMensajeConDestinatarioConectadoPersistaEnBaseDeDatos()
     {
+        //Arrange
         await using var factory = new ChatFactory();
-
         var (tokenA, idA) = await RegistrarYObtenerToken(factory, "usuarioA", "a@test.com");
         var (tokenB, idB) = await RegistrarYObtenerToken(factory, "usuarioB", "b@test.com");
 
@@ -65,15 +58,14 @@ public class ChatTests
         await connA.StartAsync();
         await connB.StartAsync();
 
-        // Esperamos confirmación de envío antes de consultar la BD
         var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         connA.On<object>("MensajeEnviado", _ => tcs.TrySetResult(true));
 
+        //Act
         await connA.InvokeAsync("EnviarMensaje", idB, "Mensaje persistente");
-
         await Task.WhenAny(tcs.Task, Task.Delay(5000));
 
-        // Verificar que el mensaje quedó en la base de datos
+        //Assert
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var mensajes = await db.MensajesChat
@@ -85,26 +77,24 @@ public class ChatTests
     }
 
     [Fact]
-    public async Task Enviar_mensaje_a_usuario_offline_persiste_en_bd()
+    public async Task QueElEnvioDeMensajeAUsuarioOfflinePersistaEnBaseDeDatos()
     {
+        //Arrange
         await using var factory = new ChatFactory();
-
         var (tokenA, idA) = await RegistrarYObtenerToken(factory, "usuarioA", "a@test.com");
         var (_, idB) = await RegistrarYObtenerToken(factory, "usuarioB", "b@test.com");
 
-        // Solo A se conecta; B nunca se conecta al hub (está offline)
         await using var connA = CrearConexion(factory, tokenA);
         await connA.StartAsync();
 
         var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         connA.On<object>("MensajeEnviado", _ => tcs.TrySetResult(true));
 
-        // Enviar a B offline ya no lanza excepción, sino que se procesa correctamente
+        //Act
         await connA.InvokeAsync("EnviarMensaje", idB, "Mensaje para usuario offline");
-
         await Task.WhenAny(tcs.Task, Task.Delay(5000));
 
-        // Verificar que el mensaje quedó guardado en la base de datos
+        //Assert
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var mensajes = await db.MensajesChat
@@ -115,11 +105,15 @@ public class ChatTests
         Assert.Equal("Mensaje para usuario offline", mensajes[0].Contenido);
     }
 
-    [Fact]
-    public async Task Enviar_mensaje_vacio_lanza_hub_exception()
-    {
-        await using var factory = new ChatFactory();
+    #endregion
 
+    #region Validaciones de Envío
+
+    [Fact]
+    public async Task QueFalleElEnvioDeMensajeVacio()
+    {
+        //Arrange
+        await using var factory = new ChatFactory();
         var (tokenA, _) = await RegistrarYObtenerToken(factory, "usuarioA", "a@test.com");
         var (tokenB, idB) = await RegistrarYObtenerToken(factory, "usuarioB", "b@test.com");
 
@@ -128,29 +122,31 @@ public class ChatTests
         await connA.StartAsync();
         await connB.StartAsync();
 
+        //Act & Assert
         await Assert.ThrowsAsync<HubException>(
             () => connA.InvokeAsync("EnviarMensaje", idB, ""));
     }
 
     [Fact]
-    public async Task Enviar_mensaje_a_uno_mismo_lanza_hub_exception()
+    public async Task QueFalleElEnvioDeMensajeAUnoMismo()
     {
+        //Arrange
         await using var factory = new ChatFactory();
-
         var (tokenA, idA) = await RegistrarYObtenerToken(factory, "usuarioA", "a@test.com");
 
         await using var connA = CrearConexion(factory, tokenA);
         await connA.StartAsync();
 
+        //Act & Assert
         await Assert.ThrowsAsync<HubException>(
             () => connA.InvokeAsync("EnviarMensaje", idA, "Mensaje a mí mismo"));
     }
 
     [Fact]
-    public async Task Mensaje_supera_limite_de_caracteres_lanza_hub_exception()
+    public async Task QueFalleElEnvioCuandoElMensajeSuperaLimiteDeCaracteres()
     {
+        //Arrange
         await using var factory = new ChatFactory();
-
         var (tokenA, _) = await RegistrarYObtenerToken(factory, "usuarioA", "a@test.com");
         var (tokenB, idB) = await RegistrarYObtenerToken(factory, "usuarioB", "b@test.com");
 
@@ -161,19 +157,20 @@ public class ChatTests
 
         var mensajeLargo = new string('x', 2001);
 
+        //Act & Assert
         await Assert.ThrowsAsync<HubException>(
             () => connA.InvokeAsync("EnviarMensaje", idB, mensajeLargo));
     }
 
-    // ──────────────────────────────────────────────
-    // HISTORIAL
-    // ──────────────────────────────────────────────
+    #endregion
+
+    #region Historial de Mensajes
 
     [Fact]
-    public async Task Obtener_historial_devuelve_mensajes_en_orden_cronologico()
+    public async Task QueSeObtengaHistorialEnOrdenCronologico()
     {
+        //Arrange
         await using var factory = new ChatFactory();
-
         var (tokenA, idA) = await RegistrarYObtenerToken(factory, "usuarioA", "a@test.com");
         var (tokenB, idB) = await RegistrarYObtenerToken(factory, "usuarioB", "b@test.com");
 
@@ -182,8 +179,6 @@ public class ChatTests
         await connA.StartAsync();
         await connB.StartAsync();
 
-        // Enviar tres mensajes y esperar confirmación de cada uno
-        // para garantizar orden de inserción en BD
         foreach (var texto in new[] { "Primero", "Segundo", "Tercero" })
         {
             var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -193,10 +188,11 @@ public class ChatTests
             connA.Remove("MensajeEnviado");
         }
 
-        // Pedir historial
+        //Act
         var historial = await connA.InvokeAsync<List<MensajeChatRespuesta>>(
             "ObtenerHistorial", idB);
 
+        //Assert
         Assert.Equal(3, historial.Count);
         Assert.Equal("Primero", historial[0].Contenido);
         Assert.Equal("Segundo", historial[1].Contenido);
@@ -204,44 +200,45 @@ public class ChatTests
     }
 
     [Fact]
-    public async Task Obtener_historial_vacio_devuelve_lista_vacia()
+    public async Task QueSeObtengaHistorialVacioCuandoNoHayMensajes()
     {
+        //Arrange
         await using var factory = new ChatFactory();
-
         var (tokenA, _)   = await RegistrarYObtenerToken(factory, "usuarioA", "a@test.com");
         var (tokenB, idB) = await RegistrarYObtenerToken(factory, "usuarioB", "b@test.com");
 
         await using var connA = CrearConexion(factory, tokenA);
         await connA.StartAsync();
 
+        //Act
         var historial = await connA.InvokeAsync<List<MensajeChatRespuesta>>(
             "ObtenerHistorial", idB);
 
+        //Assert
         Assert.Empty(historial);
     }
 
-    // ──────────────────────────────────────────────
-    // PRESENCIA
-    // ──────────────────────────────────────────────
+    #endregion
+
+    #region Conexión y Presencia
 
     [Fact]
-    public async Task Conectarse_al_hub_sin_token_es_rechazado()
+    public async Task QueFalleLaConexionAlHubSinToken()
     {
+        //Arrange
         await using var factory = new ChatFactory();
-
-        // Crear conexión sin token
         await using var conn = CrearConexion(factory, token: null);
 
-        // La conexión debe ser rechazada (401)
+        //Act & Assert
         await Assert.ThrowsAsync<HttpRequestException>(
             () => conn.StartAsync());
     }
 
     [Fact]
-    public async Task Desconectarse_permite_que_mensajes_posteriores_se_persistan()
+    public async Task QueLaDesconexionPermitaPersistirMensajesPosteriores()
     {
+        //Arrange
         await using var factory = new ChatFactory();
-
         var (tokenA, idA) = await RegistrarYObtenerToken(factory, "usuarioA", "a@test.com");
         var (tokenB, idB) = await RegistrarYObtenerToken(factory, "usuarioB", "b@test.com");
 
@@ -250,21 +247,17 @@ public class ChatTests
         await connA.StartAsync();
         await connB.StartAsync();
 
-        // B se desconecta
         await connB.StopAsync();
-
-        // Pequeña espera para que el servidor procese la desconexión
         await Task.Delay(200);
 
         var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         connA.On<object>("MensajeEnviado", _ => tcs.TrySetResult(true));
 
-        // A le envía un mensaje a B, que ahora está offline. Debe tener éxito y guardarse.
+        //Act
         await connA.InvokeAsync("EnviarMensaje", idB, "B ya no está pero el mensaje se guarda");
-
         await Task.WhenAny(tcs.Task, Task.Delay(5000));
 
-        // Verificar que se persistió en BD a pesar de estar offline
+        //Assert
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var mensajes = await db.MensajesChat
@@ -275,13 +268,10 @@ public class ChatTests
         Assert.Equal("B ya no está pero el mensaje se guarda", mensajes[0].Contenido);
     }
 
-    // ──────────────────────────────────────────────
-    // Infraestructura de test
-    // ──────────────────────────────────────────────
+    #endregion
 
-    /// <summary>
-    /// Registra un usuario vía HTTP y devuelve su token JWT y su Id.
-    /// </summary>
+    #region Infraestructura y Helpers de Test
+
     private static async Task<(string token, int id)> RegistrarYObtenerToken(
         ChatFactory factory, string username, string email)
     {
@@ -297,18 +287,11 @@ public class ChatTests
         return (body!.Token, body.UsuarioId);
     }
 
-    /// <summary>
-    /// Crea un HubConnection apuntando al TestServer interno de la factory.
-    /// El token viaja por query string porque SignalR no soporta headers
-    /// personalizados en WebSockets.
-    /// </summary>
     private static HubConnection CrearConexion(ChatFactory factory, string? token)
     {
         return new HubConnectionBuilder()
             .WithUrl("http://localhost/hubs/chat", options =>
             {
-                // Reutilizar el HttpMessageHandler del TestServer en lugar de
-                // hacer conexiones de red reales. Fundamental para tests.
                 options.HttpMessageHandlerFactory = _ => factory.Server.CreateHandler();
                 if (token is not null)
                     options.AccessTokenProvider = () => Task.FromResult<string?>(token);
@@ -333,7 +316,6 @@ public class ChatTests
             });
             builder.ConfigureServices(services =>
             {
-                // Reemplazar PostgreSQL por base de datos en memoria
                 services.RemoveAll<DbContextOptions<ApplicationDbContext>>();
                 services.RemoveAll<IDbContextOptionsConfiguration<ApplicationDbContext>>();
                 var nombre = Guid.NewGuid().ToString();
@@ -344,7 +326,6 @@ public class ChatTests
 
     private record AuthRespuesta(string Token, int UsuarioId, string Username, string Email, bool EsAdmin);
 
-    // DTO de respuesta del historial — coincide con MensajeChatDto del servidor
     private record MensajeChatRespuesta(
         int Id,
         int EmisorId,
@@ -352,4 +333,6 @@ public class ChatTests
         int DestinatarioId,
         string Contenido,
         DateTime FechaEnvio);
+
+    #endregion
 }
