@@ -4,11 +4,10 @@ using ProyectoFinalTPI.Backend.Entidades;
 
 namespace ProyectoFinalTPI.Backend.Repositorio.Cache;
 
-public sealed class InvalidacionPublicaInterceptor(CacheLecturasPublicas cache) : SaveChangesInterceptor
+public sealed class InvalidacionPublicaInterceptor(IInvalidadorLecturasPublicas cache, IDetectorCambiosPublicos detector) : SaveChangesInterceptor
 {
     private bool pendiente;
-    private void Detectar(DbContext? db) => pendiente = db is not null && db.ChangeTracker.Entries()
-        .Any(e => (e.Entity is Usuario || e.Entity is Publicacion) && e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted);
+    private void Detectar(DbContext? db) => pendiente = detector.HayCambios(db);
     public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
     { Detectar(eventData.Context); return result; }
     public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)

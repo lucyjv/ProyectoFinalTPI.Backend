@@ -6,7 +6,7 @@ using StackExchange.Redis;
 namespace ProyectoFinalTPI.Backend.Repositorio.Cache;
 
 // El número de generación evita que una lectura concurrente repueble una clave invalidada.
-public sealed class CacheLecturasPublicas(IDistributedCache cache, ILogger<CacheLecturasPublicas> logger)
+public sealed class CacheLecturasPublicas(IDistributedCache cache, ILogger<CacheLecturasPublicas> logger) : ICacheLecturasPublicas, IInvalidadorLecturasPublicas
 {
     private const string Generacion = "publico:generacion:v1";
     public async Task<T?> Obtener<T>(string clave, Func<Task<T?>> consultar, CancellationToken ct) where T : class

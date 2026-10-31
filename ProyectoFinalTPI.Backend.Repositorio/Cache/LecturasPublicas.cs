@@ -6,19 +6,19 @@ using ProyectoFinalTPI.Backend.Repositorio.Data;
 
 namespace ProyectoFinalTPI.Backend.Repositorio.Cache;
 
-public sealed class PerfilPublicoConsulta(ApplicationDbContext db, CacheLecturasPublicas cache) : IPerfilPublicoConsulta
+public sealed class PerfilPublicoConsulta(IOrigenLecturasPublicas origen, ICacheLecturasPublicas cache) : IPerfilPublicoConsulta
 {
     public async Task<Usuario?> Obtener(int id, CancellationToken cancellationToken = default)
     {
         var datos = await cache.Obtener($"perfil:{id}", async () =>
         {
-            var usuario = await db.Usuarios.AsNoTracking().SingleOrDefaultAsync(u => u.Id == id, cancellationToken);
+            var usuario = await origen.ObtenerUsuario(id, cancellationToken);
             if (usuario is null) return null;
             return usuario switch
             {
-                Usuario_Personal p => new DatosPublicos(p.Id, p.Username, p.FotoPerfilUrl, "personal", p.Nombre, p.Apellido, p.Reputacion, p.PuntosNostalgia),
-                Usuario_Marca m => new DatosPublicos(m.Id, m.Username, m.FotoPerfilUrl, "marca", m.NombreEmpresa, null, default, m.PuntosNostalgia),
-                _ => new DatosPublicos(usuario.Id, usuario.Username, usuario.FotoPerfilUrl, "usuario", null, null, default, 0)
+                Usuario_Personal p => new DatosPerfilPublico(p.Id, p.Username, p.FotoPerfilUrl, "personal", p.Nombre, p.Apellido, p.Reputacion, p.PuntosNostalgia),
+                Usuario_Marca m => new DatosPerfilPublico(m.Id, m.Username, m.FotoPerfilUrl, "marca", m.NombreEmpresa, null, default, m.PuntosNostalgia),
+                _ => new DatosPerfilPublico(usuario.Id, usuario.Username, usuario.FotoPerfilUrl, "usuario", null, null, default, 0)
             };
         }, cancellationToken);
         if (datos is null) return null;
@@ -34,15 +34,14 @@ public sealed class PerfilPublicoConsulta(ApplicationDbContext db, CacheLecturas
         resultado.FotoPerfilUrl = datos.Foto;
         return resultado;
     }
-    private sealed record DatosPublicos(int Id, string Username, string? Foto, string Tipo, string? Nombre, string? Apellido, ReputacionEnum Reputacion, int Puntos);
 }
 
-public sealed class ResumenPublicacionConsulta(ApplicationDbContext db, IPublicacionRepositorio repositorio, CacheLecturasPublicas cache) : IResumenPublicacionConsulta
+public sealed class ResumenPublicacionConsulta(IOrigenLecturasPublicas origen, IPublicacionRepositorio repositorio, ICacheLecturasPublicas cache) : IResumenPublicacionConsulta
 {
     public async Task<PublicacionResumenDto?> Obtener(int id, CancellationToken cancellationToken = default)
     {
         // La visibilidad y existencia no dependen del TTL ni de Redis.
-        if (!await db.Publicaciones.AsNoTracking().AnyAsync(p => p.Id == id && !p.EstaOculto, cancellationToken)) return null;
+        if (!await origen.EsPublicacionVisible(id, cancellationToken)) return null;
         return await cache.Obtener($"resumen:{id}", () => repositorio.ObtenerResumenPorId(id, cancellationToken), cancellationToken);
     }
 }
