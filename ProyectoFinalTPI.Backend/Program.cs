@@ -1,3 +1,4 @@
+using ProyectoFinalTPI.Backend.Repositorio.Cache;
 using System.Text;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -67,11 +68,14 @@ builder.Services.AddControllersWithViews(options =>
     options.ValueProviderFactories.Insert(0, new ProyectoFinalTPI.Backend.Requests.InvariantFormValueProviderFactory());
 });
 
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
+builder.Services.AddDbContext<ApplicationDbContext>((provider, options) =>
+{
+    if (builder.Configuration.GetValue<bool>("Redis:Habilitado")) options.AddInterceptors(provider.GetRequiredService<InvalidacionPublicaInterceptor>());
     options.UseNpgsql(
         builder.Configuration.GetConnectionString("PostgresConnection"),
         npgsqlOptions => npgsqlOptions.UseNetTopologySuite()
-    ));
+    );
+});
 
 builder.Services.AddSingleton<IDriver>(provider =>
 {
@@ -159,9 +163,26 @@ builder.Services.AddHttpClient("GooglePhotos", client => client.Timeout = TimeSp
 builder.Services.AddSingleton<GooglePhotosService>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<GooglePhotosService>());
 
-builder.Services.AddSingleton<
-    ISesionFypRepositorio,
-    SesionFypRepositorio>();
+if (builder.Configuration.GetValue<bool>("Redis:Habilitado"))
+{
+    var conexionRedis = builder.Configuration["Redis:ConnectionString"];
+    if (string.IsNullOrWhiteSpace(conexionRedis))
+        throw new InvalidOperationException("Redis:ConnectionString es obligatoria cuando Redis está habilitado.");
+    builder.Services.AddStackExchangeRedisCache(options =>
+    {
+        options.Configuration = conexionRedis;
+        options.InstanceName = "nostalgiar:v1:";
+    });
+    builder.Services.AddSingleton<ISesionFypRepositorio, SesionFypRedisRepositorio>();
+    builder.Services.AddSingleton<CacheLecturasPublicas>();
+    builder.Services.AddScoped<InvalidacionPublicaInterceptor>();
+    builder.Services.AddScoped<IPerfilPublicoConsulta, PerfilPublicoConsulta>();
+    builder.Services.AddScoped<IResumenPublicacionConsulta, ResumenPublicacionConsulta>();
+}
+else
+{
+    builder.Services.AddSingleton<ISesionFypRepositorio, SesionFypRepositorio>();
+}
 
 // Auth
 builder.Services.AddScoped<IAuthServicio, AuthServicio>();

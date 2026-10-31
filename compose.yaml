@@ -15,6 +15,8 @@ x-backend: &backend
     Cors__AllowedOrigins__0: http://localhost:${FRONTEND_PORT:-3001}
     Cors__AllowedOrigins__1: http://127.0.0.1:${FRONTEND_PORT:-3001}
     Seed__Habilitado: "false"
+    Redis__Habilitado: "true"
+    Redis__ConnectionString: redis:6379,abortConnect=false,connectTimeout=1000,syncTimeout=1000,asyncTimeout=1000
     AnalisisRecuerdos__Habilitado: "false"
     Gemini__Habilitado: "false"
     Cloudinary__CloudName: ${DOCKER_CLOUDINARY_CLOUD_NAME:-}
@@ -22,6 +24,17 @@ x-backend: &backend
     Cloudinary__ApiSecret: ${DOCKER_CLOUDINARY_API_SECRET:-}
 
 services:
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "128mb", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+
   postgres:
     image: postgis/postgis:16-3.5
     environment:
@@ -69,6 +82,8 @@ services:
     depends_on:
       initialize:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/swagger/v1/swagger.json"]
       interval: 10s
@@ -99,5 +114,6 @@ services:
       start_period: 20s
 
 volumes:
+  redis-data:
   postgres-data:
   neo4j-data:

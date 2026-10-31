@@ -29,6 +29,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
         private readonly INotificacionServicio _notificacionServicio;
         private readonly ILogroServicio _logroServicio;
         private readonly OpcionesPublicacion _opcionesPublicacion;
+        private readonly IResumenPublicacionConsulta? _resumenConsulta;
 
         public PublicacionServicio(
             IPublicacionRepositorio publicacionRepositorio,
@@ -39,9 +40,10 @@ namespace ProyectoFinalTPI.Backend.Servicio
             IOptions<FeedRecomendacionesOptions> opcionesFeed,
             INotificacionServicio notificacionServicio,
             ILogroServicio logroServicio,
-            IOptions<OpcionesPublicacion>? opcionesPublicacion = null)
+            IOptions<OpcionesPublicacion>? opcionesPublicacion = null, IResumenPublicacionConsulta? resumenConsulta = null)
         {
             _publicacionRepositorio = publicacionRepositorio;
+            _resumenConsulta = resumenConsulta;
             _usuarioRepositorio = usuarioRepositorio;
             _multimediaServicio = multimediaServicio;
             _sesionFypRepositorio = sesionFypRepositorio;
@@ -263,7 +265,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
         {
             ValidarIdPublicacion(id);
 
-            return await _publicacionRepositorio.ObtenerResumenPorId(id, cancellationToken)
+            return await (_resumenConsulta is null ? _publicacionRepositorio.ObtenerResumenPorId(id, cancellationToken) : _resumenConsulta.Obtener(id, cancellationToken))
            ?? throw new KeyNotFoundException("La publicación no existe o no está disponible.");
         }
         public async Task<PublicacionDetalleDto> ObtenerDetallePorId(int id, CancellationToken cancellationToken = default)

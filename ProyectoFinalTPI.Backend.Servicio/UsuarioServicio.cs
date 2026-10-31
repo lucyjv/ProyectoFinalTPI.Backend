@@ -12,6 +12,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
     public class UsuarioServicio : IUsuarioServicio
     {
         private readonly IUsuarioRepositorio _repositorio;
+        private readonly IPerfilPublicoConsulta? _perfilPublico;
         private readonly ISeguimientoServicio? _seguimientoServicio;
         private readonly ILogroServicio _logroServicio;
         private readonly TimeProvider _timeProvider;
@@ -21,9 +22,10 @@ namespace ProyectoFinalTPI.Backend.Servicio
             IUsuarioRepositorio repositorio,
             ILogroServicio logroServicio,
             ISeguimientoServicio? seguimientoServicio = null, TimeProvider? timeProvider = null,
-            IFotoPerfilAlmacenamiento? fotoPerfilAlmacenamiento = null)
+            IFotoPerfilAlmacenamiento? fotoPerfilAlmacenamiento = null, IPerfilPublicoConsulta? perfilPublico = null)
         {
             _repositorio = repositorio;
+            _perfilPublico = perfilPublico;
             _seguimientoServicio = seguimientoServicio;
             _logroServicio = logroServicio;
             _timeProvider = timeProvider ?? TimeProvider.System;
@@ -139,7 +141,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
             string username, int? usuarioAutenticadoId, CancellationToken cancellationToken = default)
         {
             var usuario = await ObtenerUsuarioPorUsername(username, cancellationToken);
-
+            if (_perfilPublico is not null) usuario = await _perfilPublico.Obtener(usuario.Id, cancellationToken) ?? usuario;
             return await ConstruirPerfilDto(usuario, usuarioAutenticadoId, cancellationToken);
         }
 
@@ -147,7 +149,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
         public async Task<UsuarioPerfilDto> ObtenerPerfilPorIdAsync(
             int usuarioId, int? usuarioAutenticadoId, CancellationToken cancellationToken = default)
         {
-            var usuario = await _repositorio.ObtenerPorIdAsync(usuarioId);
+            var usuario = _perfilPublico is null ? await _repositorio.ObtenerPorIdAsync(usuarioId) : await _perfilPublico.Obtener(usuarioId, cancellationToken);
 
             if (usuario is null)
                 throw new KeyNotFoundException($"No existe ningún usuario con el identificador '{usuarioId}'.");
