@@ -49,6 +49,11 @@ namespace ProyectoFinalTPI.Backend.Tests
                     ids.Distinct().ToDictionary(id => id, _ => (1, false)));
 
             _publicacionRepositorioMock
+                .Setup(r => r.ObtenerResumenGuardados(It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((IReadOnlyCollection<int> ids, int _, CancellationToken _) =>
+                    ids.Distinct().ToDictionary(id => id, _ => false));
+
+            _publicacionRepositorioMock
                 .Setup(r => r.ObtenerEstadoRepost(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((int publicacionId, int _, CancellationToken _) => new RepostPublicacionDto
                 {

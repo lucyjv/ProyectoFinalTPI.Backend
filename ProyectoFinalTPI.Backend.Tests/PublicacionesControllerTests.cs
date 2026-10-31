@@ -632,47 +632,78 @@ namespace ProyectoFinalTPI.Backend.Tests
         [Fact]
         public async Task QueSePuedaGuardarUnaPublicacion()
         {
+            //Arrange
+            _publicacionServicioMock
+                .Setup(s => s.Guardar(42, 10, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new GuardadoPublicacionDto { PublicacionId = 42, Guardada = true });
+
+            //Act
             var result = await _controller.Guardar(42, 10);
+
+            //Assert
             var ok = Assert.IsType<OkObjectResult>(result);
             var dto = Assert.IsType<GuardadoPublicacionDto>(ok.Value);
             Assert.Equal(42, dto.PublicacionId);
             Assert.True(dto.Guardada);
-            Assert.Equal(42, _servicio.IdConsultado);
+            _publicacionServicioMock.Verify(s => s.Guardar(42, 10, It.IsAny<CancellationToken>()), Times.Once);
         }
 
         [Fact]
         public async Task QueSePuedaQuitarGuardadoDeUnaPublicacion()
         {
+            //Arrange
+            _publicacionServicioMock
+                .Setup(s => s.QuitarGuardado(42, 10, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new GuardadoPublicacionDto { PublicacionId = 42, Guardada = false });
+
+            //Act
             var result = await _controller.QuitarGuardado(42, 10);
+
+            //Assert
             var ok = Assert.IsType<OkObjectResult>(result);
             var dto = Assert.IsType<GuardadoPublicacionDto>(ok.Value);
             Assert.Equal(42, dto.PublicacionId);
             Assert.False(dto.Guardada);
-            Assert.Equal(42, _servicio.IdConsultado);
+            _publicacionServicioMock.Verify(s => s.QuitarGuardado(42, 10, It.IsAny<CancellationToken>()), Times.Once);
         }
 
         [Fact]
-        public async Task Guardar_DevuelveUnauthorizedSiNoHayUsuario()
+        public async Task QueGuardarDevuelvaUnauthorizedSiNoHayUsuario()
         {
+            //Arrange & Act
             var result = await _controller.Guardar(42, null);
+
+            //Assert
             Assert.IsType<UnauthorizedObjectResult>(result);
         }
 
         [Fact]
-        public async Task QuitarGuardado_DevuelveUnauthorizedSiNoHayUsuario()
+        public async Task QueQuitarGuardadoDevuelvaUnauthorizedSiNoHayUsuario()
         {
+            //Arrange & Act
             var result = await _controller.QuitarGuardado(42, null);
+
+            //Assert
             Assert.IsType<UnauthorizedObjectResult>(result);
         }
 
         [Fact]
         public async Task QueSePuedanObtenerPublicacionesGuardadasPorUsuario()
         {
+            //Arrange
+            var listaMock = new List<PublicacionDetalleDto> { new() { Id = 1 } };
+            _publicacionServicioMock
+                .Setup(s => s.ObtenerGuardadasPorUsuarioId(10, null, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(listaMock);
+
+            //Act
             var result = await _controller.ObtenerGuardadasPorUsuario(10, CancellationToken.None);
+
+            //Assert
             var ok = Assert.IsType<OkObjectResult>(result.Result);
             var lista = Assert.IsType<List<PublicacionDetalleDto>>(ok.Value);
-            Assert.Equal(10, _servicio.IdConsultado);
             Assert.Single(lista);
+            _publicacionServicioMock.Verify(s => s.ObtenerGuardadasPorUsuarioId(10, null, It.IsAny<CancellationToken>()), Times.Once);
         }
 
         [Fact]
