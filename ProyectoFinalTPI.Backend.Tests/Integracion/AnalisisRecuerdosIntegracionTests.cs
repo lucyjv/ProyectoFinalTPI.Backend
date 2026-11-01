@@ -122,7 +122,7 @@ public class AnalisisRecuerdosIntegracionTests(PostgisFixture postgres) : IClass
     }
 
     [Fact]
-    public async Task QueElWorkerUseLaColaRealYExpongaSinAnalizadorSinInventarMomentos()
+    public async Task QueLaIaDeshabilitadaMantengaElTrabajoPendienteSinInventarMomentos()
     {
         //Arrange
         await using var factory = new PublicacionesApiFactory(postgres);
@@ -137,8 +137,8 @@ public class AnalisisRecuerdosIntegracionTests(PostgisFixture postgres) : IClass
 
         //Assert
         Assert.Equal("pendiente", pendiente!.Estado);
-        Assert.True(procesado);
-        Assert.Equal("sinAnalizador", terminado!.Estado);
+        Assert.False(procesado);
+        Assert.Equal("pendiente", terminado!.Estado);
         using var consulta = factory.Services.CreateScope();
         Assert.Empty(await consulta.ServiceProvider.GetRequiredService<ApplicationDbContext>().PublicacionesMomentos.ToListAsync());
     }

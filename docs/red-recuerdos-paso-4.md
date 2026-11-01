@@ -6,7 +6,7 @@ La creación de un recuerdo original visible guarda la publicación y un trabajo
 
 El worker consume trabajos en segundo plano, uno por ciclo y con un scope nuevo. Puede haber varios workers/instancias: PostgreSQL reserva cada fila con `FOR UPDATE SKIP LOCKED`. Cada reserva tiene token y vencimiento; una instancia anterior no puede confirmar resultados después de que otra recupere el trabajo.
 
-**Todavía no hay proveedor de IA.** `AnalizadorRecuerdoSinProveedor` permite ejecutar el circuito completo, termina como `sinAnalizador` y no agrega ni retira asociaciones. Los tests usan analizadores controlados para comprobar resultados, errores y carreras. La extracción de acontecimientos, su resolución/creación y el proveedor corresponden al paso 5.
+La integración con Gemini se describe en el [paso 5](red-recuerdos-paso-5.md). Cuando el análisis está deshabilitado, la cola permanece pendiente sin consumir intentos. Se retiró el analizador temporal sin proveedor; `sinAnalizador` se conserva como estado histórico. Los tests usan analizadores controlados para comprobar resultados, errores y carreras.
 
 ## Modelo y versiones
 
@@ -26,7 +26,7 @@ El worker consume trabajos en segundo plano, uno por ciclo y con un scope nuevo.
 2. Leer el contenido solo si siguen vigentes la reserva, la versión, la visibilidad y la preferencia de automatización. Si dejaron de ser válidos, descartar sin llamar al analizador.
 3. Invocar `IAnalizadorRecuerdo` con cancelación y tiempo máximo. Validar la salida antes de persistir: hasta 50 momentos distintos, Id positivos y confianza finita entre 0 y 1.
 4. Tomar el mismo bloqueo por publicación que usan las correcciones del paso 3. Volver a comprobar reserva, versión de contenido y preferencias actuales.
-5. Para un análisis real, reemplazar solamente las asociaciones automáticas. Mantener intactas las decisiones del autor, tanto activas como rechazadas. Una salida real vacía puede retirar vínculos automáticos anteriores; el analizador temporal sin proveedor no lo hace.
+5. Para un análisis real, reemplazar solamente las asociaciones automáticas. Mantener intactas las decisiones del autor, tanto activas como rechazadas. Una salida real vacía puede retirar vínculos automáticos anteriores; deshabilitar el análisis no modifica esos vínculos.
 6. Guardar asociaciones, nueva VersionRelaciones si hubo cambios y estado final del trabajo en una sola transacción. Si algo falla, se revierte el resultado completo antes de registrar el fallo/reintento.
 
 El contrato del analizador devuelve datos; no debe escribir asociaciones por su cuenta y debe respetar cancelación. El circuito admite resultados referidos a momentos ya resueltos; la resolución semántica se implementará detrás de este contrato en el paso 5.
@@ -68,7 +68,7 @@ Lectura pública de la versión actual del recuerdo visible:
 | `procesando` | Un worker tiene la reserva. |
 | `completado` | Se procesó una salida real con momentos detectados. Consultar el GET de momentos para conocer las asociaciones activas. |
 | `sinMomento` | Una salida real no detectó momentos. No elimina decisiones del autor. |
-| `sinAnalizador` | El circuito terminó sin proveedor configurado. Es el resultado normal del analizador temporal de esta entrega. |
+| `sinAnalizador` | Estado histórico de trabajos completados con el antiguo analizador sin proveedor. |
 | `descartado` | El trabajo dejó de ser aplicable y no impuso su resultado. |
 | `fallido` | Se agotaron intentos o hubo una entrada/salida inválida. |
 | `desactivado` | El autor desactivó asociaciones automáticas; tiene prioridad sobre el estado interno del trabajo. |
@@ -84,7 +84,7 @@ Valores predeterminados, configurables en la sección `AnalisisRecuerdos`:
 ```json
 {
   "AnalisisRecuerdos": {
-    "Habilitado": true,
+    "Habilitado": false,
     "IntervaloSegundos": 5,
     "ReservaSegundos": 120,
     "TiempoMaximoSegundos": 30,
@@ -95,7 +95,7 @@ Valores predeterminados, configurables en la sección `AnalisisRecuerdos`:
 }
 ```
 
-También se pueden usar variables como `AnalisisRecuerdos__Habilitado`. La reserva debe superar el tiempo máximo de análisis en más de 5 segundos; hay validación al iniciar. Habilitado = false detiene el consumo, pero no impide guardar nuevos trabajos. En `Testing` se desactiva el loop por defecto para evitar carreras con las pruebas; los tests ejecutan ciclos explícitos contra la cola real.
+También se pueden usar variables como `AnalisisRecuerdos__Habilitado`. La reserva debe superar el tiempo máximo de análisis en más de 5 segundos; hay validación al iniciar. Habilitado = false detiene el consumo, pero no impide guardar nuevos trabajos. El análisis está deshabilitado por defecto en todos los entornos. Los tests que lo habilitan retiran el worker automático y ejecutan ciclos explícitos para evitar carreras.
 
 Desactivar y volver a activar la preferencia de un autor no reprograma un trabajo terminal. No se expone un endpoint público para vaciar, reintentar o reprocesar la cola.
 

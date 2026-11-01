@@ -635,7 +635,7 @@ Aplicar `20261021144634_AgregarCorreccionMomentos` mediante el comando habitual 
 
 Crear un recuerdo original visible guarda también un trabajo persistente de análisis, en la misma transacción. El POST conserva `201 { id }` y no espera al analizador. El worker usa reservas con token/vencimiento, reintentos y control de versiones para recuperar interrupciones y descartar resultados de texto desactualizado. Las correcciones del autor siguen teniendo prioridad.
 
-El analizador temporal termina en `sinAnalizador`, sin inventar ni retirar asociaciones. El paso 5 permite habilitar Gemini para detectar y resolver acontecimientos colectivos.
+Con el análisis deshabilitado, los trabajos permanecen pendientes sin consumir intentos. El paso 5 permite habilitar Gemini para detectar y resolver acontecimientos colectivos. El estado histórico `sinAnalizador` se mantiene para trabajos anteriores.
 
 Frontend puede consultar el estado de la versión actual con `GET /api/publicaciones/{id}/analisis` (público):
 
@@ -655,11 +655,11 @@ Aplicar `20261021160638_AgregarColaAnalisisRecuerdos` mediante el comando habitu
 
 Se integró Gemini detrás de `IAnalizadorRecuerdo`, con el modelo configurable `gemini-3.5-flash-lite`. Analiza título/descripción, propone acontecimientos colectivos con evidencia y confianza, reutiliza el catálogo o crea momentos y alias al confirmar el trabajo. El catálogo y los vínculos se guardan juntos; se respetan versiones y correcciones del autor. No requiere nuevas migraciones ni cambios en los endpoints de frontend.
 
-Gemini viene deshabilitado. Guardar `Gemini:ApiKey` en User Secrets del proyecto web y habilitar expresamente `Gemini:Habilitado` para procesar recuerdos reales. El nivel gratuito y sus cuotas dependen del proyecto en AI Studio. Google puede usar contenido enviado en el nivel gratuito para mejorar sus productos; evaluar primero con datos ficticios.
+Gemini viene deshabilitado. Guardar `AnalisisRecuerdos:ApiKey` en User Secrets del proyecto web y habilitar expresamente `AnalisisRecuerdos:Habilitado` para procesar recuerdos reales. El nivel gratuito y sus cuotas dependen del proyecto en AI Studio. Google puede usar contenido enviado en el nivel gratuito para mejorar sus productos; evaluar primero con datos ficticios.
 
-La prueba aislada `dotnet run --project ProyectoFinalTPI.Backend --no-launch-profile -- --probar-gemini`, ejecutada en Development, envía tres ejemplos ficticios y no abre ni modifica la base. La clave no se envía al frontend. Cambiar luego `Gemini:Modelo` permite evaluar otro modelo compatible sin modificar la cola ni sus endpoints.
+La integración HTTP vive en `ProyectoFinalTPI.Backend.Infraestructura`. La configuración de IA y del procesamiento se centraliza en `AnalisisRecuerdos`: `Proveedor`, `Modelo` y `ApiKey`. Infraestructura selecciona el adaptador; actualmente solo se admite `Gemini` y un proveedor no implementado se rechaza al iniciar. No se usa la antigua sección `Gemini`. Las pruebas automáticas utilizan HTTP simulado y no consumen cuota.
 
-Configuración completa, ejecución de la prueba, cuotas, privacidad y límites de la canonicalización: [Gemini y acontecimientos colectivos: paso 5](docs/red-recuerdos-paso-5.md).
+Configuración completa, pruebas, cuotas, privacidad y límites de la canonicalización: [Gemini y acontecimientos colectivos: paso 5](docs/red-recuerdos-paso-5.md).
 
 ### Reprocesar recuerdos existentes por lotes (paso 6)
 

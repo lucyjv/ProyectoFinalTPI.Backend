@@ -19,7 +19,7 @@ public partial class MomentoRepositorio
     public async Task<MomentoDetalleDto?> ObtenerDetalle(int id, CancellationToken ct)
     {
         if (!await db.Momentos.AnyAsync(m => m.Id == id, ct)) return null;
-        var canonico = await CatalogoMomentos.Resolver(db, id, ct);
+        var canonico = await MomentoRepositorio.Resolver(db, id, ct);
         var momento = await db.Momentos.AsNoTracking().Include(m => m.MomentoPadre)
             .Include(m => m.Hijos).Include(m => m.Alias).AsSingleQuery().SingleOrDefaultAsync(m => m.Id == canonico.Id, ct);
         return momento == null ? null : new MomentoDetalleDto
@@ -35,7 +35,7 @@ public partial class MomentoRepositorio
 
     public async Task<List<PublicacionResumenDto>> ObtenerPublicaciones(int id, bool descendientes, CursorExploracionMomentoDto? cursor, int limite, CancellationToken ct)
     {
-        id = (await CatalogoMomentos.Resolver(db, id, ct)).Id;
+        id = (await MomentoRepositorio.Resolver(db, id, ct)).Id;
         var ids = new HashSet<int> { id };
         var frontera = new List<int> { id };
         while (descendientes && frontera.Count > 0)
@@ -74,7 +74,7 @@ public partial class MomentoRepositorio
             if (actual.UsuarioId != usuarioId) throw new UnauthorizedAccessException("Solo el autor puede corregir su recuerdo.");
             if (actual.VersionRelaciones != version) throw new ConflictoRelacionesException();
             var canonicos = new HashSet<int>();
-            foreach (var seleccionado in momentoIds) canonicos.Add((await CatalogoMomentos.Resolver(db, seleccionado, ct)).Id);
+            foreach (var seleccionado in momentoIds) canonicos.Add((await MomentoRepositorio.Resolver(db, seleccionado, ct)).Id);
             momentoIds = canonicos;
             if (await db.Momentos.CountAsync(m => momentoIds.Contains(m.Id), ct) != momentoIds.Count)
                 throw new KeyNotFoundException("Alguno de los momentos seleccionados no existe.");

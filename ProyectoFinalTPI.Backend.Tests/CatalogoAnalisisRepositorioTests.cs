@@ -17,7 +17,7 @@ public class CatalogoAnalisisRepositorioTests : IDisposable
         _context.Momentos.AddRange(new Momento { Id = 1, Nombre = "Argentina campeón 1986", Alias = [new() { Texto = "México 86", TextoNormalizado = "mexico 86" }] },
             new Momento { Id = 2, Nombre = "Recital de Soda Stereo 1997" });
         await _context.SaveChangesAsync();
-        var repositorio = new CatalogoAnalisisRepositorio(_context);
+        var repositorio = new MomentoRepositorio(_context);
 
         //Act
         var result = await repositorio.BuscarCandidatos("Mi recuerdo de MÉXICO 86", CancellationToken.None);
@@ -37,7 +37,7 @@ public class CatalogoAnalisisRepositorioTests : IDisposable
                 .Select(a => new MomentoAlias { Texto = $"Alias {a}", TextoNormalizado = $"alias {a}" }).ToList()
         });
         await _context.SaveChangesAsync();
-        var repositorio = new CatalogoAnalisisRepositorio(_context);
+        var repositorio = new MomentoRepositorio(_context);
 
         //Act
         var result = await repositorio.BuscarCandidatos("Mundial", CancellationToken.None);

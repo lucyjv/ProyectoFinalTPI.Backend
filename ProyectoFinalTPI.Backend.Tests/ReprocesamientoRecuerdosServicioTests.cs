@@ -1,3 +1,4 @@
+using ProyectoFinalTPI.Backend.Interfaces.Configuracion;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -14,7 +15,7 @@ public class ReprocesamientoRecuerdosServicioTests
 {
     private readonly Mock<IReprocesamientoRecuerdosRepositorio> _repositorio = new(MockBehavior.Strict);
     private readonly Mock<IAnalizadorRecuerdo> _analizador = new(MockBehavior.Strict);
-    private readonly OpcionesAnalisisRecuerdos _opciones = new();
+    private readonly OpcionesAnalisisRecuerdos _opciones = new() { Habilitado = true };
     private readonly ReprocesamientoRecuerdosServicio _servicio;
     private readonly RelojFijo _reloj = new();
 

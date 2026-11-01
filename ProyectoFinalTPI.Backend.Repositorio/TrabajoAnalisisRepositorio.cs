@@ -85,7 +85,7 @@ public partial class TrabajoAnalisisRepositorio(ApplicationDbContext db) : ITrab
                 await db.SaveChangesAsync(ct);
                 return true;
             }
-            resultado = resultado with { Momentos = await ResolverPropuestas(resultado, ahora, ct) };
+            resultado = resultado with { Momentos = await MomentoRepositorio.ResolverPropuestas(db, resultado, ahora, ct) };
             var ids = resultado.Momentos.Select(m => m.MomentoId).ToArray();
             if (await db.Momentos.CountAsync(m => ids.Contains(m.Id), ct) != ids.Length)
                 throw new ArgumentException("El resultado contiene momentos inexistentes.");

@@ -25,17 +25,18 @@ En el nivel gratuito, Google puede usar los contenidos para mejorar sus producto
 Desde la raíz del repositorio:
 
 ```powershell
-dotnet user-secrets set "Gemini:ApiKey" "TU_CLAVE_REAL" --project ProyectoFinalTPI.Backend
+dotnet user-secrets set "AnalisisRecuerdos:ApiKey" "TU_CLAVE_REAL" --project ProyectoFinalTPI.Backend
 ```
 
-La clave se mantiene fuera del repositorio y del frontend. En un servidor usar el almacén de secretos del entorno, por ejemplo `Gemini__ApiKey`. Los User Secrets se cargan en Development.
+La clave se mantiene fuera del repositorio y del frontend. En un servidor usar el almacén de secretos del entorno, por ejemplo `AnalisisRecuerdos__ApiKey`. Los User Secrets se cargan en Development. Si ya tenías valores en `Gemini:ApiKey`, `Gemini:Habilitado` o `Gemini:Modelo`, trasladalos a `AnalisisRecuerdos:ApiKey`, `AnalisisRecuerdos:Habilitado` y `AnalisisRecuerdos:Modelo`. La sección anterior ya no se utiliza.
 
 Valores de `appsettings.json`:
 
 ```json
 {
-  "Gemini": {
+  "AnalisisRecuerdos": {
     "Habilitado": false,
+    "Proveedor": "Gemini",
     "Modelo": "gemini-3.5-flash-lite",
     "ConfianzaMinima": 0.85,
     "IntervaloMinimoSegundos": 6
@@ -46,21 +47,20 @@ Valores de `appsettings.json`:
 Para activar el procesamiento real local después de evaluar:
 
 ```powershell
-dotnet user-secrets set "Gemini:Habilitado" "true" --project ProyectoFinalTPI.Backend
+dotnet user-secrets set "AnalisisRecuerdos:Habilitado" "true" --project ProyectoFinalTPI.Backend
 ```
 
-También debe estar habilitado `AnalisisRecuerdos:Habilitado`. Si Gemini está deshabilitado, se conserva el analizador sin proveedor del paso 4. Si está habilitado sin clave, la validación falla al iniciar. El tiempo máximo y la cantidad de reintentos se configuran en `AnalisisRecuerdos`.
+`AnalisisRecuerdos` es la única sección de configuración para el proveedor y el procesamiento. `Proveedor` elige el adaptador desde Infraestructura; por defecto es `Gemini`. Actualmente solo Gemini está implementado. Los nombres se comparan sin distinguir mayúsculas y se ignoran espacios exteriores. Un proveedor vacío o no implementado impide el arranque, sin elegir otro como alternativa. Si está deshabilitado, la aplicación funciona y los trabajos permanecen pendientes sin consumir intentos ni llamar a Gemini. Si se habilita sin clave, la validación falla al iniciar. El tiempo máximo y la cantidad de reintentos se configuran en la misma sección.
 
-Para pasar a otro modelo compatible de Gemini basta cambiar `Gemini:Modelo`; para usar un proveedor diferente, implementar `IAnalizadorRecuerdo` y registrar esa implementación. El proveedor devuelve datos: el catálogo y las asociaciones siguen siendo responsabilidad del repositorio. La cola, los endpoints y el frontend no dependen del modelo.
+Para pasar a otro modelo compatible de Gemini basta cambiar `AnalisisRecuerdos:Modelo`. La selección de `AnalisisRecuerdos:Proveedor` está en `RegistroAnalisisRecuerdos`, dentro de Infraestructura. Para habilitar un proveedor nuevo hay que implementar `IAnalizadorRecuerdo` y agregarlo a la selección y validación de ese registro. Después se eligen proveedor, modelo y clave desde `AnalisisRecuerdos`, sin modificar Servicio, Repositorio ni Program.cs. El proveedor devuelve datos: el catálogo y las asociaciones siguen siendo responsabilidad del repositorio. La cola, los endpoints y el frontend no dependen del modelo.
 
-## Prueba real aislada
+## Separación de responsabilidades y pruebas
 
-```powershell
-$env:DOTNET_ENVIRONMENT = "Development"
-dotnet run --project ProyectoFinalTPI.Backend --no-launch-profile -- --probar-gemini
-```
+`ProyectoFinalTPI.Backend.Infraestructura` contiene `AnalizadorRecuerdoGemini` y el registro `AddAnalisisRecuerdosIa`. Servicio utiliza `IAnalizadorRecuerdo`, sin depender de Infraestructura. La configuración compartida está en `Interfaces/Configuracion/OpcionesAnalisisRecuerdos.cs`.
 
-Este comando hace hasta tres solicitudes con ejemplos ficticios: Argentina campeón 1986, un paseo familiar sin acontecimiento y Argentina campeón 2022. Usa un catálogo vacío, no abre la base, no inicia el servidor ni workers y no modifica publicaciones. Funciona aunque `Gemini:Habilitado` sea false, porque el comando solicita expresamente esta prueba. Imprime los resultados y la versión del analizador; no imprime la clave. Ante un error de cuota/configuración termina sin cambiar de modelo ni reintentar. Las pruebas automáticas habituales usan HTTP simulado y no consumen Gemini.
+`MomentoRepositorio` reúne candidatos, identidades, resolución de propuestas y persistencia del catálogo. `TrabajoAnalisisRepositorio` conserva la cola y confirma el catálogo y las asociaciones dentro de su transacción. `ReglasMomento.cs`, en Entidades, reúne normalización e identidad sin dependencias externas.
+
+Se retiró la herramienta manual con ejemplos ficticios. Las pruebas automáticas usan HTTP simulado y no consumen Gemini.
 
 ## Cuotas y fallos
 

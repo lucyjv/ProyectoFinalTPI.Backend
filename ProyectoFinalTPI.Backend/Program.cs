@@ -1,3 +1,4 @@
+using ProyectoFinalTPI.Backend.Infraestructura;
 using ProyectoFinalTPI.Backend.Repositorio.Cache;
 using System.Text;
 using System.Threading.RateLimiting;
@@ -18,12 +19,6 @@ using ProyectoFinalTPI.Backend.Hubs;
 using ProyectoFinalTPI.Backend.Swagger;
 
 var builder = WebApplication.CreateBuilder(args);
-
-if (args.Contains("--probar-gemini"))
-{
-    await PruebaGemini.Ejecutar(builder.Configuration);
-    return;
-}
 
 if (args.Contains("--previsualizar-reprocesamiento"))
 {
@@ -96,32 +91,11 @@ builder.Services.AddScoped<IGestionDuplicadosMomentoServicio, GestionDuplicadosM
 builder.Services.AddScoped<IExploracionMomentosRepositorio, MomentoRepositorio>();
 builder.Services.AddScoped<IExploracionMomentosServicio, ExploracionMomentosServicio>();
 builder.Services.AddSingleton(TimeProvider.System);
-builder.Services.AddOptions<OpcionesAnalisisRecuerdos>()
-    .Bind(builder.Configuration.GetSection("AnalisisRecuerdos"))
-    .Configure(o =>
-    {
-        if (builder.Environment.EnvironmentName == "Testing" && builder.Configuration["AnalisisRecuerdos:Habilitado"] == null)
-            o.Habilitado = false;
-    })
-    .ValidateDataAnnotations()
-    .Validate(o => o.ReservaSegundos > o.TiempoMaximoSegundos + 5, "La reserva debe superar el tiempo máximo de análisis en más de 5 segundos.")
-    .ValidateOnStart();
+builder.Services.AddAnalisisRecuerdosIa(builder.Configuration);
 builder.Services.AddScoped<ITrabajoAnalisisRepositorio, TrabajoAnalisisRepositorio>();
 builder.Services.AddScoped<IReprocesamientoRecuerdosRepositorio, ReprocesamientoRecuerdosRepositorio>();
 builder.Services.AddScoped<IReprocesamientoRecuerdosServicio, ReprocesamientoRecuerdosServicio>();
-builder.Services.AddScoped<ICatalogoAnalisisRepositorio, CatalogoAnalisisRepositorio>();
-builder.Services.AddOptions<OpcionesGemini>()
-    .Bind(builder.Configuration.GetSection("Gemini"))
-    .Configure(o => { if (builder.Environment.EnvironmentName == "Testing") o.Habilitado = false; })
-    .ValidateDataAnnotations()
-    .Validate(o => !o.Habilitado || !string.IsNullOrWhiteSpace(o.ApiKey), "Gemini:ApiKey es obligatoria al habilitar Gemini.")
-    .ValidateOnStart();
-builder.Services.AddSingleton<ControlCuotaGemini>();
-builder.Services.AddHttpClient<AnalizadorRecuerdoGemini>(http => http.Timeout = Timeout.InfiniteTimeSpan)
-    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
-builder.Services.AddScoped<IAnalizadorRecuerdo>(sp =>
-    sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<OpcionesGemini>>().Value.Habilitado
-        ? sp.GetRequiredService<AnalizadorRecuerdoGemini>() : new AnalizadorRecuerdoSinProveedor());
+builder.Services.AddScoped<ICatalogoAnalisisRepositorio, MomentoRepositorio>();
 builder.Services.AddScoped<IAnalisisRecuerdosServicio, AnalisisRecuerdosServicio>();
 builder.Services.AddHostedService<AnalisisRecuerdosWorker>();
 builder.Services.Configure<OpcionesPublicacion>(

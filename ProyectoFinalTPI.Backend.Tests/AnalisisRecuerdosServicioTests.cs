@@ -1,3 +1,4 @@
+using ProyectoFinalTPI.Backend.Interfaces.Configuracion;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -21,6 +22,23 @@ public class AnalisisRecuerdosServicioTests
     {
         _relaciones.Setup(r => r.ObtenerOriginalVisible(It.IsAny<int>(), It.IsAny<CancellationToken>())).ReturnsAsync(10);
         _servicio = new(_repositorio, _analizador, _relaciones.Object, Options.Create(_opciones), TimeProvider.System, NullLogger<AnalisisRecuerdosServicio>.Instance);
+    }
+
+    [Fact]
+    public async Task QueElProveedorDeshabilitadoNoReserveTrabajosNiConsumaIntentos()
+    {
+        //Arrange
+        _analizador.Disponible = false;
+
+        //Act
+        var resultado = await _servicio.ProcesarUno(CancellationToken.None);
+
+        //Assert
+        Assert.False(resultado);
+        Assert.Equal(0, _repositorio.Reservas);
+        Assert.Equal(0, _analizador.Llamadas);
+        Assert.Equal(0, _repositorio.Fallos);
+        Assert.Null(_repositorio.ResultadoGuardado);
     }
 
     [Fact]
@@ -232,6 +250,7 @@ public class AnalisisRecuerdosServicioTests
 
     private sealed class AnalizadorFake : IAnalizadorRecuerdo
     {
+        public bool Disponible { get; set; } = true;
         public string Version => "test-v1";
         public int Llamadas;
         public Exception? Error;
@@ -248,6 +267,7 @@ public class AnalisisRecuerdosServicioTests
 
     private sealed class RepositorioFake : ITrabajoAnalisisRepositorio
     {
+        public int Reservas;
         public ReservaAnalisisDto? Reserva = new() { Id = 1, PublicacionId = 10, VersionContenido = 1, Intentos = 1, TokenReserva = Guid.NewGuid(), ReservadoHasta = DateTime.UtcNow.AddMinutes(2) };
         public EntradaAnalisisRecuerdoDto? Entrada = new(10, 1, "México 86", "Los festejos", DateTime.UtcNow);
         public ResultadoAnalisisRecuerdoDto? ResultadoGuardado;
@@ -256,7 +276,8 @@ public class AnalisisRecuerdosServicioTests
         public int Fallos, MaxIntentosFallo;
         public int? PublicacionConsultada;
         public DateTime SiguienteIntento, AhoraFallo;
-        public Task<ReservaAnalisisDto?> Reservar(DateTime ahora, TimeSpan duracion, int maxIntentos, CancellationToken ct) => Task.FromResult(Reserva);
+        public Task<ReservaAnalisisDto?> Reservar(DateTime ahora, TimeSpan duracion, int maxIntentos, CancellationToken ct)
+        { Reservas++; return Task.FromResult(Reserva); }
         public Task<EntradaAnalisisRecuerdoDto?> ObtenerEntrada(ReservaAnalisisDto reserva, DateTime ahora, CancellationToken ct) => Task.FromResult(Entrada);
         public Task<bool> Completar(ReservaAnalisisDto reserva, ResultadoAnalisisRecuerdoDto resultado, string versionAnalizador, DateTime ahora, CancellationToken ct)
         { ResultadoGuardado = resultado; VersionGuardada = versionAnalizador; return Task.FromResult(true); }
