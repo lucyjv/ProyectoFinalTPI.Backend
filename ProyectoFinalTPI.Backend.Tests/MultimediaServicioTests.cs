@@ -7,6 +7,8 @@ namespace ProyectoFinalTPI.Backend.Tests;
 
 public class MultimediaServicioTests
 {
+    #region Procesamiento de Enlaces Multimedia
+
     [Theory]
     [InlineData("https://www.youtube.com/watch?v=VBvXwX7bNMk")]
     [InlineData("https://youtu.be/VBvXwX7bNMk?si=compartido")]
@@ -15,9 +17,9 @@ public class MultimediaServicioTests
     [InlineData("https://www.youtube.com/live/VBvXwX7bNMk")]
     [InlineData("https://www.youtube.com/embed/VBvXwX7bNMk")]
     [InlineData("https://www.youtube-nocookie.com/embed/VBvXwX7bNMk")]
-    public async Task Video_de_youtube_conserva_enlace_sin_subir_a_cloudinary(string url)
+    public async Task QueVideoDeYoutubeConserveEnlaceSinSubirACloudinary(string url)
     {
-        // Las credenciales ficticias hacen que una subida accidental no pueda pasar.
+        //Arrange
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(
             new Dictionary<string, string?>
             {
@@ -27,8 +29,12 @@ public class MultimediaServicioTests
             }).Build();
         var servicio = new MultimediaServicio(configuration);
 
+        //Act
         var resultado = await servicio.SubirAsync(null, null, url, MultimediaEnum.Video);
 
+        //Assert
         Assert.Equal(url, resultado);
     }
+
+    #endregion
 }

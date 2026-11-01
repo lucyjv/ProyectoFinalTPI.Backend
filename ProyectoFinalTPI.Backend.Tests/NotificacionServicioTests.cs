@@ -10,46 +10,42 @@ namespace ProyectoFinalTPI.Backend.Tests;
 
 public class NotificacionServicioTests
 {
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    private readonly Mock<INotificacionRepositorio> _repositorioMock = new();
+    private readonly Mock<IUsuarioRepositorio> _usuarioRepositorioMock = new();
+    private readonly Mock<INotificacionPush> _pushMock = new();
+    private readonly NotificacionServicio _servicio;
 
-    private static (
-        Mock<INotificacionRepositorio> repoMock,
-        Mock<IUsuarioRepositorio> usuarioRepoMock,
-        Mock<INotificacionPush> pushMock,
-        NotificacionServicio servicio)
-        CrearServicio()
+    public NotificacionServicioTests()
     {
-        var repoMock = new Mock<INotificacionRepositorio>();
-        var usuarioRepoMock = new Mock<IUsuarioRepositorio>();
-        var pushMock = new Mock<INotificacionPush>();
-
-        pushMock
+        _pushMock
             .Setup(p => p.EnviarAsync(
                 It.IsAny<int>(),
                 It.IsAny<NotificacionDto>(),
                 It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        var servicio = new NotificacionServicio(
-            repoMock.Object,
-            usuarioRepoMock.Object,
-            pushMock.Object);
-
-        return (repoMock, usuarioRepoMock, pushMock, servicio);
+        _servicio = new NotificacionServicio(
+            _repositorioMock.Object,
+            _usuarioRepositorioMock.Object,
+            _pushMock.Object);
     }
 
-    // ── NotificarNuevoSeguidorAsync ───────────────────────────────────────────
+    #region Notificar Nuevo Seguidor
 
     [Fact]
-    public async Task NotificarNuevoSeguidor_guarda_notificacion_con_datos_correctos()
+    public async Task QueNotificarNuevoSeguidorGuardeNotificacionConDatosCorrectos()
     {
-        var (repoMock, _, _, servicio) = CrearServicio();
+        //Arrange
+        var destinatarioId = 10;
+        var nuevoSeguidorId = 20;
 
-        await servicio.NotificarNuevoSeguidorAsync(
-            usuarioDestinatarioId: 10,
-            nuevoSeguidorId: 20);
+        //Act
+        await _servicio.NotificarNuevoSeguidorAsync(
+            usuarioDestinatarioId: destinatarioId,
+            nuevoSeguidorId: nuevoSeguidorId);
 
-        repoMock.Verify(r => r.GuardarAsync(
+        //Assert
+        _repositorioMock.Verify(r => r.GuardarAsync(
             It.Is<Notificacion>(n =>
                 n.UsuarioDestinatarioId == 10 &&
                 n.EmisorId == 20 &&
@@ -59,13 +55,17 @@ public class NotificacionServicioTests
     }
 
     [Fact]
-    public async Task NotificarNuevoSeguidor_no_consulta_unicidad_porque_cada_seguidor_es_evento_distinto()
+    public async Task QueNotificarNuevoSeguidorNoConsulteUnicidadPorqueCadaSeguidorEsEventoDistinto()
     {
-        var (repoMock, _, _, servicio) = CrearServicio();
+        //Arrange
+        var destinatarioId = 10;
+        var nuevoSeguidorId = 20;
 
-        await servicio.NotificarNuevoSeguidorAsync(10, 20);
+        //Act
+        await _servicio.NotificarNuevoSeguidorAsync(destinatarioId, nuevoSeguidorId);
 
-        repoMock.Verify(r => r.ExisteNotificacionPendienteAsync(
+        //Assert
+        _repositorioMock.Verify(r => r.ExisteNotificacionPendienteAsync(
             It.IsAny<int>(),
             It.IsAny<TipoNotificacion>(),
             It.IsAny<int?>(),
@@ -73,230 +73,289 @@ public class NotificacionServicioTests
     }
 
     [Fact]
-    public async Task NotificarNuevoSeguidor_envia_push_al_destinatario()
+    public async Task QueNotificarNuevoSeguidorEnviePushAlDestinatario()
     {
-        var (_, _, pushMock, servicio) = CrearServicio();
+        //Arrange
+        var destinatarioId = 10;
+        var nuevoSeguidorId = 20;
 
-        await servicio.NotificarNuevoSeguidorAsync(
-            usuarioDestinatarioId: 10,
-            nuevoSeguidorId: 20);
+        //Act
+        await _servicio.NotificarNuevoSeguidorAsync(
+            usuarioDestinatarioId: destinatarioId,
+            nuevoSeguidorId: nuevoSeguidorId);
 
-        pushMock.Verify(p => p.EnviarAsync(
+        //Assert
+        _pushMock.Verify(p => p.EnviarAsync(
             10,
             It.IsAny<NotificacionDto>(),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    // ── NotificarComentarioEnPublicacionAsync ────────────────────────────────
+    #endregion
+
+    #region Notificar Comentario en Publicación
 
     [Fact]
-    public async Task NotificarComentario_guarda_notificacion_cuando_no_existe_una_pendiente()
+    public async Task QueNotificarComentarioGuardeNotificacionCuandoNoExisteUnaPendiente()
     {
-        var (repoMock, _, _, servicio) = CrearServicio();
-
-        repoMock
+        //Arrange
+        _repositorioMock
             .Setup(r => r.ExisteNotificacionPendienteAsync(
                 5, TipoNotificacion.ComentarioEnPublicacion, 99,
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
 
-        await servicio.NotificarComentarioEnPublicacionAsync(
+        //Act
+        await _servicio.NotificarComentarioEnPublicacionAsync(
             usuarioDestinatarioId: 5,
             publicacionId: 99,
             comentadorId: 7);
 
-        repoMock.Verify(r => r.GuardarAsync(
+        //Assert
+        _repositorioMock.Verify(r => r.GuardarAsync(
             It.Is<Notificacion>(n =>
                 n.UsuarioDestinatarioId == 5 &&
-                n.PublicacionId == 99 &&
                 n.EmisorId == 7 &&
-                n.Tipo == TipoNotificacion.ComentarioEnPublicacion),
+                n.PublicacionId == 99 &&
+                n.Tipo == TipoNotificacion.ComentarioEnPublicacion &&
+                !n.Leida),
+            It.IsAny<CancellationToken>()), Times.Once);
+
+        _pushMock.Verify(p => p.EnviarAsync(
+            5,
+            It.IsAny<NotificacionDto>(),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task NotificarComentario_no_guarda_cuando_ya_existe_una_pendiente()
+    public async Task QueNotificarComentarioNoGuardeCuandoYaExisteUnaPendiente()
     {
-        var (repoMock, _, _, servicio) = CrearServicio();
-
-        repoMock
+        //Arrange
+        _repositorioMock
             .Setup(r => r.ExisteNotificacionPendienteAsync(
                 5, TipoNotificacion.ComentarioEnPublicacion, 99,
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
-        await servicio.NotificarComentarioEnPublicacionAsync(5, 99, 7);
+        //Act
+        await _servicio.NotificarComentarioEnPublicacionAsync(
+            usuarioDestinatarioId: 5,
+            publicacionId: 99,
+            comentadorId: 7);
 
-        repoMock.Verify(r => r.GuardarAsync(
+        //Assert
+        _repositorioMock.Verify(r => r.GuardarAsync(
             It.IsAny<Notificacion>(),
             It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task NotificarComentario_no_envia_push_cuando_ya_existe_una_pendiente()
+    public async Task QueNotificarComentarioNoEnviePushCuandoYaExisteUnaPendiente()
     {
-        var (repoMock, _, pushMock, servicio) = CrearServicio();
-
-        repoMock
+        //Arrange
+        _repositorioMock
             .Setup(r => r.ExisteNotificacionPendienteAsync(
-                It.IsAny<int>(),
-                TipoNotificacion.ComentarioEnPublicacion,
-                It.IsAny<int?>(),
+                5, TipoNotificacion.ComentarioEnPublicacion, 99,
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
-        await servicio.NotificarComentarioEnPublicacionAsync(5, 99, 7);
+        //Act
+        await _servicio.NotificarComentarioEnPublicacionAsync(
+            usuarioDestinatarioId: 5,
+            publicacionId: 99,
+            comentadorId: 7);
 
-        pushMock.Verify(p => p.EnviarAsync(
+        //Assert
+        _pushMock.Verify(p => p.EnviarAsync(
             It.IsAny<int>(),
             It.IsAny<NotificacionDto>(),
             It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    // ── NotificarPuntuacionEnPublicacionAsync ────────────────────────────────
+    #endregion
+
+    #region Notificar Puntuación en Publicación
 
     [Fact]
-    public async Task NotificarPuntuacion_guarda_notificacion_cuando_no_existe_una_pendiente()
+    public async Task QueNotificarPuntuacionGuardeNotificacionCuandoNoExisteUnaPendiente()
     {
-        var (repoMock, _, _, servicio) = CrearServicio();
-
-        repoMock
+        //Arrange
+        _repositorioMock
             .Setup(r => r.ExisteNotificacionPendienteAsync(
-                3, TipoNotificacion.PuntuacionEnPublicacion, 55,
+                5, TipoNotificacion.PuntuacionEnPublicacion, 99,
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
 
-        await servicio.NotificarPuntuacionEnPublicacionAsync(
-            usuarioDestinatarioId: 3,
-            publicacionId: 55,
-            puntuadorId: 8);
+        //Act
+        await _servicio.NotificarPuntuacionEnPublicacionAsync(
+            usuarioDestinatarioId: 5,
+            publicacionId: 99,
+            puntuadorId: 7);
 
-        repoMock.Verify(r => r.GuardarAsync(
+        //Assert
+        _repositorioMock.Verify(r => r.GuardarAsync(
             It.Is<Notificacion>(n =>
-                n.UsuarioDestinatarioId == 3 &&
-                n.PublicacionId == 55 &&
-                n.EmisorId == 8 &&
-                n.Tipo == TipoNotificacion.PuntuacionEnPublicacion),
+                n.UsuarioDestinatarioId == 5 &&
+                n.EmisorId == 7 &&
+                n.PublicacionId == 99 &&
+                n.Tipo == TipoNotificacion.PuntuacionEnPublicacion &&
+                !n.Leida),
+            It.IsAny<CancellationToken>()), Times.Once);
+
+        _pushMock.Verify(p => p.EnviarAsync(
+            5,
+            It.IsAny<NotificacionDto>(),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task NotificarPuntuacion_no_guarda_cuando_ya_existe_una_pendiente()
+    public async Task QueNotificarPuntuacionNoGuardeCuandoYaExisteUnaPendiente()
     {
-        var (repoMock, _, _, servicio) = CrearServicio();
-
-        repoMock
+        //Arrange
+        _repositorioMock
             .Setup(r => r.ExisteNotificacionPendienteAsync(
-                It.IsAny<int>(),
-                TipoNotificacion.PuntuacionEnPublicacion,
-                It.IsAny<int?>(),
+                5, TipoNotificacion.PuntuacionEnPublicacion, 99,
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
-        await servicio.NotificarPuntuacionEnPublicacionAsync(3, 55, 8);
+        //Act
+        await _servicio.NotificarPuntuacionEnPublicacionAsync(
+            usuarioDestinatarioId: 5,
+            publicacionId: 99,
+            puntuadorId: 7);
 
-        repoMock.Verify(r => r.GuardarAsync(
+        //Assert
+        _repositorioMock.Verify(r => r.GuardarAsync(
             It.IsAny<Notificacion>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+
+        _pushMock.Verify(p => p.EnviarAsync(
+            It.IsAny<int>(),
+            It.IsAny<NotificacionDto>(),
             It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    // ── NotificarMensajeChatAsync ────────────────────────────────────────────
+    #endregion
+
+    #region Notificar Mensaje de Chat
 
     [Fact]
-    public async Task NotificarMensajeChat_guarda_notificacion_cuando_no_existe_una_pendiente()
+    public async Task QueNotificarMensajeChatGuardeNotificacionCuandoNoExisteUnaPendiente()
     {
-        var (repoMock, _, _, servicio) = CrearServicio();
-
-        repoMock
+        //Arrange
+        _repositorioMock
             .Setup(r => r.ExisteNotificacionPendienteAsync(
-                10, TipoNotificacion.MensajeChat, null,
+                5, TipoNotificacion.MensajeChat, null,
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
 
-        await servicio.NotificarMensajeChatAsync(
-            usuarioDestinatarioId: 10,
-            emisorId: 20);
+        //Act
+        await _servicio.NotificarMensajeChatAsync(
+            usuarioDestinatarioId: 5,
+            emisorId: 7);
 
-        repoMock.Verify(r => r.GuardarAsync(
+        //Assert
+        _repositorioMock.Verify(r => r.GuardarAsync(
             It.Is<Notificacion>(n =>
-                n.UsuarioDestinatarioId == 10 &&
-                n.EmisorId == 20 &&
+                n.UsuarioDestinatarioId == 5 &&
+                n.EmisorId == 7 &&
                 n.Tipo == TipoNotificacion.MensajeChat &&
-                n.PublicacionId == null),
+                !n.Leida),
+            It.IsAny<CancellationToken>()), Times.Once);
+
+        _pushMock.Verify(p => p.EnviarAsync(
+            5,
+            It.IsAny<NotificacionDto>(),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task NotificarMensajeChat_no_guarda_cuando_ya_existe_una_pendiente()
+    public async Task QueNotificarMensajeChatNoGuardeCuandoYaExisteUnaPendiente()
     {
-        var (repoMock, _, _, servicio) = CrearServicio();
-
-        repoMock
+        //Arrange
+        _repositorioMock
             .Setup(r => r.ExisteNotificacionPendienteAsync(
-                It.IsAny<int>(),
-                TipoNotificacion.MensajeChat,
-                null,
+                5, TipoNotificacion.MensajeChat, null,
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
-        await servicio.NotificarMensajeChatAsync(10, 20);
+        //Act
+        await _servicio.NotificarMensajeChatAsync(5, 7);
 
-        repoMock.Verify(r => r.GuardarAsync(
+        //Assert
+        _repositorioMock.Verify(r => r.GuardarAsync(
             It.IsAny<Notificacion>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+
+        _pushMock.Verify(p => p.EnviarAsync(
+            It.IsAny<int>(),
+            It.IsAny<NotificacionDto>(),
             It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    // ── NotificarMensajesCorreoAsync ─────────────────────────────────────────
+    #endregion
+
+    #region Notificar Mensajes de Correo
 
     [Fact]
-    public async Task NotificarMensajesCorreo_guarda_notificacion_cuando_no_existe_una_pendiente()
+    public async Task QueNotificarMensajesCorreoGuardeNotificacionCuandoNoExisteUnaPendiente()
     {
-        var (repoMock, _, _, servicio) = CrearServicio();
-
-        repoMock
+        //Arrange
+        _repositorioMock
             .Setup(r => r.ExisteNotificacionPendienteAsync(
-                10, TipoNotificacion.MensajesCorreo, null,
+                5, TipoNotificacion.MensajesCorreo, null,
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
 
-        await servicio.NotificarMensajesCorreoAsync(usuarioDestinatarioId: 10);
+        //Act
+        await _servicio.NotificarMensajesCorreoAsync(usuarioDestinatarioId: 5);
 
-        repoMock.Verify(r => r.GuardarAsync(
+        //Assert
+        _repositorioMock.Verify(r => r.GuardarAsync(
             It.Is<Notificacion>(n =>
-                n.UsuarioDestinatarioId == 10 &&
+                n.UsuarioDestinatarioId == 5 &&
                 n.Tipo == TipoNotificacion.MensajesCorreo &&
-                n.PublicacionId == null &&
-                n.EmisorId == null),
+                !n.Leida),
+            It.IsAny<CancellationToken>()), Times.Once);
+
+        _pushMock.Verify(p => p.EnviarAsync(
+            5,
+            It.IsAny<NotificacionDto>(),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task NotificarMensajesCorreo_no_guarda_cuando_ya_existe_una_pendiente()
+    public async Task QueNotificarMensajesCorreoNoGuardeCuandoYaExisteUnaPendiente()
     {
-        var (repoMock, _, _, servicio) = CrearServicio();
-
-        repoMock
+        //Arrange
+        _repositorioMock
             .Setup(r => r.ExisteNotificacionPendienteAsync(
-                It.IsAny<int>(),
-                TipoNotificacion.MensajesCorreo,
-                null,
+                5, TipoNotificacion.MensajesCorreo, null,
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
-        await servicio.NotificarMensajesCorreoAsync(10);
+        //Act
+        await _servicio.NotificarMensajesCorreoAsync(5);
 
-        repoMock.Verify(r => r.GuardarAsync(
+        //Assert
+        _repositorioMock.Verify(r => r.GuardarAsync(
             It.IsAny<Notificacion>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+
+        _pushMock.Verify(p => p.EnviarAsync(
+            It.IsAny<int>(),
+            It.IsAny<NotificacionDto>(),
             It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    // ── ObtenerNotificacionesAsync ────────────────────────────────────────────
+    #endregion
+
+    #region Obtener Notificaciones
 
     [Fact]
-    public async Task ObtenerNotificaciones_devuelve_dtos_mapeados_correctamente()
+    public async Task QueObtenerNotificacionesDevuelvaDtosMapeadosCorrectamente()
     {
-        var (repoMock, _, _, servicio) = CrearServicio();
-
+        //Arrange
         var emisorFalso = new Usuario { Id = 5, Username = "seguidor_test" };
         var notificacionesFalsas = new List<Notificacion>
         {
@@ -323,12 +382,14 @@ public class NotificacionServicioTests
             }
         };
 
-        repoMock
+        _repositorioMock
             .Setup(r => r.ObtenerPorUsuarioAsync(10, It.IsAny<CancellationToken>()))
             .ReturnsAsync(notificacionesFalsas);
 
-        var resultado = (await servicio.ObtenerNotificacionesAsync(10)).ToList();
+        //Act
+        var resultado = (await _servicio.ObtenerNotificacionesAsync(10)).ToList();
 
+        //Assert
         Assert.Equal(2, resultado.Count);
         Assert.Equal(1, resultado[0].Id);
         Assert.Equal(TipoNotificacion.NuevoSeguidor, resultado[0].Tipo);
@@ -339,31 +400,31 @@ public class NotificacionServicioTests
         Assert.Equal(TipoNotificacion.ComentarioEnPublicacion, resultado[1].Tipo);
         Assert.True(resultado[1].Leida);
         Assert.Equal(99, resultado[1].PublicacionId);
+        _repositorioMock.Verify(r => r.ObtenerPorUsuarioAsync(10, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task ObtenerNotificaciones_repositorio_vacio_devuelve_lista_vacia()
+    public async Task QueObtenerNotificacionesConRepositorioVacioDevuelvaListaVacia()
     {
-        var (repoMock, _, _, servicio) = CrearServicio();
-
-        repoMock
-            .Setup(r => r.ObtenerPorUsuarioAsync(
-                It.IsAny<int>(), It.IsAny<CancellationToken>()))
+        //Arrange
+        _repositorioMock
+            .Setup(r => r.ObtenerPorUsuarioAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<Notificacion>());
 
-        var resultado = await servicio.ObtenerNotificacionesAsync(10);
+        //Act
+        var resultado = await _servicio.ObtenerNotificacionesAsync(10);
 
+        //Assert
         Assert.Empty(resultado);
+        _repositorioMock.Verify(r => r.ObtenerPorUsuarioAsync(10, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task ObtenerNotificaciones_emisor_null_usa_null_para_username()
+    public async Task QueObtenerNotificacionesConEmisorNullUseNullParaUsername()
     {
-        var (repoMock, _, _, servicio) = CrearServicio();
-
-        repoMock
-            .Setup(r => r.ObtenerPorUsuarioAsync(
-                It.IsAny<int>(), It.IsAny<CancellationToken>()))
+        //Arrange
+        _repositorioMock
+            .Setup(r => r.ObtenerPorUsuarioAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<Notificacion>
             {
                 new()
@@ -377,34 +438,45 @@ public class NotificacionServicioTests
                 }
             });
 
-        var resultado = (await servicio.ObtenerNotificacionesAsync(10)).ToList();
+        //Act
+        var resultado = (await _servicio.ObtenerNotificacionesAsync(10)).ToList();
 
+        //Assert
         Assert.Null(resultado[0].EmisorUsername);
     }
 
-    // ── MarcarComoLeidaAsync ─────────────────────────────────────────────────
+    #endregion
+
+    #region Marcar Como Leídas
 
     [Fact]
-    public async Task MarcarComoLeida_delega_al_repositorio_con_ids_correctos()
+    public async Task QueMarcarComoLeidaDelegueAlRepositorioConIdsCorrectos()
     {
-        var (repoMock, _, _, servicio) = CrearServicio();
+        //Arrange
+        var notificacionId = 42;
+        var usuarioId = 10;
 
-        await servicio.MarcarComoLeidaAsync(notificacionId: 42, usuarioId: 10);
+        //Act
+        await _servicio.MarcarComoLeidaAsync(notificacionId: notificacionId, usuarioId: usuarioId);
 
-        repoMock.Verify(r => r.MarcarComoLeidaAsync(
+        //Assert
+        _repositorioMock.Verify(r => r.MarcarComoLeidaAsync(
             42, 10, It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    // ── MarcarTodasComoLeidasAsync ───────────────────────────────────────────
-
     [Fact]
-    public async Task MarcarTodasComoLeidas_delega_al_repositorio_con_id_correcto()
+    public async Task QueMarcarTodasComoLeidasDelegueAlRepositorioConIdCorrecto()
     {
-        var (repoMock, _, _, servicio) = CrearServicio();
+        //Arrange
+        var usuarioId = 10;
 
-        await servicio.MarcarTodasComoLeidasAsync(usuarioId: 10);
+        //Act
+        await _servicio.MarcarTodasComoLeidasAsync(usuarioId: usuarioId);
 
-        repoMock.Verify(r => r.MarcarTodasComoLeidasAsync(
+        //Assert
+        _repositorioMock.Verify(r => r.MarcarTodasComoLeidasAsync(
             10, It.IsAny<CancellationToken>()), Times.Once);
     }
+
+    #endregion
 }

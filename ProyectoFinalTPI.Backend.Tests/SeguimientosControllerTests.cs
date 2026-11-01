@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Moq;
 using ProyectoFinalTPI.Backend.Dtos.Usuario;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Repositorio.Data;
@@ -15,78 +16,105 @@ namespace ProyectoFinalTPI.Backend.Tests;
 
 public class SeguimientosControllerTests
 {
+    #region Seguir Usuario (POST /api/seguimientos)
+
     [Theory]
     [InlineData(ResultadoSeguimiento.Aplicado, HttpStatusCode.Created, "Ahora seguís a este usuario.")]
     [InlineData(ResultadoSeguimiento.SinCambios, HttpStatusCode.OK, "Ya seguías a este usuario.")]
     [InlineData(ResultadoSeguimiento.AutoSeguimiento, HttpStatusCode.BadRequest, "No podés seguirte a vos mismo.")]
     [InlineData(ResultadoSeguimiento.UsuarioNoEncontrado, HttpStatusCode.NotFound, "No se encontró uno o ambos usuarios.")]
-    public async Task SeguirUsuario_devuelve_el_codigo_y_mensaje_segun_el_resultado(
+    public async Task QueSeguirUsuarioDevuelvaCodigoYMensajeSegunResultado(
         ResultadoSeguimiento resultado,
         HttpStatusCode codigoEsperado,
         string mensajeEsperado)
     {
+        //Arrange
         await using var factory = new ApiFactory();
-        factory.Seguimiento.ResultadoSeguir = resultado;
+        factory.SeguimientoMock
+            .Setup(s => s.SeguirUsuario(10, 20, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(resultado);
         using var client = factory.CreateClient();
 
-        using var response = await client.PostAsJsonAsync(
-            "/api/seguimientos",
-            new { idUsuario = 10, idUsuarioASeguir = 20 });
-
-        Assert.Equal(codigoEsperado, response.StatusCode);
-        Assert.Contains(mensajeEsperado, await response.Content.ReadAsStringAsync());
-        Assert.Equal((10, 20), factory.Seguimiento.UltimosIds);
-    }
-
-    [Fact]
-    public async Task Falla_inesperada_al_seguir_devuelve_500_sin_exponer_detalles()
-    {
-        await using var factory = new ApiFactory();
-        factory.Seguimiento.ErrorSeguir = new InvalidOperationException("detalle interno");
-        using var client = factory.CreateClient();
-
+        //Act
         using var response = await client.PostAsJsonAsync(
             "/api/seguimientos",
             new { idUsuario = 10, idUsuarioASeguir = 20 });
         var contenido = await response.Content.ReadAsStringAsync();
 
+        //Assert
+        Assert.Equal(codigoEsperado, response.StatusCode);
+        Assert.Contains(mensajeEsperado, contenido);
+        factory.SeguimientoMock.Verify(s => s.SeguirUsuario(10, 20, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task QueFallaInesperadaAlSeguirDevuelva500SinExponerDetalles()
+    {
+        //Arrange
+        await using var factory = new ApiFactory();
+        factory.SeguimientoMock
+            .Setup(s => s.SeguirUsuario(10, 20, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("detalle interno"));
+        using var client = factory.CreateClient();
+
+        //Act
+        using var response = await client.PostAsJsonAsync(
+            "/api/seguimientos",
+            new { idUsuario = 10, idUsuarioASeguir = 20 });
+        var contenido = await response.Content.ReadAsStringAsync();
+
+        //Assert
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
         Assert.Contains("Ocurrió un error al procesar el seguimiento.", contenido);
         Assert.DoesNotContain("detalle interno", contenido);
     }
 
     [Fact]
-    public async Task Request_con_id_invalido_devuelve_400_sin_invocar_el_servicio()
+    public async Task QueRequestConIdInvalidoAlSeguirDevuelva400SinInvocarServicio()
     {
+        //Arrange
         await using var factory = new ApiFactory();
         using var client = factory.CreateClient();
 
+        //Act
         using var response = await client.PostAsJsonAsync(
             "/api/seguimientos",
             new { idUsuario = 0, idUsuarioASeguir = 20 });
 
+        //Assert
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.False(factory.Seguimiento.FueInvocado);
+        factory.SeguimientoMock.Verify(
+            s => s.SeguirUsuario(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
+
+    #endregion
+
+    #region Dejar de Seguir (DELETE /api/seguimientos)
 
     [Theory]
     [InlineData(ResultadoSeguimiento.Aplicado, HttpStatusCode.NoContent)]
     [InlineData(ResultadoSeguimiento.SinCambios, HttpStatusCode.NoContent)]
     [InlineData(ResultadoSeguimiento.AutoSeguimiento, HttpStatusCode.BadRequest)]
     [InlineData(ResultadoSeguimiento.UsuarioNoEncontrado, HttpStatusCode.NotFound)]
-    public async Task DejarDeSeguir_devuelve_el_codigo_segun_el_resultado(
+    public async Task QueDejarDeSeguirDevuelvaCodigoSegunResultado(
         ResultadoSeguimiento resultado,
         HttpStatusCode codigoEsperado)
     {
+        //Arrange
         await using var factory = new ApiFactory();
-        factory.Seguimiento.ResultadoDejarDeSeguir = resultado;
+        factory.SeguimientoMock
+            .Setup(s => s.DejarDeSeguirUsuario(10, 20, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(resultado);
         using var client = factory.CreateClient();
         using var request = CrearRequestDelete(10, 20);
 
+        //Act
         using var response = await client.SendAsync(request);
 
+        //Assert
         Assert.Equal(codigoEsperado, response.StatusCode);
-        Assert.Equal((10, 20), factory.Seguimiento.UltimosIds);
+        factory.SeguimientoMock.Verify(s => s.DejarDeSeguirUsuario(10, 20, It.IsAny<CancellationToken>()), Times.Once);
         if (codigoEsperado == HttpStatusCode.NoContent)
         {
             Assert.Empty(await response.Content.ReadAsStringAsync());
@@ -94,49 +122,63 @@ public class SeguimientosControllerTests
     }
 
     [Fact]
-    public async Task Falla_inesperada_al_dejar_de_seguir_devuelve_500_sin_exponer_detalles()
+    public async Task QueFallaInesperadaAlDejarDeSeguirDevuelva500SinExponerDetalles()
     {
+        //Arrange
         await using var factory = new ApiFactory();
-        factory.Seguimiento.ErrorDejarDeSeguir = new InvalidOperationException("detalle interno");
+        factory.SeguimientoMock
+            .Setup(s => s.DejarDeSeguirUsuario(10, 20, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("detalle interno"));
         using var client = factory.CreateClient();
         using var request = CrearRequestDelete(10, 20);
 
+        //Act
         using var response = await client.SendAsync(request);
         var contenido = await response.Content.ReadAsStringAsync();
 
+        //Assert
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
         Assert.Contains("Ocurrió un error al procesar el seguimiento.", contenido);
         Assert.DoesNotContain("detalle interno", contenido);
     }
 
     [Fact]
-    public async Task Delete_con_id_invalido_devuelve_400_sin_invocar_el_servicio()
+    public async Task QueDeleteConIdInvalidoDevuelva400SinInvocarServicio()
     {
+        //Arrange
         await using var factory = new ApiFactory();
         using var client = factory.CreateClient();
         using var request = CrearRequestDelete(0, 20);
 
+        //Act
         using var response = await client.SendAsync(request);
 
+        //Assert
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.False(factory.Seguimiento.FueInvocado);
+        factory.SeguimientoMock.Verify(
+            s => s.DejarDeSeguirUsuario(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
+    #endregion
+
+    #region Listar Seguidos (GET /api/seguimientos/{id}/seguidos)
+
     [Fact]
-    public async Task ListarSeguidos_devuelve_los_usuarios_que_sigue()
+    public async Task QueListarSeguidosDevuelvaLosUsuariosQueSigue()
     {
+        //Arrange
         await using var factory = new ApiFactory();
-        factory.Seguimiento.ResultadoSeguidos = new List<AutorResumenDto>
-        {
-            new() { Id = 20, Username = "usuario_20" },
-            new() { Id = 30, Username = "usuario_30" }
-        };
+        factory.SeguimientoMock
+            .Setup(s => s.ListarSeguidos(10, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CrearAutoresResumenEjemplo());
         using var client = factory.CreateClient();
 
+        //Act
         using var response = await client.GetAsync("/api/seguimientos/10/seguidos");
 
+        //Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal((10, 0), factory.Seguimiento.UltimosIds);
         var seguidos = await response.Content.ReadFromJsonAsync<List<AutorResumenDto>>();
         Assert.NotNull(seguidos);
         Assert.Collection(
@@ -151,77 +193,100 @@ public class SeguimientosControllerTests
                 Assert.Equal(30, usuario.Id);
                 Assert.Equal("usuario_30", usuario.Username);
             });
+        factory.SeguimientoMock.Verify(s => s.ListarSeguidos(10, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task ListarSeguidos_devuelve_lista_vacia_si_no_sigue_a_usuarios()
+    public async Task QueListarSeguidosDevuelvaListaVaciaSiNoSigueAUsuarios()
     {
+        //Arrange
         await using var factory = new ApiFactory();
-        factory.Seguimiento.ResultadoSeguidos = Array.Empty<AutorResumenDto>();
+        factory.SeguimientoMock
+            .Setup(s => s.ListarSeguidos(10, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<AutorResumenDto>());
         using var client = factory.CreateClient();
 
+        //Act
         using var response = await client.GetAsync("/api/seguimientos/10/seguidos");
 
+        //Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Empty(await response.Content.ReadFromJsonAsync<List<AutorResumenDto>>() ?? new());
     }
 
     [Fact]
-    public async Task ListarSeguidos_devuelve_404_si_el_usuario_no_existe()
+    public async Task QueListarSeguidosDevuelva404SiElUsuarioNoExiste()
     {
+        //Arrange
         await using var factory = new ApiFactory();
-        factory.Seguimiento.ResultadoSeguidos = null;
+        factory.SeguimientoMock
+            .Setup(s => s.ListarSeguidos(999, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyList<AutorResumenDto>?)null);
         using var client = factory.CreateClient();
 
+        //Act
         using var response = await client.GetAsync("/api/seguimientos/999/seguidos");
         var contenido = await response.Content.ReadAsStringAsync();
 
+        //Assert
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.Contains("No se encontro el usuario", contenido);
     }
 
     [Fact]
-    public async Task ListarSeguidos_con_id_invalido_devuelve_400_sin_invocar_el_servicio()
+    public async Task QueListarSeguidosConIdInvalidoDevuelva400SinInvocarServicio()
     {
+        //Arrange
         await using var factory = new ApiFactory();
         using var client = factory.CreateClient();
 
+        //Act
         using var response = await client.GetAsync("/api/seguimientos/0/seguidos");
 
+        //Assert
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.False(factory.Seguimiento.FueInvocado);
+        factory.SeguimientoMock.Verify(s => s.ListarSeguidos(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task Falla_inesperada_al_listar_seguidos_devuelve_500_sin_exponer_detalles()
+    public async Task QueFallaInesperadaAlListarSeguidosDevuelva500SinExponerDetalles()
     {
+        //Arrange
         await using var factory = new ApiFactory();
-        factory.Seguimiento.ErrorListarSeguidos = new InvalidOperationException("detalle interno");
+        factory.SeguimientoMock
+            .Setup(s => s.ListarSeguidos(10, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("detalle interno"));
         using var client = factory.CreateClient();
 
+        //Act
         using var response = await client.GetAsync("/api/seguimientos/10/seguidos");
         var contenido = await response.Content.ReadAsStringAsync();
 
+        //Assert
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
         Assert.Contains("Ocurrio un error al listar los usuarios seguidos", contenido);
         Assert.DoesNotContain("detalle interno", contenido);
     }
 
+    #endregion
+
+    #region Listar Seguidores (GET /api/seguimientos/{id}/seguidores)
+
     [Fact]
-    public async Task ListarSeguidores_devuelve_los_usuarios_que_siguen_al_usuario()
+    public async Task QueListarSeguidoresDevuelvaLosUsuariosQueSiguenAlUsuario()
     {
+        //Arrange
         await using var factory = new ApiFactory();
-        factory.Seguimiento.ResultadoSeguidores = new List<AutorResumenDto>
-        {
-            new() { Id = 20, Username = "usuario_20" },
-            new() { Id = 30, Username = "usuario_30" }
-        };
+        factory.SeguimientoMock
+            .Setup(s => s.ListarSeguidores(10, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CrearAutoresResumenEjemplo());
         using var client = factory.CreateClient();
 
+        //Act
         using var response = await client.GetAsync("/api/seguimientos/10/seguidores");
 
+        //Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal((10, 0), factory.Seguimiento.UltimosIds);
         var seguidores = await response.Content.ReadFromJsonAsync<List<AutorResumenDto>>();
         Assert.NotNull(seguidores);
         Assert.Collection(
@@ -236,91 +301,124 @@ public class SeguimientosControllerTests
                 Assert.Equal(30, usuario.Id);
                 Assert.Equal("usuario_30", usuario.Username);
             });
+        factory.SeguimientoMock.Verify(s => s.ListarSeguidores(10, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task ListarSeguidores_devuelve_lista_vacia_si_nadie_sigue_al_usuario()
+    public async Task QueListarSeguidoresDevuelvaListaVaciaSiNadieSigueAlUsuario()
     {
+        //Arrange
         await using var factory = new ApiFactory();
-        factory.Seguimiento.ResultadoSeguidores = Array.Empty<AutorResumenDto>();
+        factory.SeguimientoMock
+            .Setup(s => s.ListarSeguidores(10, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<AutorResumenDto>());
         using var client = factory.CreateClient();
 
+        //Act
         using var response = await client.GetAsync("/api/seguimientos/10/seguidores");
 
+        //Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Empty(await response.Content.ReadFromJsonAsync<List<AutorResumenDto>>() ?? new());
     }
 
     [Fact]
-    public async Task ListarSeguidores_devuelve_404_si_el_usuario_no_existe()
+    public async Task QueListarSeguidoresDevuelva404SiElUsuarioNoExiste()
     {
+        //Arrange
         await using var factory = new ApiFactory();
-        factory.Seguimiento.ResultadoSeguidores = null;
+        factory.SeguimientoMock
+            .Setup(s => s.ListarSeguidores(999, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyList<AutorResumenDto>?)null);
         using var client = factory.CreateClient();
 
+        //Act
         using var response = await client.GetAsync("/api/seguimientos/999/seguidores");
         var contenido = await response.Content.ReadAsStringAsync();
 
+        //Assert
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.Contains("No se encontro el usuario", contenido);
     }
 
     [Fact]
-    public async Task ListarSeguidores_con_id_invalido_devuelve_400_sin_invocar_el_servicio()
+    public async Task QueListarSeguidoresConIdInvalidoDevuelva400SinInvocarServicio()
     {
+        //Arrange
         await using var factory = new ApiFactory();
         using var client = factory.CreateClient();
 
+        //Act
         using var response = await client.GetAsync("/api/seguimientos/0/seguidores");
 
+        //Assert
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.False(factory.Seguimiento.FueInvocado);
+        factory.SeguimientoMock.Verify(s => s.ListarSeguidores(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task Falla_inesperada_al_listar_seguidores_devuelve_500_sin_exponer_detalles()
+    public async Task QueFallaInesperadaAlListarSeguidoresDevuelva500SinExponerDetalles()
     {
+        //Arrange
         await using var factory = new ApiFactory();
-        factory.Seguimiento.ErrorListarSeguidores = new InvalidOperationException("detalle interno");
+        factory.SeguimientoMock
+            .Setup(s => s.ListarSeguidores(10, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("detalle interno"));
         using var client = factory.CreateClient();
 
+        //Act
         using var response = await client.GetAsync("/api/seguimientos/10/seguidores");
         var contenido = await response.Content.ReadAsStringAsync();
 
+        //Assert
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
         Assert.Contains("Ocurrio un error al listar los seguidores", contenido);
         Assert.DoesNotContain("detalle interno", contenido);
     }
+
+    #endregion
+
+    #region Seguir / Dejar de Seguir por Ruta (/api/seguimientos/{id})
 
     [Theory]
     [InlineData(ResultadoSeguimiento.Aplicado, HttpStatusCode.NoContent)]
     [InlineData(ResultadoSeguimiento.SinCambios, HttpStatusCode.NoContent)]
     [InlineData(ResultadoSeguimiento.AutoSeguimiento, HttpStatusCode.BadRequest)]
     [InlineData(ResultadoSeguimiento.UsuarioNoEncontrado, HttpStatusCode.NotFound)]
-    public async Task DejarDeSeguir_por_ruta_devuelve_el_codigo_segun_el_resultado(
+    public async Task QueDejarDeSeguirPorRutaDevuelvaCodigoSegunResultado(
         ResultadoSeguimiento resultado,
         HttpStatusCode codigoEsperado)
     {
+        //Arrange
         await using var factory = new ApiFactory();
-        factory.Seguimiento.ResultadoDejarDeSeguir = resultado;
+        factory.SeguimientoMock
+            .Setup(s => s.DejarDeSeguirUsuario(10, 20, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(resultado);
         using var client = factory.CreateClient();
 
+        //Act
         using var response = await client.DeleteAsync("/api/seguimientos/20?idUsuario=10");
 
+        //Assert
         Assert.Equal(codigoEsperado, response.StatusCode);
-        Assert.Equal((10, 20), factory.Seguimiento.UltimosIds);
+        factory.SeguimientoMock.Verify(s => s.DejarDeSeguirUsuario(10, 20, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task DejarDeSeguir_por_ruta_sin_usuario_devuelve_401()
+    public async Task QueDejarDeSeguirPorRutaSinUsuarioDevuelva401()
     {
+        //Arrange
         await using var factory = new ApiFactory();
         using var client = factory.CreateClient();
 
+        //Act
         using var response = await client.DeleteAsync("/api/seguimientos/20");
 
+        //Assert
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.False(factory.Seguimiento.FueInvocado);
+        factory.SeguimientoMock.Verify(
+            s => s.DejarDeSeguirUsuario(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Theory]
@@ -328,30 +426,53 @@ public class SeguimientosControllerTests
     [InlineData(ResultadoSeguimiento.SinCambios, HttpStatusCode.OK)]
     [InlineData(ResultadoSeguimiento.AutoSeguimiento, HttpStatusCode.BadRequest)]
     [InlineData(ResultadoSeguimiento.UsuarioNoEncontrado, HttpStatusCode.NotFound)]
-    public async Task Seguir_por_ruta_devuelve_el_codigo_segun_el_resultado(
+    public async Task QueSeguirPorRutaDevuelvaCodigoSegunResultado(
         ResultadoSeguimiento resultado,
         HttpStatusCode codigoEsperado)
     {
+        //Arrange
         await using var factory = new ApiFactory();
-        factory.Seguimiento.ResultadoSeguir = resultado;
+        factory.SeguimientoMock
+            .Setup(s => s.SeguirUsuario(10, 20, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(resultado);
         using var client = factory.CreateClient();
 
+        //Act
         using var response = await client.PostAsync("/api/seguimientos/20?idUsuario=10", null);
 
+        //Assert
         Assert.Equal(codigoEsperado, response.StatusCode);
-        Assert.Equal((10, 20), factory.Seguimiento.UltimosIds);
+        factory.SeguimientoMock.Verify(s => s.SeguirUsuario(10, 20, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task Seguir_por_ruta_sin_usuario_devuelve_401()
+    public async Task QueSeguirPorRutaSinUsuarioDevuelva401()
     {
+        //Arrange
         await using var factory = new ApiFactory();
         using var client = factory.CreateClient();
 
+        //Act
         using var response = await client.PostAsync("/api/seguimientos/20", null);
 
+        //Assert
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.False(factory.Seguimiento.FueInvocado);
+        factory.SeguimientoMock.Verify(
+            s => s.SeguirUsuario(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    #endregion
+
+    #region Infraestructura y Helpers Privados
+
+    private static List<AutorResumenDto> CrearAutoresResumenEjemplo()
+    {
+        return new List<AutorResumenDto>
+        {
+            new() { Id = 20, Username = "usuario_20" },
+            new() { Id = 30, Username = "usuario_30" }
+        };
     }
 
     private static HttpRequestMessage CrearRequestDelete(int idUsuario, int idUsuarioASeguir)
@@ -364,7 +485,7 @@ public class SeguimientosControllerTests
 
     private sealed class ApiFactory : WebApplicationFactory<Program>
     {
-        public SeguimientoFake Seguimiento { get; } = new();
+        public Mock<ISeguimientoServicio> SeguimientoMock { get; } = new();
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -377,75 +498,10 @@ public class SeguimientosControllerTests
                     options.UseInMemoryDatabase(Guid.NewGuid().ToString()));
 
                 services.RemoveAll<ISeguimientoServicio>();
-                services.AddSingleton<ISeguimientoServicio>(Seguimiento);
+                services.AddSingleton(SeguimientoMock.Object);
             });
         }
     }
 
-    private sealed class SeguimientoFake : ISeguimientoServicio
-    {
-        public async Task<IReadOnlyCollection<int>> ObtenerSeguidosIdsAsync(
-            int usuarioId, CancellationToken cancellationToken = default)
-        {
-            var seguidos = await ListarSeguidos(usuarioId, cancellationToken);
-            return seguidos?.Select(u => u.Id).ToArray() ?? Array.Empty<int>();
-        }
-
-        public ResultadoSeguimiento ResultadoSeguir { get; set; }
-        public ResultadoSeguimiento ResultadoDejarDeSeguir { get; set; }
-        public IReadOnlyList<ProyectoFinalTPI.Backend.Dtos.Usuario.AutorResumenDto>? ResultadoSeguidos { get; set; }
-        public Exception? ErrorListarSeguidos { get; set; }
-        public IReadOnlyList<ProyectoFinalTPI.Backend.Dtos.Usuario.AutorResumenDto>? ResultadoSeguidores { get; set; }
-        public Exception? ErrorListarSeguidores { get; set; }
-        public Exception? ErrorSeguir { get; set; }
-        public Exception? ErrorDejarDeSeguir { get; set; }
-        public (int Seguidor, int Seguido) UltimosIds { get; private set; }
-        public bool FueInvocado { get; private set; }
-
-        public Task<IReadOnlyList<ProyectoFinalTPI.Backend.Dtos.Usuario.AutorResumenDto>?> ListarSeguidos(
-            int idUsuario, CancellationToken cancellationToken = default)
-        {
-            FueInvocado = true;
-            UltimosIds = (idUsuario, 0);
-            return ErrorListarSeguidos is null
-                ? Task.FromResult(ResultadoSeguidos)
-                : Task.FromException<IReadOnlyList<ProyectoFinalTPI.Backend.Dtos.Usuario.AutorResumenDto>?>(ErrorListarSeguidos);
-        }
-
-        public Task<IReadOnlyList<ProyectoFinalTPI.Backend.Dtos.Usuario.AutorResumenDto>?> ListarSeguidores(
-            int idUsuario, CancellationToken cancellationToken = default)
-        {
-            FueInvocado = true;
-            UltimosIds = (idUsuario, 0);
-            return ErrorListarSeguidores is null
-                ? Task.FromResult(ResultadoSeguidores)
-                : Task.FromException<IReadOnlyList<ProyectoFinalTPI.Backend.Dtos.Usuario.AutorResumenDto>?>(ErrorListarSeguidores);
-        }
-
-        public Task<ResultadoSeguimiento> SeguirUsuario(
-            int idUsuario,
-            int idUsuarioASeguir,
-            CancellationToken cancellationToken = default)
-        {
-            FueInvocado = true;
-            UltimosIds = (idUsuario, idUsuarioASeguir);
-
-            return ErrorSeguir is null
-                ? Task.FromResult(ResultadoSeguir)
-                : Task.FromException<ResultadoSeguimiento>(ErrorSeguir);
-        }
-
-        public Task<ResultadoSeguimiento> DejarDeSeguirUsuario(
-            int idUsuario,
-            int idUsuarioASeguir,
-            CancellationToken cancellationToken = default)
-        {
-            FueInvocado = true;
-            UltimosIds = (idUsuario, idUsuarioASeguir);
-
-            return ErrorDejarDeSeguir is null
-                ? Task.FromResult(ResultadoDejarDeSeguir)
-                : Task.FromException<ResultadoSeguimiento>(ErrorDejarDeSeguir);
-        }
-    }
+    #endregion
 }

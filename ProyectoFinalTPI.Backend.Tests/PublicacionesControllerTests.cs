@@ -1,10 +1,9 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 using ProyectoFinalTPI.Backend.Controllers;
 using ProyectoFinalTPI.Backend.Dtos;
-using ProyectoFinalTPI.Backend.Dtos.Comentario;
 using ProyectoFinalTPI.Backend.Dtos.Mapa;
 using ProyectoFinalTPI.Backend.Dtos.Publicacion;
 using ProyectoFinalTPI.Backend.Entidades;
@@ -16,24 +15,60 @@ namespace ProyectoFinalTPI.Backend.Tests
 {
     public class PublicacionesControllerTests
     {
-        private readonly PublicacionServicioFake _servicio = new();
-        private readonly EtiquetadoServicioFake _etiquetado = new();
+        private readonly Mock<IPublicacionServicio> _publicacionServicioMock = new();
+        private readonly Mock<IEtiquetadoPublicacionServicio> _etiquetadoServicioMock = new();
         private readonly PublicacionesController _controller;
 
         public PublicacionesControllerTests()
         {
             _controller = new PublicacionesController(
-                _servicio, _etiquetado)
+                _publicacionServicioMock.Object,
+                _etiquetadoServicioMock.Object)
             {
                 ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
             };
         }
 
+        #region Helpers Reutilizables
+
+        private static CrearPublicacionRequest CrearRequestEjemplo(int autorId = 10, string? url = "https://example.com/foto.jpg") => new()
+        {
+            Titulo = "Recuerdo",
+            Descripcion = "Una visita",
+            AutorId = autorId,
+            NombreLugar = "Obelisco",
+            Latitud = -34.6,
+            Longitud = -58.3,
+            Categoria = CategoriaEnum.Lugares,
+            TipoMultimedia = MultimediaEnum.Foto,
+            Fecha = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            UrlArchivo = url
+        };
+
+        private class ArchivoConError : IFormFile
+        {
+            public string ContentType => "image/jpeg";
+            public string ContentDisposition => string.Empty;
+            public IHeaderDictionary Headers => new HeaderDictionary();
+            public long Length => 3;
+            public string Name => "Archivo";
+            public string FileName => "foto.jpg";
+            public Stream OpenReadStream() => throw new IOException("ruta interna");
+            public void CopyTo(Stream target) => throw new NotImplementedException();
+            public Task CopyToAsync(Stream target, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        }
+
+        #endregion
+
+        #region Creación de Publicaciones
+
         [Fact]
         public async Task QueSeDevuelvaCreatedConElIdYLaUbicacionDeLaPublicacionCreada()
         {
             //Arrange
-            _servicio.IdCreado = 25;
+            _publicacionServicioMock
+                .Setup(s => s.Crear(It.IsAny<Publicacion>(), It.IsAny<Stream?>(), It.IsAny<string?>(), It.IsAny<NetTopologySuite.Geometries.Point?>()))
+                .ReturnsAsync(25);
             var request = new CrearPublicacionRequest();
 
             //Act
@@ -50,31 +85,51 @@ namespace ProyectoFinalTPI.Backend.Tests
         public async Task QueSeEnvienAlServicioLosDatosDeLaPublicacionConUrl()
         {
             //Arrange
-            var request = new CrearPublicacionRequest
-            {
-                Titulo = "Recuerdo", Descripcion = "Una visita", AutorId = 10,
-                NombreLugar = "Obelisco", Latitud = -34.6, Longitud = -58.3,
-                Categoria = CategoriaEnum.Lugares, TipoMultimedia = MultimediaEnum.Foto,
-                Fecha = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-                UrlArchivo = "https://example.com/foto.jpg"
-            };
+            Publicacion? enviada = null;
+            Stream? archivoEnviado = null;
+            _publicacionServicioMock
+                .Setup(s => s.Crear(It.IsAny<Publicacion>(), It.IsAny<Stream?>(), It.IsAny<string?>(), It.IsAny<NetTopologySuite.Geometries.Point?>()))
+                .Callback<Publicacion, Stream?, string?, NetTopologySuite.Geometries.Point?>((p, stream, _, _) =>
+                {
+                    enviada = p;
+                    archivoEnviado = stream;
+                })
+                .ReturnsAsync(1);
+
+            var request = CrearRequestEjemplo(10, "https://example.com/foto.jpg");
 
             //Act
             await _controller.Crear(request);
 
             //Assert
-            Assert.NotNull(_servicio.PublicacionCreada);
-            Assert.Equal("Recuerdo", _servicio.PublicacionCreada.Titulo);
-            Assert.Equal("Obelisco", _servicio.PublicacionCreada.Lugar.Nombre);
-            Assert.Equal(10, _servicio.PublicacionCreada.UsuarioId);
-            Assert.Equal(request.UrlArchivo, _servicio.PublicacionCreada.UrlMultimedia);
-            Assert.Null(_servicio.ArchivoRecibido);
+            Assert.NotNull(enviada);
+            Assert.Equal("Recuerdo", enviada.Titulo);
+            Assert.Equal("Obelisco", enviada.Lugar?.Nombre);
+            Assert.Equal(10, enviada.UsuarioId);
+            Assert.Equal(request.UrlArchivo, enviada.UrlMultimedia);
+            Assert.Null(archivoEnviado);
         }
 
         [Fact]
         public async Task QueSeEnvienAlServicioElArchivoYSuNombre()
         {
             //Arrange
+            string? nombreRecibido = null;
+            byte[]? bytesRecibidos = null;
+            _publicacionServicioMock
+                .Setup(s => s.Crear(It.IsAny<Publicacion>(), It.IsAny<Stream?>(), It.IsAny<string?>(), It.IsAny<NetTopologySuite.Geometries.Point?>()))
+                .Callback<Publicacion, Stream?, string?, NetTopologySuite.Geometries.Point?>((_, stream, nombre, _) =>
+                {
+                    nombreRecibido = nombre;
+                    if (stream != null)
+                    {
+                        using var ms = new MemoryStream();
+                        stream.CopyTo(ms);
+                        bytesRecibidos = ms.ToArray();
+                    }
+                })
+                .ReturnsAsync(1);
+
             using var stream = new MemoryStream(new byte[] { 1, 2, 3 });
             var request = new CrearPublicacionRequest
             {
@@ -85,18 +140,21 @@ namespace ProyectoFinalTPI.Backend.Tests
             await _controller.Crear(request);
 
             //Assert
-            Assert.Equal("foto.jpg", _servicio.NombreArchivoRecibido);
-            Assert.Equal(new byte[] { 1, 2, 3 }, _servicio.ArchivoRecibido);
+            Assert.Equal("foto.jpg", nombreRecibido);
+            Assert.Equal(new byte[] { 1, 2, 3 }, bytesRecibidos);
         }
 
         [Fact]
         public async Task QueSeDevuelvaNotFoundAlCrearSiElAutorNoExiste()
         {
             //Arrange
-            _servicio.Error = new KeyNotFoundException("El usuario indicado no existe.");
+            _publicacionServicioMock
+                .Setup(s => s.Crear(It.IsAny<Publicacion>(), It.IsAny<Stream?>(), It.IsAny<string?>(), It.IsAny<NetTopologySuite.Geometries.Point?>()))
+                .ThrowsAsync(new KeyNotFoundException("El usuario indicado no existe."));
 
             //Act
-            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () => await _controller.Crear(new CrearPublicacionRequest()));
+            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () =>
+                await _controller.Crear(new CrearPublicacionRequest()));
 
             //Assert
             var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
@@ -106,324 +164,13 @@ namespace ProyectoFinalTPI.Backend.Tests
             Assert.Equal("El usuario indicado no existe.", problema.Detail);
         }
 
-
-        [Fact]
-        public async Task QueSeDevuelvaOkAlEliminarPublicacion()
-        {
-            var result = await _controller.Eliminar(5, 10);
-            var ok = Assert.IsType<OkObjectResult>(result);
-            Assert.Equal(200, ok.StatusCode);
-            Assert.Equal(5, _servicio.IdEliminado);
-            Assert.Equal(10, _servicio.AutorEliminado);
-        }
-
-        [Fact]
-        public async Task QueSeDevuelvaNotFoundAlEliminarPublicacionInexistente()
-        {
-            _servicio.Error = new KeyNotFoundException("No existe");
-            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () => await _controller.Eliminar(99));
-            var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
-            Assert.Equal(404, respuesta.StatusCode);
-        }
-
-
-        [Fact]
-        public async Task QueSeDevuelvaOkConLosPinesDelMapa()
-        {
-            //Arrange
-            _servicio.Mapa = new ResultadoMapaDto
-            {
-                Pines = new List<PublicacionPinDto> { new() { Id = 5 } }, HayMas = true
-            };
-
-            //Act
-            var result = await _controller.ObtenerMapa(new PublicacionFiltroDto(), default);
-
-            //Assert
-            var respuesta = Assert.IsType<OkObjectResult>(result.Result);
-            Assert.Same(_servicio.Mapa, respuesta.Value);
-        }
-
-        [Fact]
-        public async Task QueSeEnvieAlServicioElFiltroDelMapa()
-        {
-            //Arrange
-            var filtro = new PublicacionFiltroDto
-            {
-                MinLatitud = -35, MaxLatitud = -34, MinLongitud = -59, MaxLongitud = -58,
-                Categoria = CategoriaEnum.Lugares
-            };
-
-            //Act
-            await _controller.ObtenerMapa(filtro, default);
-
-            //Assert
-            Assert.Same(filtro, _servicio.Filtro);
-        }
-
-        [Fact]
-        public async Task QueSeDevuelvaBadRequestSiElFiltroDelMapaEsInvalido()
-        {
-            //Arrange
-            _servicio.Error = new ArgumentException("Datos inválidos");
-
-            //Act
-            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () => (await _controller.ObtenerMapa(new PublicacionFiltroDto(), default)).Result);
-
-            //Assert
-            var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
-            var problema = Assert.IsType<ProblemDetails>(respuesta.Value);
-            Assert.Equal(400, respuesta.StatusCode);
-            Assert.Equal(400, problema.Status);
-            Assert.Equal("Datos inválidos", problema.Detail);
-        }
-
-        [Fact]
-        public async Task QueSeDevuelvaOkConElResumenDeLaPublicacion()
-        {
-            //Arrange
-            _servicio.Resumen = new PublicacionResumenDto { Id = 5, Titulo = "Recuerdo" };
-
-            //Act
-            var result = await _controller.ObtenerResumen(5, default);
-
-            //Assert
-            var respuesta = Assert.IsType<OkObjectResult>(result.Result);
-            Assert.Same(_servicio.Resumen, respuesta.Value);
-            Assert.Equal(5, _servicio.IdConsultado);
-        }
-
-        [Fact]
-        public async Task QueSeDevuelvaBadRequestSiElIdDelResumenEsInvalido()
-        {
-            //Arrange
-            _servicio.Error = new ArgumentException("Datos inválidos");
-
-            //Act
-            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () => (await _controller.ObtenerResumen(0, default)).Result);
-
-            //Assert
-            var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
-            var problema = Assert.IsType<ProblemDetails>(respuesta.Value);
-            Assert.Equal(400, respuesta.StatusCode);
-            Assert.Equal(400, problema.Status);
-            Assert.Equal("Datos inválidos", problema.Detail);
-        }
-
-        [Fact]
-        public async Task QueSeDevuelvaNotFoundSiElResumenNoEstaDisponible()
-        {
-            //Arrange
-            _servicio.Error = new KeyNotFoundException("La publicación no está disponible.");
-
-            //Act
-            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () => (await _controller.ObtenerResumen(99, default)).Result);
-
-            //Assert
-            var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
-            var problema = Assert.IsType<ProblemDetails>(respuesta.Value);
-            Assert.Equal(404, respuesta.StatusCode);
-            Assert.Equal(404, problema.Status);
-            Assert.Equal("La publicación no está disponible.", problema.Detail);
-        }
-
-        [Fact]
-        public async Task QueSeDevuelvaOkConElDetalleDeLaPublicacion()
-        {
-            //Arrange
-            _servicio.Detalle = new PublicacionDetalleDto { Id = 5, Titulo = "Recuerdo" };
-
-            //Act
-            var result = await _controller.ObtenerDetalle(5, default);
-
-            //Assert
-            var respuesta = Assert.IsType<OkObjectResult>(result.Result);
-            Assert.Same(_servicio.Detalle, respuesta.Value);
-            Assert.Equal(5, _servicio.IdConsultado);
-        }
-
-        [Fact]
-        public async Task QueSeDevuelvaBadRequestSiElIdDelDetalleEsInvalido()
-        {
-            //Arrange
-            _servicio.Error = new ArgumentException("Datos inválidos");
-
-            //Act
-            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () => (await _controller.ObtenerDetalle(0, default)).Result);
-
-            //Assert
-            var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
-            var problema = Assert.IsType<ProblemDetails>(respuesta.Value);
-            Assert.Equal(400, respuesta.StatusCode);
-            Assert.Equal(400, problema.Status);
-            Assert.Equal("Datos inválidos", problema.Detail);
-        }
-
-        [Fact]
-        public async Task QueSeDevuelvaNotFoundSiElDetalleNoEstaDisponible()
-        {
-            //Arrange
-            _servicio.Error = new KeyNotFoundException("La publicación no está disponible.");
-
-            //Act
-            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () => (await _controller.ObtenerDetalle(99, default)).Result);
-
-            //Assert
-            var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
-            var problema = Assert.IsType<ProblemDetails>(respuesta.Value);
-            Assert.Equal(404, respuesta.StatusCode);
-            Assert.Equal(404, problema.Status);
-            Assert.Equal("La publicación no está disponible.", problema.Detail);
-        }
-
-        [Fact]
-        public async Task QueSeDevuelvaCreatedSiSeAgreganEtiquetasNuevas()
-        {
-            //Arrange
-            _etiquetado.Cantidad = 2;
-            var request = new EtiquetarUsuariosRequest { UsuariosIds = new List<int> { 10, 20 } };
-
-            //Act
-            var result = await _controller.EtiquetarUsuarios(5, request, default);
-
-            //Assert
-            var respuesta = Assert.IsType<ObjectResult>(result);
-            Assert.Equal(201, respuesta.StatusCode);
-            Assert.Equal(2, JsonSerializer.SerializeToElement(respuesta.Value).GetProperty("cantidadEtiquetasNuevas").GetInt32());
-        }
-
-        [Fact]
-        public async Task QueSeDevuelvaOkSiLosUsuariosYaEstabanEtiquetados()
-        {
-            //Arrange
-            _etiquetado.Cantidad = 0;
-            var request = new EtiquetarUsuariosRequest { UsuariosIds = new List<int> { 10, 20 } };
-
-            //Act
-            var result = await _controller.EtiquetarUsuarios(5, request, default);
-
-            //Assert
-            var respuesta = Assert.IsType<OkObjectResult>(result);
-            Assert.Equal(200, respuesta.StatusCode);
-            Assert.Equal(0, JsonSerializer.SerializeToElement(respuesta.Value).GetProperty("cantidadEtiquetasNuevas").GetInt32());
-        }
-
-        [Fact]
-        public async Task QueSeEnvienAlServicioLaPublicacionYLosUsuariosAEtiquetar()
-        {
-            //Arrange
-            var request = new EtiquetarUsuariosRequest { UsuariosIds = new List<int> { 10, 20 } };
-
-            //Act
-            await _controller.EtiquetarUsuarios(5, request, default);
-
-            //Assert
-            Assert.Equal(5, _etiquetado.PublicacionId);
-            Assert.Equal(new[] { 10, 20 }, _etiquetado.UsuariosIds);
-        }
-
-        [Fact]
-        public async Task QueSeDevuelvaBadRequestSiLosDatosDeEtiquetadoSonInvalidos()
-        {
-            //Arrange
-            _etiquetado.Error = new ArgumentException("Datos inválidos");
-
-            //Act
-            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () => await _controller.EtiquetarUsuarios(5, new EtiquetarUsuariosRequest(), default));
-
-            //Assert
-            var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
-            var problema = Assert.IsType<ProblemDetails>(respuesta.Value);
-            Assert.Equal(400, respuesta.StatusCode);
-            Assert.Equal(400, problema.Status);
-            Assert.Equal("Datos inválidos", problema.Detail);
-        }
-
-        [Fact]
-        public async Task QueSeDevuelvaNotFoundSiLaPublicacionOElUsuarioAEtiquetarNoExiste()
-        {
-            //Arrange
-            _etiquetado.Error = new KeyNotFoundException("El usuario no existe.");
-
-            //Act
-            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () => await _controller.EtiquetarUsuarios(5, new EtiquetarUsuariosRequest(), default));
-
-            //Assert
-            var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
-            var problema = Assert.IsType<ProblemDetails>(respuesta.Value);
-            Assert.Equal(404, respuesta.StatusCode);
-            Assert.Equal(404, problema.Status);
-            Assert.Equal("El usuario no existe.", problema.Detail);
-        }
-
-        [Fact]
-        public async Task QueSeDevuelvaErrorInternoSinExponerDetallesSiFallaElEtiquetado()
-        {
-            //Arrange
-            _etiquetado.Error = new InvalidOperationException("credenciales internas");
-
-            //Act
-            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () => await _controller.EtiquetarUsuarios(5, new EtiquetarUsuariosRequest(), default));
-
-            //Assert
-            var respuesta = Assert.IsType<ObjectResult>(result);
-            var problema = Assert.IsType<ProblemDetails>(respuesta.Value);
-            Assert.Equal(500, respuesta.StatusCode);
-            Assert.Equal(500, problema.Status);
-            Assert.DoesNotContain("credenciales internas", JsonSerializer.Serialize(problema));
-            Assert.False(string.IsNullOrWhiteSpace(problema.Detail));
-        }
-
-        [Fact]
-        public async Task QueSePropagueLaCancelacionDelEtiquetado()
-        {
-            //Arrange
-            using var cancelacion = new CancellationTokenSource();
-            cancelacion.Cancel();
-            _etiquetado.Error = new OperationCanceledException(cancelacion.Token);
-
-            //Act
-            var result = await Assert.ThrowsAsync<OperationCanceledException>(
-                () => _controller.EtiquetarUsuarios(5, new EtiquetarUsuariosRequest(), cancelacion.Token));
-
-            //Assert
-            Assert.Equal(cancelacion.Token, result.CancellationToken);
-        }
-
-        [Theory]
-        [InlineData("crear")]
-        [InlineData("mapa")]
-        [InlineData("resumen")]
-        [InlineData("detalle")]
-        public async Task QueSeDevuelvaErrorInternoSinExponerDetallesSiFallaUnaOperacion(string operacion)
-        {
-            //Arrange
-            _servicio.Error = new InvalidOperationException("credenciales internas");
-
-            //Act
-            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () => operacion switch
-            {
-                "crear" => await _controller.Crear(new CrearPublicacionRequest()),
-                "mapa" => (await _controller.ObtenerMapa(new PublicacionFiltroDto(), default)).Result,
-                "resumen" => (await _controller.ObtenerResumen(5, default)).Result,
-                "detalle" => (await _controller.ObtenerDetalle(5, default)).Result,
-                _ => throw new ArgumentOutOfRangeException(nameof(operacion))
-            });
-
-            //Assert
-            var respuesta = Assert.IsType<ObjectResult>(result);
-            var problema = Assert.IsType<ProblemDetails>(respuesta.Value);
-            Assert.Equal(500, respuesta.StatusCode);
-            Assert.Equal(500, problema.Status);
-            Assert.False(string.IsNullOrWhiteSpace(problema.Detail));
-            Assert.DoesNotContain("credenciales internas", JsonSerializer.Serialize(problema));
-        }
-
         [Fact]
         public async Task QueSeDevuelvaBadRequestSiElServicioRechazaLaCreacion()
         {
             //Arrange
-            _servicio.Error = new ArgumentException("Datos inválidos");
+            _publicacionServicioMock
+                .Setup(s => s.Crear(It.IsAny<Publicacion>(), It.IsAny<Stream?>(), It.IsAny<string?>(), It.IsAny<NetTopologySuite.Geometries.Point?>()))
+                .ThrowsAsync(new ArgumentException("Datos inválidos"));
 
             //Act
             var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () =>
@@ -445,7 +192,8 @@ namespace ProyectoFinalTPI.Backend.Tests
             _controller.HttpContext.Request.Path = "/api/publicaciones";
 
             //Act
-            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () => await _controller.Crear(request));
+            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () =>
+                await _controller.Crear(request));
 
             //Assert
             var respuesta = Assert.IsType<ObjectResult>(result);
@@ -455,87 +203,571 @@ namespace ProyectoFinalTPI.Backend.Tests
             Assert.Equal("/api/publicaciones", problema.Instance);
             Assert.Contains("application/problem+json", respuesta.ContentTypes);
             Assert.DoesNotContain("ruta interna", JsonSerializer.Serialize(problema));
-            Assert.Null(_servicio.PublicacionCreada);
+            _publicacionServicioMock.Verify(s => s.Crear(It.IsAny<Publicacion>(), It.IsAny<Stream?>(), It.IsAny<string?>(), It.IsAny<NetTopologySuite.Geometries.Point?>()), Times.Never);
         }
+
+        #endregion
+
+        #region Eliminación de Publicaciones
+
+        [Fact]
+        public async Task QueSeDevuelvaOkAlEliminarPublicacion()
+        {
+            //Arrange
+            _publicacionServicioMock
+                .Setup(s => s.Eliminar(5, 10, It.IsAny<CancellationToken>()))
+                .Returns(Task.CompletedTask);
+
+            //Act
+            var result = await _controller.Eliminar(5, 10);
+
+            //Assert
+            var ok = Assert.IsType<OkObjectResult>(result);
+            Assert.Equal(200, ok.StatusCode);
+            _publicacionServicioMock.Verify(s => s.Eliminar(5, 10, It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task QueSeDevuelvaNotFoundAlEliminarPublicacionInexistente()
+        {
+            //Arrange
+            _publicacionServicioMock
+                .Setup(s => s.Eliminar(99, null, It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new KeyNotFoundException("No existe"));
+
+            //Act
+            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () =>
+                await _controller.Eliminar(99));
+
+            //Assert
+            var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
+            Assert.Equal(404, respuesta.StatusCode);
+        }
+
+        #endregion
+
+        #region Pines y Mapa
+
+        [Fact]
+        public async Task QueSeDevuelvaOkConLosPinesDelMapa()
+        {
+            //Arrange
+            var mapaEsperado = new ResultadoMapaDto
+            {
+                Pines = new List<PublicacionPinDto> { new() { Id = 5 } },
+                HayMas = true
+            };
+            _publicacionServicioMock
+                .Setup(s => s.ObtenerPines(It.IsAny<PublicacionFiltroDto>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(mapaEsperado);
+
+            //Act
+            var result = await _controller.ObtenerMapa(new PublicacionFiltroDto(), default);
+
+            //Assert
+            var respuesta = Assert.IsType<OkObjectResult>(result.Result);
+            Assert.Same(mapaEsperado, respuesta.Value);
+        }
+
+        [Fact]
+        public async Task QueSeEnvieAlServicioElFiltroDelMapa()
+        {
+            //Arrange
+            var filtro = new PublicacionFiltroDto
+            {
+                MinLatitud = -35,
+                MaxLatitud = -34,
+                MinLongitud = -59,
+                MaxLongitud = -58,
+                Categoria = CategoriaEnum.Lugares
+            };
+            PublicacionFiltroDto? filtroRecibido = null;
+            _publicacionServicioMock
+                .Setup(s => s.ObtenerPines(It.IsAny<PublicacionFiltroDto>(), It.IsAny<CancellationToken>()))
+                .Callback<PublicacionFiltroDto, CancellationToken>((f, _) => filtroRecibido = f)
+                .ReturnsAsync(new ResultadoMapaDto());
+
+            //Act
+            await _controller.ObtenerMapa(filtro, default);
+
+            //Assert
+            Assert.Same(filtro, filtroRecibido);
+        }
+
+        [Fact]
+        public async Task QueSeDevuelvaBadRequestSiElFiltroDelMapaEsInvalido()
+        {
+            //Arrange
+            _publicacionServicioMock
+                .Setup(s => s.ObtenerPines(It.IsAny<PublicacionFiltroDto>(), It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new ArgumentException("Datos inválidos"));
+
+            //Act
+            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () =>
+                (await _controller.ObtenerMapa(new PublicacionFiltroDto(), default)).Result);
+
+            //Assert
+            var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
+            var problema = Assert.IsType<ProblemDetails>(respuesta.Value);
+            Assert.Equal(400, respuesta.StatusCode);
+            Assert.Equal(400, problema.Status);
+            Assert.Equal("Datos inválidos", problema.Detail);
+        }
+
+        #endregion
+
+        #region Resumen y Detalle
+
+        [Fact]
+        public async Task QueSeDevuelvaOkConElResumenDeLaPublicacion()
+        {
+            //Arrange
+            var resumenEsperado = new PublicacionResumenDto { Id = 5, Titulo = "Recuerdo" };
+            _publicacionServicioMock
+                .Setup(s => s.ObtenerResumenPorId(5, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(resumenEsperado);
+
+            //Act
+            var result = await _controller.ObtenerResumen(5, default);
+
+            //Assert
+            var respuesta = Assert.IsType<OkObjectResult>(result.Result);
+            Assert.Same(resumenEsperado, respuesta.Value);
+            _publicacionServicioMock.Verify(s => s.ObtenerResumenPorId(5, It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task QueSeDevuelvaBadRequestSiElIdDelResumenEsInvalido()
+        {
+            //Arrange
+            _publicacionServicioMock
+                .Setup(s => s.ObtenerResumenPorId(0, It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new ArgumentException("Datos inválidos"));
+
+            //Act
+            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () =>
+                (await _controller.ObtenerResumen(0, default)).Result);
+
+            //Assert
+            var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
+            var problema = Assert.IsType<ProblemDetails>(respuesta.Value);
+            Assert.Equal(400, respuesta.StatusCode);
+            Assert.Equal(400, problema.Status);
+            Assert.Equal("Datos inválidos", problema.Detail);
+        }
+
+        [Fact]
+        public async Task QueSeDevuelvaNotFoundSiElResumenNoEstaDisponible()
+        {
+            //Arrange
+            _publicacionServicioMock
+                .Setup(s => s.ObtenerResumenPorId(99, It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new KeyNotFoundException("La publicación no está disponible."));
+
+            //Act
+            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () =>
+                (await _controller.ObtenerResumen(99, default)).Result);
+
+            //Assert
+            var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
+            var problema = Assert.IsType<ProblemDetails>(respuesta.Value);
+            Assert.Equal(404, respuesta.StatusCode);
+            Assert.Equal(404, problema.Status);
+            Assert.Equal("La publicación no está disponible.", problema.Detail);
+        }
+
+        [Fact]
+        public async Task QueSeDevuelvaOkConElDetalleDeLaPublicacion()
+        {
+            //Arrange
+            var detalleEsperado = new PublicacionDetalleDto { Id = 5, Titulo = "Recuerdo" };
+            _publicacionServicioMock
+                .Setup(s => s.ObtenerDetallePorId(5, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(detalleEsperado);
+
+            //Act
+            var result = await _controller.ObtenerDetalle(5, default);
+
+            //Assert
+            var respuesta = Assert.IsType<OkObjectResult>(result.Result);
+            Assert.Same(detalleEsperado, respuesta.Value);
+            _publicacionServicioMock.Verify(s => s.ObtenerDetallePorId(5, It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task QueSeDevuelvaBadRequestSiElIdDelDetalleEsInvalido()
+        {
+            //Arrange
+            _publicacionServicioMock
+                .Setup(s => s.ObtenerDetallePorId(0, It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new ArgumentException("Datos inválidos"));
+
+            //Act
+            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () =>
+                (await _controller.ObtenerDetalle(0, default)).Result);
+
+            //Assert
+            var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
+            var problema = Assert.IsType<ProblemDetails>(respuesta.Value);
+            Assert.Equal(400, respuesta.StatusCode);
+            Assert.Equal(400, problema.Status);
+            Assert.Equal("Datos inválidos", problema.Detail);
+        }
+
+        [Fact]
+        public async Task QueSeDevuelvaNotFoundSiElDetalleNoEstaDisponible()
+        {
+            //Arrange
+            _publicacionServicioMock
+                .Setup(s => s.ObtenerDetallePorId(99, It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new KeyNotFoundException("La publicación no está disponible."));
+
+            //Act
+            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () =>
+                (await _controller.ObtenerDetalle(99, default)).Result);
+
+            //Assert
+            var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
+            var problema = Assert.IsType<ProblemDetails>(respuesta.Value);
+            Assert.Equal(404, respuesta.StatusCode);
+            Assert.Equal(404, problema.Status);
+            Assert.Equal("La publicación no está disponible.", problema.Detail);
+        }
+
+        #endregion
+
+        #region Etiquetado de Usuarios
+
+        [Fact]
+        public async Task QueSeDevuelvaCreatedSiSeAgreganEtiquetasNuevas()
+        {
+            //Arrange
+            _etiquetadoServicioMock
+                .Setup(e => e.EtiquetarUsuarios(5, It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(2);
+            var request = new EtiquetarUsuariosRequest { UsuariosIds = new List<int> { 10, 20 } };
+
+            //Act
+            var result = await _controller.EtiquetarUsuarios(5, request, default);
+
+            //Assert
+            var respuesta = Assert.IsType<ObjectResult>(result);
+            Assert.Equal(201, respuesta.StatusCode);
+            Assert.Equal(2, JsonSerializer.SerializeToElement(respuesta.Value).GetProperty("cantidadEtiquetasNuevas").GetInt32());
+        }
+
+        [Fact]
+        public async Task QueSeDevuelvaOkSiLosUsuariosYaEstabanEtiquetados()
+        {
+            //Arrange
+            _etiquetadoServicioMock
+                .Setup(e => e.EtiquetarUsuarios(5, It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(0);
+            var request = new EtiquetarUsuariosRequest { UsuariosIds = new List<int> { 10, 20 } };
+
+            //Act
+            var result = await _controller.EtiquetarUsuarios(5, request, default);
+
+            //Assert
+            var respuesta = Assert.IsType<OkObjectResult>(result);
+            Assert.Equal(200, respuesta.StatusCode);
+            Assert.Equal(0, JsonSerializer.SerializeToElement(respuesta.Value).GetProperty("cantidadEtiquetasNuevas").GetInt32());
+        }
+
+        [Fact]
+        public async Task QueSeEnvienAlServicioLaPublicacionYLosUsuariosAEtiquetar()
+        {
+            //Arrange
+            var request = new EtiquetarUsuariosRequest { UsuariosIds = new List<int> { 10, 20 } };
+            int publicacionRecibida = 0;
+            IReadOnlyCollection<int>? usuariosRecibidos = null;
+            _etiquetadoServicioMock
+                .Setup(e => e.EtiquetarUsuarios(It.IsAny<int>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()))
+                .Callback<int, IReadOnlyCollection<int>, CancellationToken>((p, u, _) =>
+                {
+                    publicacionRecibida = p;
+                    usuariosRecibidos = u;
+                })
+                .ReturnsAsync(2);
+
+            //Act
+            await _controller.EtiquetarUsuarios(5, request, default);
+
+            //Assert
+            Assert.Equal(5, publicacionRecibida);
+            Assert.Equal(new[] { 10, 20 }, usuariosRecibidos);
+        }
+
+        [Fact]
+        public async Task QueSeDevuelvaBadRequestSiLosDatosDeEtiquetadoSonInvalidos()
+        {
+            //Arrange
+            _etiquetadoServicioMock
+                .Setup(e => e.EtiquetarUsuarios(It.IsAny<int>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new ArgumentException("Datos inválidos"));
+
+            //Act
+            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () =>
+                await _controller.EtiquetarUsuarios(5, new EtiquetarUsuariosRequest(), default));
+
+            //Assert
+            var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
+            var problema = Assert.IsType<ProblemDetails>(respuesta.Value);
+            Assert.Equal(400, respuesta.StatusCode);
+            Assert.Equal(400, problema.Status);
+            Assert.Equal("Datos inválidos", problema.Detail);
+        }
+
+        [Fact]
+        public async Task QueSeDevuelvaNotFoundSiLaPublicacionOElUsuarioAEtiquetarNoExiste()
+        {
+            //Arrange
+            _etiquetadoServicioMock
+                .Setup(e => e.EtiquetarUsuarios(It.IsAny<int>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new KeyNotFoundException("El usuario no existe."));
+
+            //Act
+            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () =>
+                await _controller.EtiquetarUsuarios(5, new EtiquetarUsuariosRequest(), default));
+
+            //Assert
+            var respuesta = Assert.IsAssignableFrom<ObjectResult>(result);
+            var problema = Assert.IsType<ProblemDetails>(respuesta.Value);
+            Assert.Equal(404, respuesta.StatusCode);
+            Assert.Equal(404, problema.Status);
+            Assert.Equal("El usuario no existe.", problema.Detail);
+        }
+
+        [Fact]
+        public async Task QueSeDevuelvaErrorInternoSinExponerDetallesSiFallaElEtiquetado()
+        {
+            //Arrange
+            _etiquetadoServicioMock
+                .Setup(e => e.EtiquetarUsuarios(It.IsAny<int>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new InvalidOperationException("credenciales internas"));
+
+            //Act
+            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () =>
+                await _controller.EtiquetarUsuarios(5, new EtiquetarUsuariosRequest(), default));
+
+            //Assert
+            var respuesta = Assert.IsType<ObjectResult>(result);
+            var problema = Assert.IsType<ProblemDetails>(respuesta.Value);
+            Assert.Equal(500, respuesta.StatusCode);
+            Assert.Equal(500, problema.Status);
+            Assert.DoesNotContain("credenciales internas", JsonSerializer.Serialize(problema));
+            Assert.False(string.IsNullOrWhiteSpace(problema.Detail));
+        }
+
+        [Fact]
+        public async Task QueSePropagueLaCancelacionDelEtiquetado()
+        {
+            //Arrange
+            using var cancelacion = new CancellationTokenSource();
+            cancelacion.Cancel();
+            _etiquetadoServicioMock
+                .Setup(e => e.EtiquetarUsuarios(5, It.IsAny<IReadOnlyCollection<int>>(), cancelacion.Token))
+                .ThrowsAsync(new OperationCanceledException(cancelacion.Token));
+
+            //Act
+            var result = await Assert.ThrowsAsync<OperationCanceledException>(
+                () => _controller.EtiquetarUsuarios(5, new EtiquetarUsuariosRequest(), cancelacion.Token));
+
+            //Assert
+            Assert.Equal(cancelacion.Token, result.CancellationToken);
+        }
+
+        #endregion
+
+        #region Reposts y Citas
 
         [Fact]
         public async Task QueSePuedaRepostearUnaPublicacion()
         {
+            //Arrange
+            _publicacionServicioMock
+                .Setup(s => s.Repostear(42, 10, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new RepostPublicacionDto
+                {
+                    PublicacionId = 42,
+                    DioRepost = true,
+                    CantidadReposts = 1
+                });
+
+            //Act
             var result = await _controller.Repostear(42, 10);
+
+            //Assert
             var ok = Assert.IsType<OkObjectResult>(result);
             var dto = Assert.IsType<RepostPublicacionDto>(ok.Value);
             Assert.Equal(42, dto.PublicacionId);
             Assert.True(dto.DioRepost);
-            Assert.Equal(42, _servicio.IdConsultado);
+            _publicacionServicioMock.Verify(s => s.Repostear(42, 10, It.IsAny<CancellationToken>()), Times.Once);
         }
 
         [Fact]
         public async Task QueSePuedaQuitarRepostDeUnaPublicacion()
         {
+            //Arrange
+            _publicacionServicioMock
+                .Setup(s => s.QuitarRepost(42, 10, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new RepostPublicacionDto
+                {
+                    PublicacionId = 42,
+                    DioRepost = false,
+                    CantidadReposts = 0
+                });
+
+            //Act
             var result = await _controller.QuitarRepost(42, 10);
+
+            //Assert
             var ok = Assert.IsType<OkObjectResult>(result);
             var dto = Assert.IsType<RepostPublicacionDto>(ok.Value);
             Assert.Equal(42, dto.PublicacionId);
             Assert.False(dto.DioRepost);
-            Assert.Equal(42, _servicio.IdConsultado);
+            _publicacionServicioMock.Verify(s => s.QuitarRepost(42, 10, It.IsAny<CancellationToken>()), Times.Once);
         }
 
         [Fact]
         public async Task QueSePuedaGuardarUnaPublicacion()
         {
+            //Arrange
+            _publicacionServicioMock
+                .Setup(s => s.Guardar(42, 10, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new GuardadoPublicacionDto { PublicacionId = 42, Guardada = true });
+
+            //Act
             var result = await _controller.Guardar(42, 10);
+
+            //Assert
             var ok = Assert.IsType<OkObjectResult>(result);
             var dto = Assert.IsType<GuardadoPublicacionDto>(ok.Value);
             Assert.Equal(42, dto.PublicacionId);
             Assert.True(dto.Guardada);
-            Assert.Equal(42, _servicio.IdConsultado);
+            _publicacionServicioMock.Verify(s => s.Guardar(42, 10, It.IsAny<CancellationToken>()), Times.Once);
         }
 
         [Fact]
         public async Task QueSePuedaQuitarGuardadoDeUnaPublicacion()
         {
+            //Arrange
+            _publicacionServicioMock
+                .Setup(s => s.QuitarGuardado(42, 10, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new GuardadoPublicacionDto { PublicacionId = 42, Guardada = false });
+
+            //Act
             var result = await _controller.QuitarGuardado(42, 10);
+
+            //Assert
             var ok = Assert.IsType<OkObjectResult>(result);
             var dto = Assert.IsType<GuardadoPublicacionDto>(ok.Value);
             Assert.Equal(42, dto.PublicacionId);
             Assert.False(dto.Guardada);
-            Assert.Equal(42, _servicio.IdConsultado);
+            _publicacionServicioMock.Verify(s => s.QuitarGuardado(42, 10, It.IsAny<CancellationToken>()), Times.Once);
         }
 
         [Fact]
-        public async Task Guardar_DevuelveUnauthorizedSiNoHayUsuario()
+        public async Task QueGuardarDevuelvaUnauthorizedSiNoHayUsuario()
         {
+            //Arrange & Act
             var result = await _controller.Guardar(42, null);
+
+            //Assert
             Assert.IsType<UnauthorizedObjectResult>(result);
         }
 
         [Fact]
-        public async Task QuitarGuardado_DevuelveUnauthorizedSiNoHayUsuario()
+        public async Task QueQuitarGuardadoDevuelvaUnauthorizedSiNoHayUsuario()
         {
+            //Arrange & Act
             var result = await _controller.QuitarGuardado(42, null);
+
+            //Assert
             Assert.IsType<UnauthorizedObjectResult>(result);
         }
 
         [Fact]
         public async Task QueSePuedanObtenerPublicacionesGuardadasPorUsuario()
         {
+            //Arrange
+            var listaMock = new List<PublicacionDetalleDto> { new() { Id = 1 } };
+            _publicacionServicioMock
+                .Setup(s => s.ObtenerGuardadasPorUsuarioId(10, null, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(listaMock);
+
+            //Act
             var result = await _controller.ObtenerGuardadasPorUsuario(10, CancellationToken.None);
+
+            //Assert
             var ok = Assert.IsType<OkObjectResult>(result.Result);
             var lista = Assert.IsType<List<PublicacionDetalleDto>>(ok.Value);
-            Assert.Equal(10, _servicio.IdConsultado);
             Assert.Single(lista);
+            _publicacionServicioMock.Verify(s => s.ObtenerGuardadasPorUsuarioId(10, null, It.IsAny<CancellationToken>()), Times.Once);
         }
 
         [Fact]
         public async Task QueSePuedaCitarUnaPublicacion()
         {
-            _servicio.IdCreado = 99;
+            //Arrange
+            _publicacionServicioMock
+                .Setup(s => s.Citar(42, 10, "Excelente foto", It.IsAny<CancellationToken>()))
+                .ReturnsAsync(99);
             var request = new CitarPublicacionRequest { AutorId = 10, Descripcion = "Excelente foto" };
+
+            //Act
             var result = await _controller.Citar(42, request);
+
+            //Assert
             var created = Assert.IsType<CreatedResult>(result);
             Assert.Equal("/api/publicaciones/99", created.Location);
             Assert.Equal(99, JsonSerializer.SerializeToElement(created.Value).GetProperty("id").GetInt32());
-            Assert.Equal(42, _servicio.IdConsultado);
+            _publicacionServicioMock.Verify(s => s.Citar(42, 10, "Excelente foto", It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        #endregion
+
+        #region Manejo de Excepciones y Cancelación
+
+        [Theory]
+        [InlineData("crear")]
+        [InlineData("mapa")]
+        [InlineData("resumen")]
+        [InlineData("detalle")]
+        public async Task QueSeDevuelvaErrorInternoSinExponerDetallesSiFallaUnaOperacion(string operacion)
+        {
+            //Arrange
+            var error = new InvalidOperationException("credenciales internas");
+            _publicacionServicioMock
+                .Setup(s => s.Crear(It.IsAny<Publicacion>(), It.IsAny<Stream?>(), It.IsAny<string?>(), It.IsAny<NetTopologySuite.Geometries.Point?>()))
+                .ThrowsAsync(error);
+            _publicacionServicioMock
+                .Setup(s => s.ObtenerPines(It.IsAny<PublicacionFiltroDto>(), It.IsAny<CancellationToken>()))
+                .ThrowsAsync(error);
+            _publicacionServicioMock
+                .Setup(s => s.ObtenerResumenPorId(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                .ThrowsAsync(error);
+            _publicacionServicioMock
+                .Setup(s => s.ObtenerDetallePorId(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                .ThrowsAsync(error);
+
+            //Act
+            var result = await MiddlewareTestHelper.Ejecutar(_controller.HttpContext, async () => operacion switch
+            {
+                "crear" => await _controller.Crear(new CrearPublicacionRequest()),
+                "mapa" => (await _controller.ObtenerMapa(new PublicacionFiltroDto(), default)).Result,
+                "resumen" => (await _controller.ObtenerResumen(5, default)).Result,
+                "detalle" => (await _controller.ObtenerDetalle(5, default)).Result,
+                _ => throw new ArgumentOutOfRangeException(nameof(operacion))
+            });
+
+            //Assert
+            var respuesta = Assert.IsType<ObjectResult>(result);
+            var problema = Assert.IsType<ProblemDetails>(respuesta.Value);
+            Assert.Equal(500, respuesta.StatusCode);
+            Assert.Equal(500, problema.Status);
+            Assert.False(string.IsNullOrWhiteSpace(problema.Detail));
+            Assert.DoesNotContain("credenciales internas", JsonSerializer.Serialize(problema));
         }
 
         [Theory]
@@ -549,7 +781,20 @@ namespace ProyectoFinalTPI.Backend.Tests
             using var cancelacion = new CancellationTokenSource();
             cancelacion.Cancel();
             _controller.HttpContext.RequestAborted = cancelacion.Token;
-            _servicio.Error = new OperationCanceledException(cancelacion.Token);
+
+            var error = new OperationCanceledException(cancelacion.Token);
+            _publicacionServicioMock
+                .Setup(s => s.Crear(It.IsAny<Publicacion>(), It.IsAny<Stream?>(), It.IsAny<string?>(), It.IsAny<NetTopologySuite.Geometries.Point?>()))
+                .ThrowsAsync(error);
+            _publicacionServicioMock
+                .Setup(s => s.ObtenerPines(It.IsAny<PublicacionFiltroDto>(), cancelacion.Token))
+                .ThrowsAsync(error);
+            _publicacionServicioMock
+                .Setup(s => s.ObtenerResumenPorId(It.IsAny<int>(), cancelacion.Token))
+                .ThrowsAsync(error);
+            _publicacionServicioMock
+                .Setup(s => s.ObtenerDetallePorId(It.IsAny<int>(), cancelacion.Token))
+                .ThrowsAsync(error);
 
             //Act
             var result = await Assert.ThrowsAsync<OperationCanceledException>(async () =>
@@ -577,188 +822,6 @@ namespace ProyectoFinalTPI.Backend.Tests
             Assert.Equal(cancelacion.Token, result.CancellationToken);
         }
 
-        private class ArchivoConError : IFormFile
-        {
-            public string ContentType => "image/jpeg";
-            public string ContentDisposition => string.Empty;
-            public IHeaderDictionary Headers => new HeaderDictionary();
-            public long Length => 3;
-            public string Name => "Archivo";
-            public string FileName => "foto.jpg";
-            public Stream OpenReadStream() => throw new IOException("ruta interna");
-            public void CopyTo(Stream target) => throw new NotImplementedException();
-            public Task CopyToAsync(Stream target, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-        }
-
-        private class PublicacionServicioFake : IPublicacionServicio
-        {
-            public Task<ComentarioDto> CrearComentario(Comentario comentario, CancellationToken cancellationToken = default)
-                => throw new NotImplementedException();
-
-            public Exception? Error { get; set; }
-            public int IdCreado { get; set; } = 1;
-            public Publicacion? PublicacionCreada { get; private set; }
-            public string? NombreArchivoRecibido { get; private set; }
-            public byte[]? ArchivoRecibido { get; private set; }
-            public ResultadoMapaDto Mapa { get; set; } = new();
-            public PublicacionFiltroDto? Filtro { get; private set; }
-            public PublicacionResumenDto Resumen { get; set; } = new();
-            public PublicacionDetalleDto Detalle { get; set; } = new();
-            public ResultadoPaginadoDto<ComentarioDto> Comentarios { get; set; } = new();
-            public int IdConsultado { get; private set; }
-            public string? Cursor { get; private set; }
-            public int Limite { get; private set; }
-
-            public async Task<int> Crear(Publicacion publicacion, Stream? archivo = null, string? nombreArchivo = null, NetTopologySuite.Geometries.Point? gpsUsuario = null)
-            {
-                PublicacionCreada = publicacion;
-                NombreArchivoRecibido = nombreArchivo;
-                if (Error != null) throw Error;
-                if (archivo != null)
-                {
-                    using var copia = new MemoryStream();
-                    await archivo.CopyToAsync(copia);
-                    ArchivoRecibido = copia.ToArray();
-                }
-                return IdCreado;
-            }
-
-            public Task<ResultadoMapaDto> ObtenerPines(PublicacionFiltroDto filtro, CancellationToken cancellationToken = default)
-            {
-                Filtro = filtro;
-                return Error == null ? Task.FromResult(Mapa) : Task.FromException<ResultadoMapaDto>(Error);
-            }
-
-            public Task<PublicacionResumenDto> ObtenerResumenPorId(int id, CancellationToken cancellationToken = default)
-            {
-                IdConsultado = id;
-                return Error == null ? Task.FromResult(Resumen) : Task.FromException<PublicacionResumenDto>(Error);
-            }
-
-            public Task<PublicacionDetalleDto> ObtenerDetallePorId(int id, CancellationToken cancellationToken = default)
-            {
-                IdConsultado = id;
-                return Error == null ? Task.FromResult(Detalle) : Task.FromException<PublicacionDetalleDto>(Error);
-            }
-
-            public Task<List<PublicacionDetalleDto>> ObtenerPorUsuarioId(int usuarioId, int? usuarioAutenticadoId, CancellationToken cancellationToken = default)
-            {
-                IdConsultado = usuarioId;
-                return Error == null ? Task.FromResult(new List<PublicacionDetalleDto> { Detalle }) : Task.FromException<List<PublicacionDetalleDto>>(Error);
-            }
-
-            public Task<MeGustaPublicacionDto> DarLike(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
-                => throw new NotImplementedException();
-
-            public Task<MeGustaPublicacionDto> QuitarLike(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
-                => throw new NotImplementedException();
-
-            public Task CompletarResumenesLikes(IReadOnlyCollection<PublicacionDetalleDto> publicaciones, int usuarioId,
-                CancellationToken cancellationToken = default)
-                => Task.CompletedTask;
-
-            public Task<PuntuacionPublicacionDto> Puntuar(int publicacionId, int usuarioId, int puntaje, CancellationToken cancellationToken = default)
-                => Task.FromResult(new PuntuacionPublicacionDto { PublicacionId = publicacionId, PuntosTotales = puntaje, MiPuntuacion = puntaje });
-
-            public Task<PuntuacionPublicacionDto> QuitarPuntuacion(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
-                => Task.FromResult(new PuntuacionPublicacionDto { PublicacionId = publicacionId, PuntosTotales = 0, MiPuntuacion = null });
-
-            public Task CompletarResumenesPuntuaciones(IReadOnlyCollection<PublicacionDetalleDto> publicaciones, int? usuarioId,
-                CancellationToken cancellationToken = default)
-                => Task.CompletedTask;
-
-            public Task<ResultadoPaginadoDto<ComentarioDto>> ObtenerComentarios(int publicacionId, string? cursor, int limite, CancellationToken cancellationToken = default)
-            {
-                IdConsultado = publicacionId;
-                Cursor = cursor;
-                Limite = limite;
-                return Error == null ? Task.FromResult(Comentarios) : Task.FromException<ResultadoPaginadoDto<ComentarioDto>>(Error);
-            }
-
-            public List<Publicacion> ObtenerPublicaciones() => throw new NotImplementedException();
-            public List<Publicacion> ObtenerPublicacionPorCategoria(CategoriaEnum categoria) => throw new NotImplementedException();
-            public Task<ResultadoPaginadoDto<PublicacionDetalleDto>> ObtenerFeedSeguidos(int usuarioId, string? cursor, int limite, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-            public Task<ResultadoPaginadoDto<PublicacionDetalleDto>> ObtenerPublicacionesParaVos(int usuarioId, string? cursor, int limite, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-            public Task<ResultadoPaginadoDto<PublicacionDetalleDto>> ObtenerPublicacionesPorHashtag(string hashtag, string? cursor, int limite,
-                int? usuarioId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-            public Task<List<TendenciaHashtagDto>> ObtenerTendenciasHashtags(int limite, CancellationToken cancellationToken = default)
-                => throw new NotImplementedException();
-            public Task<List<TendenciaHashtagDto>> BuscarHashtags(string consulta, int limite, CancellationToken cancellationToken = default)
-                => throw new NotImplementedException();
-            public Task RegistrarImpresionesFeed(int usuarioId, IReadOnlyCollection<int> publicacionesIds,
-                CancellationToken cancellationToken = default) => Task.CompletedTask;
-
-            public int? IdEliminado { get; private set; }
-            public int? AutorEliminado { get; private set; }
-
-            public Task Eliminar(int id, int? autorId = null, CancellationToken cancellationToken = default)
-            {
-                IdEliminado = id;
-                AutorEliminado = autorId;
-                return Error == null ? Task.CompletedTask : Task.FromException(Error);
-            }
-
-            public Task<RepostPublicacionDto> Repostear(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
-            {
-                IdConsultado = publicacionId;
-                return Error == null ? Task.FromResult(new RepostPublicacionDto { PublicacionId = publicacionId, CantidadReposts = 1, DioRepost = true }) : Task.FromException<RepostPublicacionDto>(Error);
-            }
-
-            public Task<RepostPublicacionDto> QuitarRepost(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
-            {
-                IdConsultado = publicacionId;
-                return Error == null ? Task.FromResult(new RepostPublicacionDto { PublicacionId = publicacionId, CantidadReposts = 0, DioRepost = false }) : Task.FromException<RepostPublicacionDto>(Error);
-            }
-
-            public Task<int> Citar(int publicacionId, int usuarioId, string descripcion, CancellationToken cancellationToken = default)
-            {
-                IdConsultado = publicacionId;
-                return Error == null ? Task.FromResult(IdCreado) : Task.FromException<int>(Error);
-            }
-
-            public Task CompletarResumenesReposts(IReadOnlyCollection<PublicacionDetalleDto> publicaciones, int usuarioId, CancellationToken cancellationToken = default)
-            {
-                return Task.CompletedTask;
-            }
-
-            public Task<GuardadoPublicacionDto> Guardar(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
-            {
-                IdConsultado = publicacionId;
-                return Error == null ? Task.FromResult(new GuardadoPublicacionDto { PublicacionId = publicacionId, Guardada = true }) : Task.FromException<GuardadoPublicacionDto>(Error);
-            }
-
-            public Task<GuardadoPublicacionDto> QuitarGuardado(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
-            {
-                IdConsultado = publicacionId;
-                return Error == null ? Task.FromResult(new GuardadoPublicacionDto { PublicacionId = publicacionId, Guardada = false }) : Task.FromException<GuardadoPublicacionDto>(Error);
-            }
-
-            public Task CompletarResumenesGuardados(IReadOnlyCollection<PublicacionDetalleDto> publicaciones, int usuarioId, CancellationToken cancellationToken = default)
-            {
-                return Task.CompletedTask;
-            }
-
-            public Task<List<PublicacionDetalleDto>> ObtenerGuardadasPorUsuarioId(int usuarioId, int? usuarioAutenticadoId, CancellationToken cancellationToken = default)
-            {
-                IdConsultado = usuarioId;
-                return Error == null ? Task.FromResult(new List<PublicacionDetalleDto> { Detalle }) : Task.FromException<List<PublicacionDetalleDto>>(Error);
-            }
-        }
-
-        private class EtiquetadoServicioFake : IEtiquetadoPublicacionServicio
-        {
-            public Exception? Error { get; set; }
-            public int Cantidad { get; set; }
-            public int PublicacionId { get; private set; }
-            public IReadOnlyCollection<int>? UsuariosIds { get; private set; }
-
-            public Task<int> EtiquetarUsuarios(int publicacionId, IReadOnlyCollection<int> usuariosIds, CancellationToken cancellationToken = default)
-            {
-                PublicacionId = publicacionId;
-                UsuariosIds = usuariosIds;
-                return Error == null ? Task.FromResult(Cantidad) : Task.FromException<int>(Error);
-            }
-        }
+        #endregion
     }
 }
-

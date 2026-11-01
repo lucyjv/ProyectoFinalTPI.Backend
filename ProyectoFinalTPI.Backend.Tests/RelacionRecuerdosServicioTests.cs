@@ -1,3 +1,4 @@
+using Moq;
 using ProyectoFinalTPI.Backend.Dtos.Publicacion;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Servicio;
@@ -7,52 +8,75 @@ namespace ProyectoFinalTPI.Backend.Tests;
 
 public class RelacionRecuerdosServicioTests
 {
-    private readonly RelacionRepositorioFake _repositorio = new();
+    private readonly Mock<IRelacionRecuerdosRepositorio> _repositorioMock = new();
     private readonly RelacionRecuerdosServicio _servicio;
 
     public RelacionRecuerdosServicioTests()
     {
-        _servicio = new RelacionRecuerdosServicio(_repositorio);
+        _repositorioMock
+            .Setup(r => r.ObtenerOriginalVisible(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((int id, CancellationToken ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                return 10;
+            });
+
+        _repositorioMock
+            .Setup(r => r.Obtener(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CursorRelacionDto?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<RecuerdoRelacionadoDto>());
+
+        _servicio = new RelacionRecuerdosServicio(_repositorioMock.Object);
     }
+
+    #region Obtener Relaciones Generales
 
     [Fact]
     public async Task QueSeObtenganLosBloquesDeDiaYLugarDelRecuerdoOriginal()
     {
         //Arrange
-        _repositorio.OriginalVisible = 10;
         var mismoDia = new RecuerdoRelacionadoDto { Id = 11, MismoDia = true };
         var mismoLugar = new RecuerdoRelacionadoDto { Id = 12, MismoDia = false };
-        _repositorio.Dia.Add(mismoDia);
-        _repositorio.Lugar.Add(mismoLugar);
         using var cancelacion = new CancellationTokenSource();
+
+        _repositorioMock
+            .Setup(r => r.ObtenerOriginalVisible(25, cancelacion.Token))
+            .ReturnsAsync(10);
+        _repositorioMock
+            .Setup(r => r.Obtener(10, "dia", null, 7, cancelacion.Token))
+            .ReturnsAsync(new List<RecuerdoRelacionadoDto> { mismoDia });
+        _repositorioMock
+            .Setup(r => r.Obtener(10, "lugar", null, 7, cancelacion.Token))
+            .ReturnsAsync(new List<RecuerdoRelacionadoDto> { mismoLugar });
 
         //Act
         var result = await _servicio.ObtenerRelaciones(25, cancelacion.Token);
 
         //Assert
-        Assert.Equal(25, _repositorio.IdConsultado);
         Assert.Equal(10, result.PublicacionId);
         Assert.Equal(200, result.RadioMetros);
         Assert.Same(mismoDia, Assert.Single(result.Dia.Items));
         Assert.Same(mismoLugar, Assert.Single(result.Lugar.Items));
         Assert.False(result.Dia.HayMas);
         Assert.False(result.Lugar.HayMas);
-        Assert.Equal(new[] { "dia", "lugar" }, _repositorio.Consultas.Select(c => c.Tipo));
-        Assert.All(_repositorio.Consultas, c =>
-        {
-            Assert.Equal(10, c.Id);
-            Assert.Equal(7, c.Limite);
-            Assert.Null(c.Cursor);
-            Assert.Equal(cancelacion.Token, c.Token);
-        });
+        _repositorioMock.Verify(r => r.ObtenerOriginalVisible(25, cancelacion.Token), Times.Once);
+        _repositorioMock.Verify(r => r.Obtener(10, "dia", null, 7, cancelacion.Token), Times.Once);
+        _repositorioMock.Verify(r => r.Obtener(10, "lugar", null, 7, cancelacion.Token), Times.Once);
     }
 
     [Fact]
     public async Task QueSeLimitenASeisLosRecuerdosDeCadaBloqueSinPerderElCursor()
     {
         //Arrange
-        _repositorio.Dia.AddRange(Enumerable.Range(11, 7).Select(i => new RecuerdoRelacionadoDto { Id = i, DistanciaMetros = i }));
-        _repositorio.Lugar.AddRange(_repositorio.Dia);
+        var items = Enumerable.Range(11, 7).Select(i => new RecuerdoRelacionadoDto { Id = i, DistanciaMetros = i }).ToList();
+        _repositorioMock
+            .Setup(r => r.ObtenerOriginalVisible(10, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(10);
+        _repositorioMock
+            .Setup(r => r.Obtener(10, "dia", null, 7, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(items.ToList());
+        _repositorioMock
+            .Setup(r => r.Obtener(10, "lugar", null, 7, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(items.ToList());
 
         //Act
         var result = await _servicio.ObtenerRelaciones(10, CancellationToken.None);
@@ -69,6 +93,12 @@ public class RelacionRecuerdosServicioTests
     {
         //Arrange
         var id = 10;
+        _repositorioMock
+            .Setup(r => r.ObtenerOriginalVisible(id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(10);
+        _repositorioMock
+            .Setup(r => r.Obtener(id, It.IsAny<string>(), null, 7, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<RecuerdoRelacionadoDto>());
 
         //Act
         var result = await _servicio.ObtenerRelaciones(id, CancellationToken.None);
@@ -93,24 +123,30 @@ public class RelacionRecuerdosServicioTests
 
         //Assert
         Assert.Contains("identificador", result.Message);
-        Assert.Null(_repositorio.IdConsultado);
-        Assert.Empty(_repositorio.Consultas);
+        _repositorioMock.Verify(r => r.ObtenerOriginalVisible(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        _repositorioMock.Verify(r => r.Obtener(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CursorRelacionDto?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
     public async Task QueNoSeConsultenRelacionesSiElOrigenNoEstaDisponible()
     {
         //Arrange
-        _repositorio.OriginalVisible = null;
+        _repositorioMock
+            .Setup(r => r.ObtenerOriginalVisible(99, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((int?)null);
 
         //Act
         var result = await Assert.ThrowsAsync<KeyNotFoundException>(() => _servicio.ObtenerRelaciones(99, CancellationToken.None));
 
         //Assert
         Assert.Contains("no está disponible", result.Message);
-        Assert.Equal(99, _repositorio.IdConsultado);
-        Assert.Empty(_repositorio.Consultas);
+        _repositorioMock.Verify(r => r.ObtenerOriginalVisible(99, It.IsAny<CancellationToken>()), Times.Once);
+        _repositorioMock.Verify(r => r.Obtener(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CursorRelacionDto?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
+
+    #endregion
+
+    #region Obtener Relacionadas Paginadas
 
     [Theory]
     [InlineData("dia", 1)]
@@ -119,6 +155,12 @@ public class RelacionRecuerdosServicioTests
     {
         //Arrange
         using var cancelacion = new CancellationTokenSource();
+        _repositorioMock
+            .Setup(r => r.ObtenerOriginalVisible(10, cancelacion.Token))
+            .ReturnsAsync(10);
+        _repositorioMock
+            .Setup(r => r.Obtener(10, tipo, null, limite + 1, cancelacion.Token))
+            .ReturnsAsync(new List<RecuerdoRelacionadoDto>());
 
         //Act
         var result = await _servicio.ObtenerRelacionadas(10, tipo, null, limite, cancelacion.Token);
@@ -126,11 +168,79 @@ public class RelacionRecuerdosServicioTests
         //Assert
         Assert.Empty(result.Items);
         Assert.False(result.HayMas);
-        var consulta = Assert.Single(_repositorio.Consultas);
-        Assert.Equal(tipo, consulta.Tipo);
-        Assert.Equal(limite + 1, consulta.Limite);
-        Assert.Equal(cancelacion.Token, consulta.Token);
+        _repositorioMock.Verify(r => r.Obtener(10, tipo, null, limite + 1, cancelacion.Token), Times.Once);
     }
+
+    [Fact]
+    public async Task QueSePuedaContinuarDesdeElUltimoRecuerdoEntregadoSinSaltarElAdicional()
+    {
+        //Arrange
+        var itemsPrimera = new List<RecuerdoRelacionadoDto>
+        {
+            new() { Id = 11, DistanciaMetros = 50 },
+            new() { Id = 12, DistanciaMetros = 50 },
+            new() { Id = 13, DistanciaMetros = 75 }
+        };
+        var itemsSegunda = new List<RecuerdoRelacionadoDto>
+        {
+            new() { Id = 13, DistanciaMetros = 75 }
+        };
+
+        _repositorioMock
+            .Setup(r => r.ObtenerOriginalVisible(10, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(10);
+        _repositorioMock
+            .Setup(r => r.Obtener(10, "dia", null, 3, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(itemsPrimera);
+        _repositorioMock
+            .Setup(r => r.Obtener(10, "dia", It.Is<CursorRelacionDto?>(c => c != null && c.Id == 12 && c.DistanciaMetros == 50), 3, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(itemsSegunda);
+
+        //Act
+        var primera = await _servicio.ObtenerRelacionadas(10, "dia", null, 2, CancellationToken.None);
+        var segunda = await _servicio.ObtenerRelacionadas(10, "dia", primera.SiguienteCursor, 2, CancellationToken.None);
+
+        //Assert
+        Assert.Equal(new[] { 11, 12 }, primera.Items.Select(p => p.Id));
+        Assert.True(primera.HayMas);
+        Assert.Equal(13, Assert.Single(segunda.Items).Id);
+        Assert.False(segunda.HayMas);
+        _repositorioMock.Verify(r => r.Obtener(
+            10,
+            "dia",
+            It.Is<CursorRelacionDto?>(c => c != null && c.Id == 12 && c.DistanciaMetros == 50 && c.PublicacionId == 10 && c.Tipo == "dia"),
+            3,
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task QueNoSeGenereCursorSiLaCantidadCoincideConElLimite()
+    {
+        //Arrange
+        var items = new List<RecuerdoRelacionadoDto>
+        {
+            new() { Id = 11 },
+            new() { Id = 12 }
+        };
+        _repositorioMock
+            .Setup(r => r.ObtenerOriginalVisible(10, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(10);
+        _repositorioMock
+            .Setup(r => r.Obtener(10, "lugar", null, 3, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(items);
+
+        //Act
+        var result = await _servicio.ObtenerRelacionadas(10, "lugar", null, 2, CancellationToken.None);
+
+        //Assert
+        Assert.Equal(2, result.Items.Count);
+        Assert.Null(result.SiguienteCursor);
+        Assert.False(result.HayMas);
+    }
+
+    #endregion
+
+    #region Validaciones de Cursor y Parámetros
 
     [Theory]
     [InlineData("")]
@@ -146,8 +256,8 @@ public class RelacionRecuerdosServicioTests
 
         //Assert
         Assert.Contains("tipo", result.Message);
-        Assert.Null(_repositorio.IdConsultado);
-        Assert.Empty(_repositorio.Consultas);
+        _repositorioMock.Verify(r => r.ObtenerOriginalVisible(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        _repositorioMock.Verify(r => r.Obtener(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CursorRelacionDto?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Theory]
@@ -164,8 +274,8 @@ public class RelacionRecuerdosServicioTests
 
         //Assert
         Assert.Contains("límite", result.Message);
-        Assert.Null(_repositorio.IdConsultado);
-        Assert.Empty(_repositorio.Consultas);
+        _repositorioMock.Verify(r => r.ObtenerOriginalVisible(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        _repositorioMock.Verify(r => r.Obtener(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CursorRelacionDto?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Theory]
@@ -181,68 +291,24 @@ public class RelacionRecuerdosServicioTests
 
         //Assert
         Assert.Contains("identificador", result.Message);
-        Assert.Null(_repositorio.IdConsultado);
-        Assert.Empty(_repositorio.Consultas);
+        _repositorioMock.Verify(r => r.ObtenerOriginalVisible(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        _repositorioMock.Verify(r => r.Obtener(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CursorRelacionDto?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
     public async Task QueNoSeListeUnaRelacionSiElOrigenNoEstaDisponible()
     {
         //Arrange
-        _repositorio.OriginalVisible = null;
+        _repositorioMock
+            .Setup(r => r.ObtenerOriginalVisible(99, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((int?)null);
 
         //Act
         var result = await Assert.ThrowsAsync<KeyNotFoundException>(() => _servicio.ObtenerRelacionadas(99, "lugar", null, 20, CancellationToken.None));
 
         //Assert
         Assert.Contains("no está disponible", result.Message);
-        Assert.Empty(_repositorio.Consultas);
-    }
-
-    [Fact]
-    public async Task QueSePuedaContinuarDesdeElUltimoRecuerdoEntregadoSinSaltarElAdicional()
-    {
-        //Arrange
-        _repositorio.Dia.AddRange(new[]
-        {
-            new RecuerdoRelacionadoDto { Id = 11, DistanciaMetros = 50 },
-            new RecuerdoRelacionadoDto { Id = 12, DistanciaMetros = 50 },
-            new RecuerdoRelacionadoDto { Id = 13, DistanciaMetros = 75 }
-        });
-
-        //Act
-        var primera = await _servicio.ObtenerRelacionadas(10, "dia", null, 2, CancellationToken.None);
-        _repositorio.Dia.Clear();
-        _repositorio.Dia.Add(new RecuerdoRelacionadoDto { Id = 13, DistanciaMetros = 75 });
-        var segunda = await _servicio.ObtenerRelacionadas(10, "dia", primera.SiguienteCursor, 2, CancellationToken.None);
-
-        //Assert
-        Assert.Equal(new[] { 11, 12 }, primera.Items.Select(p => p.Id));
-        Assert.True(primera.HayMas);
-        var cursor = _repositorio.Consultas[1].Cursor;
-        Assert.NotNull(cursor);
-        Assert.Equal(12, cursor.Id);
-        Assert.Equal(50, cursor.DistanciaMetros);
-        Assert.Equal(10, cursor.PublicacionId);
-        Assert.Equal("dia", cursor.Tipo);
-        Assert.Equal(13, Assert.Single(segunda.Items).Id);
-        Assert.False(segunda.HayMas);
-    }
-
-    [Fact]
-    public async Task QueNoSeGenereCursorSiLaCantidadCoincideConElLimite()
-    {
-        //Arrange
-        _repositorio.Lugar.Add(new RecuerdoRelacionadoDto { Id = 11 });
-        _repositorio.Lugar.Add(new RecuerdoRelacionadoDto { Id = 12 });
-
-        //Act
-        var result = await _servicio.ObtenerRelacionadas(10, "lugar", null, 2, CancellationToken.None);
-
-        //Assert
-        Assert.Equal(2, result.Items.Count);
-        Assert.Null(result.SiguienteCursor);
-        Assert.False(result.HayMas);
+        _repositorioMock.Verify(r => r.Obtener(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CursorRelacionDto?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Theory]
@@ -251,17 +317,29 @@ public class RelacionRecuerdosServicioTests
     public async Task QueNoSeReutiliceUnCursorEnOtraPublicacionOTipo(int id, string tipo)
     {
         //Arrange
-        _repositorio.Dia.AddRange(new[] { new RecuerdoRelacionadoDto { Id = 11 }, new RecuerdoRelacionadoDto { Id = 12 } });
+        var items = new List<RecuerdoRelacionadoDto>
+        {
+            new() { Id = 11 },
+            new() { Id = 12 }
+        };
+        _repositorioMock
+            .Setup(r => r.ObtenerOriginalVisible(10, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(10);
+        _repositorioMock
+            .Setup(r => r.Obtener(10, "dia", null, 2, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(items);
+
         var primera = await _servicio.ObtenerRelacionadas(10, "dia", null, 1, CancellationToken.None);
-        _repositorio.OriginalVisible = id;
-        _repositorio.Consultas.Clear();
+        _repositorioMock
+            .Setup(r => r.ObtenerOriginalVisible(id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(id);
 
         //Act
-        var result = await Assert.ThrowsAsync<ArgumentException>(() => _servicio.ObtenerRelacionadas(id, tipo, primera.SiguienteCursor, 1, CancellationToken.None));
+        var result = await Assert.ThrowsAsync<ArgumentException>(() =>
+            _servicio.ObtenerRelacionadas(id, tipo, primera.SiguienteCursor, 1, CancellationToken.None));
 
         //Assert
         Assert.Contains("cursor", result.Message);
-        Assert.Empty(_repositorio.Consultas);
     }
 
     [Theory]
@@ -276,11 +354,12 @@ public class RelacionRecuerdosServicioTests
         var tipo = "dia";
 
         //Act
-        var result = await Assert.ThrowsAsync<ArgumentException>(() => _servicio.ObtenerRelacionadas(10, tipo, cursor, 20, CancellationToken.None));
+        var result = await Assert.ThrowsAsync<ArgumentException>(() =>
+            _servicio.ObtenerRelacionadas(10, tipo, cursor, 20, CancellationToken.None));
 
         //Assert
         Assert.Contains("cursor", result.Message);
-        Assert.Empty(_repositorio.Consultas);
+        _repositorioMock.Verify(r => r.Obtener(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CursorRelacionDto?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -290,11 +369,12 @@ public class RelacionRecuerdosServicioTests
         var cursor = new string('a', 513);
 
         //Act
-        var result = await Assert.ThrowsAsync<ArgumentException>(() => _servicio.ObtenerRelacionadas(10, "dia", cursor, 20, CancellationToken.None));
+        var result = await Assert.ThrowsAsync<ArgumentException>(() =>
+            _servicio.ObtenerRelacionadas(10, "dia", cursor, 20, CancellationToken.None));
 
         //Assert
         Assert.Contains("cursor", result.Message);
-        Assert.Empty(_repositorio.Consultas);
+        _repositorioMock.Verify(r => r.Obtener(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CursorRelacionDto?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Theory]
@@ -308,12 +388,17 @@ public class RelacionRecuerdosServicioTests
             new CursorRelacionDto(10, "dia", distancia, id)));
 
         //Act
-        var result = await Assert.ThrowsAsync<ArgumentException>(() => _servicio.ObtenerRelacionadas(10, "dia", cursor, 20, CancellationToken.None));
+        var result = await Assert.ThrowsAsync<ArgumentException>(() =>
+            _servicio.ObtenerRelacionadas(10, "dia", cursor, 20, CancellationToken.None));
 
         //Assert
         Assert.Contains("cursor", result.Message);
-        Assert.Empty(_repositorio.Consultas);
+        _repositorioMock.Verify(r => r.Obtener(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CursorRelacionDto?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
+
+    #endregion
+
+    #region Cancelación
 
     [Fact]
     public async Task QueSePropagueLaCancelacionDeLaConsulta()
@@ -323,35 +408,13 @@ public class RelacionRecuerdosServicioTests
         cancelacion.Cancel();
 
         //Act
-        var result = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _servicio.ObtenerRelaciones(10, cancelacion.Token));
+        var result = await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            _servicio.ObtenerRelaciones(10, cancelacion.Token));
 
         //Assert
         Assert.Equal(cancelacion.Token, result.CancellationToken);
-        Assert.Empty(_repositorio.Consultas);
+        _repositorioMock.Verify(r => r.Obtener(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CursorRelacionDto?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    private sealed record Consulta(int Id, string Tipo, CursorRelacionDto? Cursor, int Limite, CancellationToken Token);
-
-    private sealed class RelacionRepositorioFake : IRelacionRecuerdosRepositorio
-    {
-        public int? OriginalVisible = 10;
-        public int? IdConsultado;
-        public List<RecuerdoRelacionadoDto> Dia = new();
-        public List<RecuerdoRelacionadoDto> Lugar = new();
-        public List<Consulta> Consultas = new();
-
-        public Task<int?> ObtenerOriginalVisible(int id, CancellationToken ct)
-        {
-            ct.ThrowIfCancellationRequested();
-            IdConsultado = id;
-            return Task.FromResult(OriginalVisible);
-        }
-
-        public Task<List<RecuerdoRelacionadoDto>> Obtener(int id, string tipo, CursorRelacionDto? cursor, int limite, CancellationToken ct)
-        {
-            ct.ThrowIfCancellationRequested();
-            Consultas.Add(new Consulta(id, tipo, cursor, limite, ct));
-            return Task.FromResult((tipo == "dia" ? Dia : Lugar).ToList());
-        }
-    }
+    #endregion
 }
