@@ -1,3 +1,4 @@
+using ProyectoFinalTPI.Backend.Interfaces.Configuracion;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -31,6 +32,7 @@ public class AnalisisRecuerdosServicioTests
     public AnalisisRecuerdosServicioTests()
     {
         _analizadorMock.SetupGet(a => a.Version).Returns("test-v1");
+        _analizadorMock.SetupGet(a => a.Disponible).Returns(true);
         _relacionesMock.Setup(r => r.ObtenerOriginalVisible(It.IsAny<int>(), It.IsAny<CancellationToken>())).ReturnsAsync(10);
 
         _repositorioMock
@@ -55,6 +57,21 @@ public class AnalisisRecuerdosServicioTests
     }
 
     #region Procesamiento de Trabajos en Cola
+
+    [Fact]
+    public async Task QueElProveedorDeshabilitadoNoReserveTrabajosNiConsumaIntentos()
+    {
+        //Arrange
+        _analizadorMock.SetupGet(a => a.Disponible).Returns(false);
+
+        //Act
+        var resultado = await _servicio.ProcesarUno(CancellationToken.None);
+
+        //Assert
+        Assert.False(resultado);
+        _repositorioMock.VerifyNoOtherCalls();
+        _analizadorMock.Verify(a => a.Analizar(It.IsAny<EntradaAnalisisRecuerdoDto>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
 
     [Fact]
     public async Task QueNoSeInvoqueAlAnalizadorCuandoLaColaEstaVacia()

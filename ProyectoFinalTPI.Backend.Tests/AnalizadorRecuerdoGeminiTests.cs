@@ -1,12 +1,16 @@
+using ProyectoFinalTPI.Backend.Infraestructura;
+using ProyectoFinalTPI.Backend.Interfaces.Configuracion;
 using System.Net;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Moq.Protected;
 using ProyectoFinalTPI.Backend.Dtos.Momento;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
-using ProyectoFinalTPI.Backend.Servicio;
+using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using Xunit;
 
 namespace ProyectoFinalTPI.Backend.Tests;
@@ -15,7 +19,7 @@ public class AnalizadorRecuerdoGeminiTests : IDisposable
 {
     private readonly Mock<HttpMessageHandler> _httpHandlerMock = new();
     private readonly Mock<ICatalogoAnalisisRepositorio> _catalogoMock = new();
-    private readonly OpcionesGemini _opciones = new() { Habilitado = true, ApiKey = "clave-ficticia-de-test" };
+    private readonly OpcionesAnalisisRecuerdos _opciones = new() { Habilitado = true, ApiKey = "clave-ficticia-de-test" };
     private readonly ControlCuotaGemini _cuota = new(TimeProvider.System);
     private readonly HttpClient _cliente;
     private readonly AnalizadorRecuerdoGemini _analizador;
@@ -62,6 +66,123 @@ public class AnalizadorRecuerdoGeminiTests : IDisposable
     }
 
     #region Configuración y Comunicación HTTP
+
+    [Fact]
+    public void QueLaConfiguracionUnicaPermitaDeshabilitarLaIaSinClave()
+    {
+        //Arrange
+        var servicios = new ServiceCollection();
+        servicios.AddSingleton(TimeProvider.System);
+        servicios.AddSingleton(_catalogoMock.Object);
+        servicios.AddAnalisisRecuerdosIa(new ConfigurationBuilder().Build());
+        using var proveedor = servicios.BuildServiceProvider();
+        using var scope = proveedor.CreateScope();
+
+        //Act
+        var analizador = scope.ServiceProvider.GetRequiredService<IAnalizadorRecuerdo>();
+
+        //Assert
+        Assert.IsType<AnalizadorRecuerdoGemini>(analizador);
+        Assert.False(analizador.Disponible);
+    }
+
+    [Fact]
+    public void QueHabilitarLaIaSinClaveFalleAlValidarLaConfiguracion()
+    {
+        //Arrange
+        var configuracion = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["AnalisisRecuerdos:Habilitado"] = "true"
+        }).Build();
+        var servicios = new ServiceCollection();
+        servicios.AddAnalisisRecuerdosIa(configuracion);
+        using var proveedor = servicios.BuildServiceProvider();
+
+        //Act
+        var error = Assert.Throws<OptionsValidationException>(() =>
+            proveedor.GetRequiredService<IOptions<OpcionesAnalisisRecuerdos>>().Value);
+
+        //Assert
+        Assert.Contains("AnalisisRecuerdos:ApiKey", error.Message);
+    }
+
+    [Fact]
+    public void QueLaConfiguracionSinProveedorExplicitoConserveGeminiPorDefecto()
+    {
+        //Arrange
+        var servicios = new ServiceCollection();
+        servicios.AddAnalisisRecuerdosIa(new ConfigurationBuilder().Build());
+        using var proveedor = servicios.BuildServiceProvider();
+
+        //Act
+        proveedor.GetRequiredService<IStartupValidator>().Validate();
+        var opciones = proveedor.GetRequiredService<IOptions<OpcionesAnalisisRecuerdos>>().Value;
+
+        //Assert
+        Assert.Equal("Gemini", opciones.Proveedor);
+        Assert.False(opciones.Habilitado);
+    }
+
+    [Theory]
+    [InlineData("Gemini")]
+    [InlineData("gemini")]
+    [InlineData(" GEMINI ")]
+    public void QueInfraestructuraSeleccioneGeminiConLaClaveYElModeloConfigurados(string nombre)
+    {
+        //Arrange
+        var configuracion = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["AnalisisRecuerdos:Proveedor"] = nombre,
+            ["AnalisisRecuerdos:Habilitado"] = "true",
+            ["AnalisisRecuerdos:ApiKey"] = "clave-ficticia",
+            ["AnalisisRecuerdos:Modelo"] = "modelo-configurado"
+        }).Build();
+        var servicios = new ServiceCollection();
+        servicios.AddSingleton(TimeProvider.System);
+        servicios.AddSingleton(_catalogoMock.Object);
+        servicios.AddAnalisisRecuerdosIa(configuracion);
+        using var proveedor = servicios.BuildServiceProvider();
+        using var scope = proveedor.CreateScope();
+
+        //Act
+        proveedor.GetRequiredService<IStartupValidator>().Validate();
+        var analizador = scope.ServiceProvider.GetRequiredService<IAnalizadorRecuerdo>();
+        var opciones = proveedor.GetRequiredService<IOptions<OpcionesAnalisisRecuerdos>>().Value;
+
+        //Assert
+        Assert.IsType<AnalizadorRecuerdoGemini>(analizador);
+        Assert.True(analizador.Disponible);
+        Assert.Equal("gemini:modelo-configurado:momentos-v1", analizador.Version);
+        Assert.Equal("clave-ficticia", opciones.ApiKey);
+    }
+
+    [Theory]
+    [InlineData("Anthropic", true)]
+    [InlineData("Anthropic", false)]
+    [InlineData("OtroProveedor", true)]
+    [InlineData("", true)]
+    [InlineData(" ", false)]
+    public void QueUnProveedorNoImplementadoOVacioFalleAlIniciarSinElegirGeminiComoAlternativa(string nombre, bool habilitado)
+    {
+        //Arrange
+        var configuracion = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["AnalisisRecuerdos:Proveedor"] = nombre,
+            ["AnalisisRecuerdos:Habilitado"] = habilitado.ToString(),
+            ["AnalisisRecuerdos:ApiKey"] = "clave-ficticia"
+        }).Build();
+        var servicios = new ServiceCollection();
+        servicios.AddAnalisisRecuerdosIa(configuracion);
+        using var proveedor = servicios.BuildServiceProvider();
+
+        //Act
+        var error = Assert.Throws<OptionsValidationException>(() =>
+            proveedor.GetRequiredService<IStartupValidator>().Validate());
+
+        //Assert
+        Assert.Contains("AnalisisRecuerdos:Proveedor", error.Message);
+        Assert.Contains("Gemini", error.Message);
+    }
 
     [Fact]
     public async Task QueSeEnvieLaClavePorHeaderYElRecuerdoComoDatosSeparadosDeLasInstrucciones()

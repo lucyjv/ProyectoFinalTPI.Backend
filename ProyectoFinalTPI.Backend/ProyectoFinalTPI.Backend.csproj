@@ -10,6 +10,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../ProyectoFinalTPI.Backend.Infraestructura/ProyectoFinalTPI.Backend.Infraestructura.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Content Update="seed.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 

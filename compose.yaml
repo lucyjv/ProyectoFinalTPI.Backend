@@ -18,7 +18,6 @@ x-backend: &backend
     Redis__Habilitado: "true"
     Redis__ConnectionString: redis:6379,abortConnect=false,connectTimeout=1000,syncTimeout=1000,asyncTimeout=1000
     AnalisisRecuerdos__Habilitado: "false"
-    Gemini__Habilitado: "false"
     Cloudinary__CloudName: ${DOCKER_CLOUDINARY_CLOUD_NAME:-}
     Cloudinary__ApiKey: ${DOCKER_CLOUDINARY_API_KEY:-}
     Cloudinary__ApiSecret: ${DOCKER_CLOUDINARY_API_SECRET:-}

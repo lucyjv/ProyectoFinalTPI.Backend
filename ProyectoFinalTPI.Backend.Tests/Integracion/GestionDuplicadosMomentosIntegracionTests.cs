@@ -292,7 +292,7 @@ public class GestionDuplicadosMomentosIntegracionTests(PostgisFixture postgres) 
             if (origenIndexado)
             {
                 var origen = await db.Momentos.SingleAsync(m => m.Id == 1);
-                origen.ClaveIdentidad = IdentidadMomento.Clave(origen.Nombre, origen.FechaInicio, origen.FechaFin);
+                origen.ClaveIdentidad = ReglasMomento.ClaveIdentidad(origen.Nombre, origen.FechaInicio, origen.FechaFin);
                 await db.SaveChangesAsync();
             }
         }

@@ -1,3 +1,4 @@
+using ProyectoFinalTPI.Backend.Interfaces.Configuracion;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -28,7 +29,7 @@ public class ReprocesamientoRecuerdosIntegracionTests(PostgisFixture postgres) :
             // Controlar el worker manualmente para comprobar el encolado antes del consumo.
             foreach (var registro in servicios.Where(d => d.ServiceType == typeof(IHostedService) &&
                 d.ImplementationType == typeof(ProyectoFinalTPI.Backend.Services.AnalisisRecuerdosWorker)).ToArray()) servicios.Remove(registro);
-            servicios.Configure<OpcionesAnalisisRecuerdos>(o => o.Habilitado = true);
+            servicios.Configure<OpcionesAnalisisRecuerdos>(o => { o.Habilitado = fake != null; o.ApiKey = "clave-ficticia"; });
             if (fake != null)
             {
                 servicios.RemoveAll<IAnalizadorRecuerdo>();

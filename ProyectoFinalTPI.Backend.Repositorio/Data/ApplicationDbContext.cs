@@ -51,7 +51,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
             foreach (var entry in ChangeTracker.Entries<Momento>().Where(e => e.State is EntityState.Added or EntityState.Modified).ToList())
             {
                 var m = entry.Entity;
-                m.ClaveIdentidad = m.MomentoCanonicoId == null ? IdentidadMomento.Clave(m.Nombre, m.FechaInicio, m.FechaFin) : null;
+                m.ClaveIdentidad = m.MomentoCanonicoId == null ? ReglasMomento.ClaveIdentidad(m.Nombre, m.FechaInicio, m.FechaFin) : null;
                 m.VersionCatalogo = entry.State == EntityState.Added ? 1 : checked(entry.Property(x => x.VersionCatalogo).OriginalValue + 1);
             }
         }
