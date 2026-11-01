@@ -93,6 +93,8 @@ Cada integrante debe configurar las credenciales en su propia computadora y usua
 
    Los valores son ejemplos, no credenciales válidas. El proyecto ya tiene `UserSecretsId`: **no ejecutar `dotnet user-secrets init`**. Para actualizar una credencial, repetir el comando correspondiente con el nuevo valor. Los comandos con valores reales pueden quedar en el historial de la terminal; no compartirlo.
 
+5. Para activar la detección automática de momentos, completar también la [configuración de IA mediante User Secrets](#configurar-la-ia-en-desarrollo-user-secrets). Es opcional para iniciar la aplicación: sin habilitarla, los trabajos de análisis quedan pendientes.
+
 #### Ejecución y verificación
 
 Después de completar la sincronización de la base de datos de la siguiente sección, iniciar PostgreSQL y Neo4j y ejecutar desde la raíz del repositorio:
@@ -629,7 +631,7 @@ La selección admite hasta 50 Id positivos sin repetir; los omitidos quedan rech
 
 Ambos listados usan `items`, `siguienteCursor`, `hayMas` y límite 1-50 (20 por defecto). La búsqueda ordena por Id ascendente; los recuerdos por fecha del recuerdo e Id descendentes. No reutilizar cursores entre consultas/contextos. Un GET desde un repost resuelve al original visible; guardar usando el `publicacionId` de la respuesta.
 
-Aplicar `20261021144634_AgregarCorreccionMomentos` mediante el comando habitual de `database update`. La generación automática de acontecimientos y la cola se incorporan en entregas posteriores. Ejemplos JSON completos, cliente TypeScript, fechas, errores y pruebas: [Integración de momentos: paso 3](docs/red-recuerdos-paso-3.md).
+Aplicar `20261021144634_AgregarCorreccionMomentos` mediante el comando habitual de `database update`. La generación automática de acontecimientos y la cola se describen en las secciones siguientes. Ejemplos JSON completos, cliente TypeScript, fechas, errores y pruebas: [Integración de momentos: paso 3](docs/red-recuerdos-paso-3.md).
 
 ### Análisis en segundo plano (paso 4)
 
@@ -658,6 +660,60 @@ Se integró Gemini detrás de `IAnalizadorRecuerdo`, con el modelo configurable 
 Gemini viene deshabilitado. Guardar `AnalisisRecuerdos:ApiKey` en User Secrets del proyecto web y habilitar expresamente `AnalisisRecuerdos:Habilitado` para procesar recuerdos reales. El nivel gratuito y sus cuotas dependen del proyecto en AI Studio. Google puede usar contenido enviado en el nivel gratuito para mejorar sus productos; evaluar primero con datos ficticios.
 
 La integración HTTP vive en `ProyectoFinalTPI.Backend.Infraestructura`. La configuración de IA y del procesamiento se centraliza en `AnalisisRecuerdos`: `Proveedor`, `Modelo` y `ApiKey`. Infraestructura selecciona el adaptador; actualmente solo se admite `Gemini` y un proveedor no implementado se rechaza al iniciar. No se usa la antigua sección `Gemini`. Las pruebas automáticas utilizan HTTP simulado y no consumen cuota.
+
+#### Recorrido del análisis y guardado
+
+1. Al guardar una publicación original visible, `ApplicationDbContext` guarda también un `TrabajoAnalisisRecuerdo` pendiente. La publicación se devuelve al cliente sin esperar la respuesta de IA.
+2. .NET inicia `AnalisisRecuerdosWorker` mediante `AddHostedService` al arrancar el backend. Si el análisis está habilitado, llama a `AnalisisRecuerdosServicio.ProcesarUno()`, que reserva un trabajo y obtiene la versión vigente del contenido.
+3. El servicio utiliza `IAnalizadorRecuerdo`. `RegistroAnalisisRecuerdos`, en Infraestructura, selecciona su implementación según `AnalisisRecuerdos:Proveedor`; `AnalizadorRecuerdoGemini` prepara la solicitud HTTP, consulta al proveedor y devuelve propuestas en `ResultadoAnalisisRecuerdoDto`.
+4. El servicio valida el resultado y solicita su confirmación a `TrabajoAnalisisRepositorio.Completar()`. Este comprueba nuevamente la reserva, la versión de contenido y las preferencias del autor.
+5. Dentro de esa transacción, `MomentoRepositorio.ResolverPropuestas()` reutiliza momentos existentes o crea los nuevos con sus alias. `TrabajoAnalisisRepositorio` guarda las asociaciones `PublicacionMomento` y actualiza el estado del trabajo. El momento, los alias, los vínculos y el estado se confirman juntos; si falla la transacción, esos cambios se revierten.
+
+`ReglasMomento.cs`, en Entidades, reúne la normalización y la generación de identidad que comparten las capas. El servicio administra tiempos máximos, cancelación y reintentos; la conexión HTTP y los detalles de Gemini quedan en Infraestructura.
+
+#### Configurar la IA en desarrollo (User Secrets)
+
+Cada integrante debe configurar los secretos con su usuario del sistema, en la máquina donde ejecuta el backend. Abrir **PowerShell en la raíz del repositorio** y reemplazar `TU_CLAVE_REAL` por la API key de Gemini:
+
+```powershell
+dotnet user-secrets set "AnalisisRecuerdos:ApiKey" "TU_CLAVE_REAL" --project "./ProyectoFinalTPI.Backend/ProyectoFinalTPI.Backend.csproj"
+dotnet user-secrets set "AnalisisRecuerdos:Habilitado" "true" --project "./ProyectoFinalTPI.Backend/ProyectoFinalTPI.Backend.csproj"
+```
+
+El proyecto web ya tiene `UserSecretsId`; no hace falta ejecutar `dotnet user-secrets init`. Los secretos se guardan fuera del repositorio, no se comparten al hacer pull y estos comandos no modifican `appsettings.json`. No pegar la clave real en ese archivo ni compartir la salida de `dotnet user-secrets list`.
+
+`appsettings.json` conserva `Habilitado: false` como valor predeterminado. En **Development**, User Secrets tiene prioridad sobre ese archivo: el comando anterior establece el valor efectivo en `true`. Las variables de entorno tienen prioridad sobre User Secrets.
+
+El proveedor predeterminado es `Gemini` y el modelo es `gemini-3.5-flash-lite`. Para fijarlos explícitamente en el mismo lugar:
+
+```powershell
+dotnet user-secrets set "AnalisisRecuerdos:Proveedor" "Gemini" --project "./ProyectoFinalTPI.Backend/ProyectoFinalTPI.Backend.csproj"
+dotnet user-secrets set "AnalisisRecuerdos:Modelo" "gemini-3.5-flash-lite" --project "./ProyectoFinalTPI.Backend/ProyectoFinalTPI.Backend.csproj"
+```
+
+Solo Gemini tiene un adaptador implementado. Configurar otro nombre no agrega soporte para ese proveedor: la aplicación rechaza esa configuración al iniciar. Si tenías secretos bajo `Gemini:ApiKey`, `Gemini:Habilitado` o `Gemini:Modelo`, volvé a guardarlos con los nombres `AnalisisRecuerdos:*` de arriba; los anteriores ya no se leen.
+
+**Detener y volver a iniciar el backend** para aplicar la configuración. Si está corriendo en una terminal, detenerlo con `Ctrl + C` y ejecutar:
+
+```powershell
+$env:DOTNET_ENVIRONMENT = "Development"
+$env:ASPNETCORE_ENVIRONMENT = "Development"
+dotnet run --project "./ProyectoFinalTPI.Backend/ProyectoFinalTPI.Backend.csproj" --no-launch-profile
+```
+
+Confirmar en la consola `Hosting environment: Development`. En Visual Studio, los perfiles `http` y `https` de `launchSettings.json` ya utilizan Development: detener y volver a iniciar con uno de esos perfiles. Ese entorno permite que `WebApplication.CreateBuilder` cargue los User Secrets locales.
+
+Para deshabilitar el análisis, ejecutar lo siguiente y reiniciar:
+
+```powershell
+dotnet user-secrets set "AnalisisRecuerdos:Habilitado" "false" --project "./ProyectoFinalTPI.Backend/ProyectoFinalTPI.Backend.csproj"
+```
+
+Con el análisis deshabilitado, la aplicación permite publicar y guarda los trabajos pendientes sin consumir intentos ni llamar al proveedor. Al habilitarlo, el worker puede procesar todos los trabajos pendientes elegibles, no solo las publicaciones nuevas. Habilitar sin una clave configurada impide el arranque; una clave rechazada por el proveedor se detecta al realizar la solicitud, no al validar la configuración local.
+
+#### Comprobar el resultado
+
+Crear una publicación ficticia cuyo título o descripción identifique un acontecimiento colectivo y su año. Consultar `GET /api/publicaciones/{id}/analisis` para seguir el trabajo y `GET /api/publicaciones/{id}/momentos` para obtener sus asociaciones. Mientras se procesa puede verse `pendiente` o `procesando`; una salida válida termina en `completado` o `sinMomento`. Los fallos se reintentan cuando corresponde y terminan en `fallido` si se agotan los intentos o son permanentes. Las correcciones del autor se respetan al confirmar el resultado.
 
 Configuración completa, pruebas, cuotas, privacidad y límites de la canonicalización: [Gemini y acontecimientos colectivos: paso 5](docs/red-recuerdos-paso-5.md).
 
