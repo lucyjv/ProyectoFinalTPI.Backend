@@ -63,15 +63,27 @@ public class AnalisisRecuerdosWorkerTests
     public async Task QueElWorkerDeshabilitadoNoConsumaLaCola()
     {
         //Arrange
-        await using var provider = new ServiceCollection().BuildServiceProvider();
-        using var worker = CrearWorker(provider.GetRequiredService<IServiceScopeFactory>(), habilitado: false);
+        var scopes = new Mock<IServiceScopeFactory>(MockBehavior.Strict);
+        using var worker = CrearWorker(scopes.Object, habilitado: false);
 
         //Act
         await worker.StartAsync(CancellationToken.None);
-        await worker.StopAsync(CancellationToken.None);
+        try
+        {
+            // BackgroundService 10 inicia ExecuteAsync en segundo plano.
+            // Esperar su salida natural antes de cancelar mediante StopAsync.
+            Assert.NotNull(worker.ExecuteTask);
+            await worker.ExecuteTask.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            await worker.StopAsync(CancellationToken.None);
+        }
 
         //Assert
         Assert.True(worker.ExecuteTask!.IsCompletedSuccessfully);
+        scopes.Verify(s => s.CreateScope(), Times.Never);
+        scopes.VerifyNoOtherCalls();
     }
 
     #endregion

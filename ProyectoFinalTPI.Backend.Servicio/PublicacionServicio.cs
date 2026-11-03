@@ -353,8 +353,27 @@ namespace ProyectoFinalTPI.Backend.Servicio
             ValidarIdUsuario(usuarioId);
             ValidarLimite(limite);
 
-            var (sesion, posicion) = await ObtenerSesionFeed(usuarioId, cursor, cancellationToken);
-            return await ObtenerPaginaFeed(sesion, posicion, usuarioId, limite, cancellationToken);
+            using var total = new TelemetriaFeed("para-vos");
+            try
+            {
+                SesionFypDto sesion;
+                int posicion;
+                using (var etapa = new TelemetriaFeed(cursor is null ? "sesion-nueva" : "sesion-existente"))
+                {
+                    (sesion, posicion) = await ObtenerSesionFeed(usuarioId, cursor, cancellationToken);
+                    etapa.Completar();
+                }
+                using var pagina = new TelemetriaFeed("pagina");
+                var resultado = await ObtenerPaginaFeed(sesion, posicion, usuarioId, limite, cancellationToken);
+                pagina.Completar();
+                total.Completar();
+                return resultado;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                total.Cancelar();
+                throw;
+            }
         }
 
         public async Task<ResultadoPaginadoDto<PublicacionDetalleDto>> ObtenerPublicacionesPorHashtag(
@@ -539,15 +558,22 @@ namespace ProyectoFinalTPI.Backend.Servicio
         {
             var cantidadMaxima = _opcionesFeed.CantidadMaximaCandidatas;
 
-            //trae likes, puntuaciones, vistas y publicaciones semilla
-            var contexto = await PrepararInteraccionesFeedAsync(usuarioId, cancellationToken);
-
-            //consulta recomendaciones, publicaciones generales y el fallback de vistas.
-            var candidatos = await ObtenerCandidatosFeedAsync(
-                usuarioId, contexto, cantidadMaxima, cancellationToken);
-
-            //aplica las prioridades y calcula el puntaje final.
-            return OrdenarCandidatosFeed(contexto, candidatos, cantidadMaxima);
+            ContextoFeed contexto;
+            using (var etapa = new TelemetriaFeed("interacciones"))
+            {
+                contexto = await PrepararInteraccionesFeedAsync(usuarioId, cancellationToken);
+                etapa.Completar();
+            }
+            CandidatosFeed candidatos;
+            using (var etapa = new TelemetriaFeed("candidatos"))
+            {
+                candidatos = await ObtenerCandidatosFeedAsync(usuarioId, contexto, cantidadMaxima, cancellationToken);
+                etapa.Completar();
+            }
+            using var ranking = new TelemetriaFeed("ranking");
+            var resultado = OrdenarCandidatosFeed(contexto, candidatos, cantidadMaxima);
+            ranking.Completar();
+            return resultado;
         }
 
         private async Task<ContextoFeed> PrepararInteraccionesFeedAsync(
