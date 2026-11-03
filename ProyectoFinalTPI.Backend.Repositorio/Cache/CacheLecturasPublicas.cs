@@ -30,6 +30,7 @@ public sealed class CacheLecturasPublicas(IDistributedCache cache, ILogger<Cache
         }
         catch (RedisException)
         {
+            TelemetriaRedis.RegistrarFallback();
             logger.LogWarning("Redis no disponible: se consulta la base para {Clave}.", clave);
             return await consultar();
         }
