@@ -20,6 +20,8 @@ using ProyectoFinalTPI.Backend.Swagger;
 
 var builder = WebApplication.CreateBuilder(args);
 
+ProyectoFinalTPI.Backend.Monitoreo.RegistroMonitoreo.Agregar(builder);
+
 if (args.Contains("--previsualizar-reprocesamiento"))
 {
     await PrevisualizarReprocesamiento.Ejecutar(builder.Configuration, args);

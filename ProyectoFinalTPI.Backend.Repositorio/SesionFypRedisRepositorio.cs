@@ -1,3 +1,4 @@
+using ProyectoFinalTPI.Backend.Repositorio.Cache;
 using System.Text.Json;
 using StackExchange.Redis;
 using ProyectoFinalTPI.Backend.Entidades;
@@ -20,8 +21,12 @@ public sealed class SesionFypRedisRepositorio(IDistributedCache cache) : ISesion
         var registro = new Registro(Guid.NewGuid(), usuarioId, DateTime.UtcNow.Add(Duracion), publicacionesIds.Distinct().ToArray());
         try
         {
-            cache.Set(Clave(registro.Id), JsonSerializer.SerializeToUtf8Bytes(registro),
-                new DistributedCacheEntryOptions { AbsoluteExpiration = new DateTimeOffset(registro.Expira) });
+            TelemetriaRedis.Medir("crear", () =>
+            {
+                cache.Set(Clave(registro.Id), JsonSerializer.SerializeToUtf8Bytes(registro),
+                    new DistributedCacheEntryOptions { AbsoluteExpiration = new DateTimeOffset(registro.Expira) });
+                return true;
+            });
         }
         catch (RedisException ex) { throw new AlmacenSesionNoDisponibleException(ex); }
         return Convertir(registro);
@@ -30,7 +35,7 @@ public sealed class SesionFypRedisRepositorio(IDistributedCache cache) : ISesion
     public SesionFypDto? Obtener(Guid sesionId, int usuarioId)
     {
         byte[]? bytes;
-        try { bytes = cache.Get(Clave(sesionId)); }
+        try { bytes = TelemetriaRedis.Medir("leer", () => cache.Get(Clave(sesionId))); }
         catch (RedisException ex) { throw new AlmacenSesionNoDisponibleException(ex); }
         if (bytes is null) return null;
         Registro? registro;

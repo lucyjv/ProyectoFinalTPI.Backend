@@ -1007,3 +1007,7 @@ Método	|   Ruta	|   Descripción
 ### Endpoints de usuarios
 |   Método  |	Ruta    |	Descripción
 |   GET |	/api/usuarios/por-username/{username}   |	Busca un usuario por su username exacto. Devuelve su id y username. Requiere JWT. Devuelve 404 si no existe ningún usuario con ese username.
+
+## Monitoreo
+
+Configuración, activación en Azure, consultas y validación: [Application Insights](docs/APPLICATION_INSIGHTS.md).

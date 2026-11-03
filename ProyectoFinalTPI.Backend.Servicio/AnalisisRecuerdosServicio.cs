@@ -14,6 +14,7 @@ public class AnalisisRecuerdosServicio(ITrabajoAnalisisRepositorio repositorio, 
     IRelacionRecuerdosRepositorio relaciones, IOptions<OpcionesAnalisisRecuerdos> opciones,
     TimeProvider reloj, ILogger<AnalisisRecuerdosServicio> logger) : IAnalisisRecuerdosServicio
 {
+    private static readonly ActivitySource Fuente = new("Nostalgiar.AnalisisRecuerdos");
     private static readonly Meter Medidor = new("Nostalgiar.AnalisisRecuerdos");
     private static readonly Counter<long> Procesados = Medidor.CreateCounter<long>("analisis.trabajos.procesados");
     private static readonly Counter<long> Fallos = Medidor.CreateCounter<long>("analisis.trabajos.fallos");
@@ -25,6 +26,7 @@ public class AnalisisRecuerdosServicio(ITrabajoAnalisisRepositorio repositorio, 
         var config = opciones.Value;
         var reserva = await repositorio.Reservar(Ahora(), TimeSpan.FromSeconds(config.ReservaSegundos), config.MaxIntentos, ct);
         if (reserva == null) return false;
+        using var actividad = Fuente.StartActivity("analisis.procesar", ActivityKind.Internal);
         var inicio = Stopwatch.GetTimestamp();
         try
         {
@@ -85,7 +87,9 @@ public class AnalisisRecuerdosServicio(ITrabajoAnalisisRepositorio repositorio, 
             ? 1 : config.MaxIntentos;
 
         await repositorio.RegistrarFallo(reserva, codigo, ahora, ahora.AddSeconds(espera), maxIntentos, ct);
-        Fallos.Add(1);
+        Fallos.Add(1, new KeyValuePair<string, object?>("codigo", codigo));
+        Activity.Current?.SetTag("analisis.error.codigo", codigo);
+        Activity.Current?.SetStatus(ActivityStatusCode.Error);
         // No guardar/loguear títulos, descripciones, prompts ni mensajes arbitrarios del proveedor.
         logger.LogWarning("Falló el trabajo de análisis {TrabajoId}: {Codigo}", reserva.Id, codigo);
     }
