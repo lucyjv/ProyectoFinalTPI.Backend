@@ -152,7 +152,7 @@ public class AnalizadorRecuerdoGeminiTests : IDisposable
         //Assert
         Assert.IsType<AnalizadorRecuerdoGemini>(analizador);
         Assert.True(analizador.Disponible);
-        Assert.Equal("gemini:modelo-configurado:momentos-v1", analizador.Version);
+        Assert.Equal("gemini:modelo-configurado:momentos-v2", analizador.Version);
         Assert.Equal("clave-ficticia", opciones.ApiKey);
     }
 
@@ -239,6 +239,30 @@ public class AnalizadorRecuerdoGeminiTests : IDisposable
     #endregion
 
     #region Catálogo y Umbrales de Confianza
+
+    [Fact]
+    public async Task QueElAnalisisIncluyaLasPistasIndirectasYElHashtagSinExigirElNombreLiteral()
+    {
+        var entrada = _entrada with
+        {
+            Titulo = "OTRA ESTRELLA MAS",
+            Descripcion = "Messi y todo el equipo nos traian la 3ra estrella y nos convertíamos en campeones del mundo #catar2022",
+            Fecha = new DateTime(2022, 12, 18)
+        };
+        Responder();
+
+        await _analizador.Analizar(entrada, CancellationToken.None);
+
+        using var cuerpo = JsonDocument.Parse(_cuerpoEnviado!);
+        var instrucciones = cuerpo.RootElement.GetProperty("systemInstruction").GetProperty("parts")[0].GetProperty("text").GetString()!;
+        Assert.Contains("#catar2022", instrucciones);
+        Assert.Contains("No exijas que el nombre canónico aparezca literalmente", instrucciones);
+        Assert.Contains("por sí solos no prueban el triunfo argentino", instrucciones);
+        Assert.Contains("frase negada", instrucciones);
+        using var datos = JsonDocument.Parse(cuerpo.RootElement.GetProperty("contents")[0].GetProperty("parts")[0].GetProperty("text").GetString()!);
+        Assert.Equal(entrada.Descripcion, datos.RootElement.GetProperty("descripcion").GetString());
+        _catalogoMock.Verify(c => c.BuscarCandidatos(entrada.Titulo + " " + entrada.Descripcion, It.IsAny<CancellationToken>()), Times.Once);
+    }
 
     [Fact]
     public async Task QueSePuedaElegirUnMomentoDelCatalogoSinCrearOtro()

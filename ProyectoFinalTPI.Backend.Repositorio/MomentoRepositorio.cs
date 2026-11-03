@@ -146,7 +146,8 @@ public partial class MomentoRepositorio : IMomentoRepositorio, IExploracionMomen
 
     public async Task<IReadOnlyList<CandidatoMomentoDto>> BuscarCandidatos(string texto, CancellationToken ct)
     {
-        var palabras = Regex.Matches(ReglasMomento.Normalizar(texto), @"[\p{L}\p{N}]+")
+        // Separar letras y números permite recuperar la edición en hashtags como #catar2022.
+        var palabras = Regex.Matches(ReglasMomento.Normalizar(texto), @"\p{L}+|\p{N}+")
             .Select(m => m.Value).Where(p => p.Length >= 4 || p.All(char.IsDigit))
             .Distinct().OrderByDescending(p => p.All(char.IsDigit)).ThenByDescending(p => p.Length).Take(12).ToArray();
         if (palabras.Length == 0) return [];
