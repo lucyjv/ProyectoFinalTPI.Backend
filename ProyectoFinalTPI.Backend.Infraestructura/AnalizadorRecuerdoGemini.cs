@@ -13,7 +13,7 @@ public class AnalizadorRecuerdoGemini(HttpClient http, ICatalogoAnalisisReposito
     IOptions<OpcionesAnalisisRecuerdos> opciones, ControlCuotaGemini cuota) : IAnalizadorRecuerdo
 {
     public bool Disponible => opciones.Value.Habilitado && !string.IsNullOrWhiteSpace(opciones.Value.ApiKey);
-    public string Version => $"gemini:{opciones.Value.Modelo}:momentos-v1";
+    public string Version => $"gemini:{opciones.Value.Modelo}:momentos-v2";
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private const string Instruccion = """
         Identificá hasta 3 acontecimientos colectivos inequívocos en un recuerdo argentino.
@@ -21,6 +21,13 @@ public class AnalizadorRecuerdoGemini(HttpClient http, ICatalogoAnalisisReposito
         Un cumpleaños, paseo, encuentro familiar, lugar, emoción o palabra genérica no es un acontecimiento colectivo.
         Devolvé propuestas vacías si no hay evidencia suficiente, si es ambiguo o si falta el año del acontecimiento.
         La fecha del recuerdo es contexto: NO implica que el acontecimiento haya sucedido ese día ni ese año.
+        Evaluá el título y la descripción en conjunto, incluidos hashtags, abreviaturas, apodos y errores ortográficos.
+        Un año unido a una palabra también es explícito: #catar2022 y #Qatar2022 identifican la edición 2022.
+        No exijas que el nombre canónico aparezca literalmente: la evidencia puede identificar el hecho por varias pistas.
+        Por ejemplo, "OTRA ESTRELLA MAS" junto con Messi, "la 3ra estrella", "campeones del mundo" y #catar2022
+        identifica "Argentina campeón del mundo 2022", igual que "Ganamos el Mundial 2022" en un relato de festejos argentinos.
+        En cambio, Messi, una estrella, un festejo o #catar2022 por sí solos no prueban el triunfo argentino.
+        No deduzcas un triunfo de una mención al torneo, de un deseo de ganar ni de una frase negada.
         Diferenciá ediciones/años y acontecimientos: Argentina campeón 1986 y Argentina campeón 2022 son distintos.
         Si un candidato identifica el mismo acontecimiento, usá su momentoId; nunca inventes IDs.
         Si no existe, usá momentoId 0 y un nombre canónico específico en español con el año completo.
