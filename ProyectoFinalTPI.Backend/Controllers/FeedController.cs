@@ -16,10 +16,14 @@ namespace ProyectoFinalTPI.Backend.Controllers
     public class FeedController : ControllerBase
     {
         private readonly IPublicacionServicio _publicacionServicio;
+        private readonly IEtiquetadoPublicacionServicio? _etiquetadoPublicacionServicio;
 
-        public FeedController(IPublicacionServicio publicacionServicio)
+        public FeedController(
+            IPublicacionServicio publicacionServicio,
+            IEtiquetadoPublicacionServicio? etiquetadoPublicacionServicio = null)
         {
             _publicacionServicio = publicacionServicio;
+            _etiquetadoPublicacionServicio = etiquetadoPublicacionServicio;
         }
 
         [HttpGet("para-vos")]
@@ -49,7 +53,8 @@ namespace ProyectoFinalTPI.Backend.Controllers
                     idFinal,
                     cursor,
                     limite,
-                    cancellationToken));
+                    cancellationToken),
+                cancellationToken);
         }
 
         [HttpGet("seguidos")]
@@ -79,7 +84,8 @@ namespace ProyectoFinalTPI.Backend.Controllers
                     idFinal,
                     cursor,
                     limite,
-                    cancellationToken));
+                    cancellationToken),
+                cancellationToken);
         }
 
         [HttpPost("impresiones")]
@@ -124,11 +130,17 @@ namespace ProyectoFinalTPI.Backend.Controllers
         }
 
         private async Task<ActionResult<ResultadoPaginadoDto<PublicacionDetalleDto>>> EjecutarConsulta(
-            Func<Task<ResultadoPaginadoDto<PublicacionDetalleDto>>> consulta)
+            Func<Task<ResultadoPaginadoDto<PublicacionDetalleDto>>> consulta,
+            CancellationToken cancellationToken = default)
         {
             try
             {
-                return Ok(await consulta());
+                var resultado = await consulta();
+                if (_etiquetadoPublicacionServicio != null && resultado.Items != null && resultado.Items.Count > 0)
+                {
+                    await _etiquetadoPublicacionServicio.CompletarEtiquetas(resultado.Items, cancellationToken);
+                }
+                return Ok(resultado);
             }
             catch (ArgumentException ex)
             {

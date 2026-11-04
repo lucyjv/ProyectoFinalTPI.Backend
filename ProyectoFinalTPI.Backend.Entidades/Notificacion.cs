@@ -59,6 +59,7 @@ namespace ProyectoFinalTPI.Backend.Entidades
         PuntuacionEnPublicacion,
         AscensoCategoria,
         MensajesCorreo,
-        MensajeChat
+        MensajeChat,
+        EtiquetadoEnPublicacion
     }
 }

@@ -163,6 +163,34 @@ namespace ProyectoFinalTPI.Backend.Servicio
         }
 
         /// <inheritdoc/>
+        public async Task NotificarEtiquetadoEnPublicacionAsync(
+            int usuarioDestinatarioId, int publicacionId, int emisorId,
+            CancellationToken cancellationToken = default)
+        {
+            if (usuarioDestinatarioId == emisorId) return;
+
+            var yaExiste = await _repositorio.ExisteNotificacionPendienteAsync(
+                usuarioDestinatarioId,
+                TipoNotificacion.EtiquetadoEnPublicacion,
+                publicacionId,
+                cancellationToken);
+
+            if (yaExiste) return;
+
+            var notificacion = new Notificacion
+            {
+                UsuarioDestinatarioId = usuarioDestinatarioId,
+                Tipo = TipoNotificacion.EtiquetadoEnPublicacion,
+                PublicacionId = publicacionId,
+                EmisorId = emisorId,
+                FechaCreacion = DateTime.UtcNow
+            };
+
+            await _repositorio.GuardarAsync(notificacion, cancellationToken);
+            await EnviarAsync(usuarioDestinatarioId, notificacion, emisorId, cancellationToken);
+        }
+
+        /// <inheritdoc/>
         public async Task<IEnumerable<NotificacionDto>> ObtenerNotificacionesAsync(
             int usuarioId, CancellationToken cancellationToken = default)
         {
