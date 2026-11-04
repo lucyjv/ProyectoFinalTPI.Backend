@@ -9,7 +9,6 @@ using ProyectoFinalTPI.Backend.Dtos.Usuario;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Repositorio.Data;
-using ProyectoFinalTPI.Backend.Repositorio.Cache;
 
 namespace ProyectoFinalTPI.Backend.Repositorio
 {
@@ -194,13 +193,10 @@ namespace ProyectoFinalTPI.Backend.Repositorio
         private readonly ApplicationDbContext _context;
         private readonly IDriver? _neo4jDriver;
 
-        private readonly ICacheLecturasPublicas? _cache;
-
-        public PublicacionRepositorio(ApplicationDbContext context, IDriver? neo4jDriver = null, ICacheLecturasPublicas? cache = null)
+        public PublicacionRepositorio(ApplicationDbContext context, IDriver? neo4jDriver = null)
         {
             _context = context;
             _neo4jDriver = neo4jDriver;
-            _cache = cache;
         }
 
         public async Task CrearLike( int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
@@ -669,32 +665,6 @@ namespace ProyectoFinalTPI.Backend.Repositorio
 
         public async Task<List<PublicacionPinDto>> ObtenerPines(PublicacionFiltroDto filtro, int limite, CancellationToken cancellationToken = default)
         {
-            if (_cache is not null)
-            {
-                // La fecha completa permite conservar los filtros exactos, aunque el pin solo exponga el año.
-                var todos = await _cache.Obtener("mapa:pines:v1", async () => await _context.Publicaciones
-                    .AsNoTracking()
-                    .Where(p => !p.EstaOculto && p.PublicacionOriginalId == null)
-                    .OrderBy(p => p.Id)
-                    .Select(p => new PinCache
-                    {
-                        Fecha = p.Fecha,
-                        Pin = new PublicacionPinDto
-                        {
-                            Id = p.Id, Latitud = p.Lugar.Coordenadas.Y, Longitud = p.Lugar.Coordenadas.X,
-                            Categoria = p.Categoria, Titulo = p.Titulo, Año = p.Fecha.Year
-                        }
-                    }).ToListAsync(cancellationToken), cancellationToken) ?? new();
-
-                return todos.Where(p =>
-                        p.Pin.Latitud >= filtro.MinLatitud && p.Pin.Latitud <= filtro.MaxLatitud &&
-                        p.Pin.Longitud >= filtro.MinLongitud && p.Pin.Longitud <= filtro.MaxLongitud &&
-                        (!filtro.Categoria.HasValue || p.Pin.Categoria == filtro.Categoria.Value) &&
-                        (!filtro.FechaDesde.HasValue || p.Fecha >= filtro.FechaDesde.Value) &&
-                        (!filtro.FechaHasta.HasValue || p.Fecha < filtro.FechaHasta.Value))
-                    .Take(limite + 1).Select(p => p.Pin).ToList();
-            }
-
             var consulta = _context.Publicaciones
                 .AsNoTracking()
                 .Where(p => !p.EstaOculto && p.PublicacionOriginalId == null)
@@ -1169,12 +1139,6 @@ namespace ProyectoFinalTPI.Backend.Repositorio
             var publicaciones = await consulta.Select(p => new { p.Descripcion, p.UsuarioId })
                 .ToListAsync(cancellationToken);
             return publicaciones.Select(p => (p.Descripcion, p.UsuarioId)).ToList();
-        }
-
-        public sealed class PinCache
-        {
-            public DateTime Fecha { get; set; }
-            public PublicacionPinDto Pin { get; set; } = new();
         }
 
         public async Task<List<PublicacionDetalleDto>> ObtenerPorUsuarioId(int usuarioId, CancellationToken cancellationToken = default)

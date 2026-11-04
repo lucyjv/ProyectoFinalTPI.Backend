@@ -3,7 +3,6 @@ using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Repositorio;
-using ProyectoFinalTPI.Backend.Repositorio.Cache;
 
 namespace ProyectoFinalTPI.Backend.Servicio
 {
@@ -14,7 +13,6 @@ namespace ProyectoFinalTPI.Backend.Servicio
     {
         private readonly IUsuarioRepositorio _repositorio;
         private readonly IPerfilPublicoConsulta? _perfilPublico;
-        private readonly ICacheLecturasPublicas? _cache;
         private readonly ISeguimientoServicio? _seguimientoServicio;
         private readonly ILogroServicio _logroServicio;
         private readonly TimeProvider _timeProvider;
@@ -24,12 +22,10 @@ namespace ProyectoFinalTPI.Backend.Servicio
             IUsuarioRepositorio repositorio,
             ILogroServicio logroServicio,
             ISeguimientoServicio? seguimientoServicio = null, TimeProvider? timeProvider = null,
-            IFotoPerfilAlmacenamiento? fotoPerfilAlmacenamiento = null, IPerfilPublicoConsulta? perfilPublico = null,
-            ICacheLecturasPublicas? cache = null)
+            IFotoPerfilAlmacenamiento? fotoPerfilAlmacenamiento = null, IPerfilPublicoConsulta? perfilPublico = null)
         {
             _repositorio = repositorio;
             _perfilPublico = perfilPublico;
-            _cache = cache;
             _seguimientoServicio = seguimientoServicio;
             _logroServicio = logroServicio;
             _timeProvider = timeProvider ?? TimeProvider.System;
@@ -144,38 +140,21 @@ namespace ProyectoFinalTPI.Backend.Servicio
         public async Task<UsuarioPerfilDto> ObtenerPerfilPorUsernameAsync(
             string username, int? usuarioAutenticadoId, CancellationToken cancellationToken = default)
         {
-            return await ObtenerPerfilCompleto($"perfil:completo:username:v1:{username}",
-                () => ObtenerUsuarioPorUsername(username, cancellationToken), usuarioAutenticadoId, cancellationToken);
+            var usuario = await ObtenerUsuarioPorUsername(username, cancellationToken);
+            if (_perfilPublico is not null) usuario = await _perfilPublico.Obtener(usuario.Id, cancellationToken) ?? usuario;
+            return await ConstruirPerfilDto(usuario, usuarioAutenticadoId, cancellationToken);
         }
 
         /// <inheritdoc/>
         public async Task<UsuarioPerfilDto> ObtenerPerfilPorIdAsync(
             int usuarioId, int? usuarioAutenticadoId, CancellationToken cancellationToken = default)
         {
-            return await ObtenerPerfilCompleto($"perfil:completo:id:v1:{usuarioId}", async () =>
-                (_perfilPublico is null ? await _repositorio.ObtenerPorIdAsync(usuarioId) : await _perfilPublico.Obtener(usuarioId, cancellationToken))
-                    ?? throw new KeyNotFoundException($"No existe ningún usuario con el identificador '{usuarioId}'."),
-                usuarioAutenticadoId, cancellationToken);
-        }
+            var usuario = _perfilPublico is null ? await _repositorio.ObtenerPorIdAsync(usuarioId) : await _perfilPublico.Obtener(usuarioId, cancellationToken);
 
-        private async Task<UsuarioPerfilDto> ObtenerPerfilCompleto(string clave, Func<Task<Usuario>> consultarUsuario,
-            int? visitanteId, CancellationToken ct)
-        {
-            async Task<UsuarioPerfilDto?> Consultar() => await ConstruirPerfilDto(await consultarUsuario(), null, ct);
-            var perfil = (_cache is null ? await Consultar() : await _cache.Obtener(clave, Consultar, ct))
-                ?? throw new KeyNotFoundException("El usuario no existe.");
-            await CompletarSeguimiento(perfil, visitanteId, ct);
-            return perfil;
-        }
+            if (usuario is null)
+                throw new KeyNotFoundException($"No existe ningún usuario con el identificador '{usuarioId}'.");
 
-        private async Task CompletarSeguimiento(UsuarioPerfilDto perfil, int? visitanteId, CancellationToken ct)
-        {
-            perfil.LoSigo = false;
-            if (_seguimientoServicio is not null && visitanteId.HasValue && visitanteId.Value > 0 && visitanteId.Value != perfil.Id)
-            {
-                var seguidos = await _seguimientoServicio.ObtenerSeguidosIdsAsync(visitanteId.Value, ct);
-                perfil.LoSigo = seguidos.Contains(perfil.Id);
-            }
+            return await ConstruirPerfilDto(usuario, usuarioAutenticadoId, cancellationToken);
         }
 
         public async Task<List<LogroEstadoDto>> RegistrarIngresoDiarioAsync(int usuarioId, CancellationToken cancellationToken = default)
@@ -223,6 +202,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
             int cantidadSeguidores = 0;
             int cantidadSeguidos = 0;
+            bool loSigo = false;
 
             if (_seguimientoServicio != null)
             {
@@ -232,6 +212,11 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 cantidadSeguidores = seguidores?.Count ?? 0;
                 cantidadSeguidos = seguidos?.Count ?? 0;
 
+                if (usuarioAutenticadoId.HasValue && usuarioAutenticadoId.Value > 0 && usuarioAutenticadoId.Value != usuario.Id)
+                {
+                    var seguidosAutenticado = await _seguimientoServicio.ObtenerSeguidosIdsAsync(usuarioAutenticadoId.Value, cancellationToken);
+                    loSigo = seguidosAutenticado.Contains(usuario.Id);
+                }
             }
 
             var dto = new UsuarioPerfilDto
@@ -242,6 +227,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 CantidadPublicaciones = cantidadPublicaciones,
                 CantidadSeguidores = cantidadSeguidores,
                 CantidadSeguidos = cantidadSeguidos,
+                LoSigo = loSigo,
                 Logros = await _logroServicio.ObtenerCatalogoParaUsuario(usuario.Id)
             };
 
@@ -271,7 +257,6 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 dto.Reputacion = "Errante";
             }
 
-            await CompletarSeguimiento(dto, usuarioAutenticadoId, cancellationToken);
             return dto;
         }
         private async Task<Usuario> ObtenerUsuarioPorUsername(string username, CancellationToken cancellationToken)
