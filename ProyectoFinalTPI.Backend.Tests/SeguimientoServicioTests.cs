@@ -5,6 +5,7 @@ using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Servicio;
+using ProyectoFinalTPI.Backend.Repositorio.Cache;
 using Xunit;
 
 namespace ProyectoFinalTPI.Backend.Tests;
@@ -43,6 +44,27 @@ public class SeguimientoServicioTests
     }
 
     #region Seguir Usuario
+
+    [Theory]
+    [InlineData(true, 1)]
+    [InlineData(true, 0)]
+    [InlineData(false, 1)]
+    [InlineData(false, 0)]
+    public async Task QueCambiarSeguimientoInvalidePerfilesSoloSiLaRelacionCambio(bool seguir, int cambios)
+    {
+        ConfigurarUsuariosExistentes(10, 20);
+        ConfigurarNeo4jEscritura(relacionesCreadas: seguir ? cambios : 0, relacionesEliminadas: seguir ? 0 : cambios);
+        ConfigurarNeo4jContadores(totalSeguidos: 2, totalSeguidores: 3);
+        var cache = new Mock<IInvalidadorLecturasPublicas>(MockBehavior.Strict);
+        cache.Setup(c => c.InvalidarAsync(CancellationToken.None)).Returns(Task.CompletedTask);
+        var servicio = new SeguimientoServicio(_usuarioRepositorioMock.Object, _driverMock.Object,
+            _logroServicioMock.Object, _notificacionServicioMock.Object, cache.Object);
+
+        if (seguir) await servicio.SeguirUsuario(10, 20);
+        else await servicio.DejarDeSeguirUsuario(10, 20);
+
+        cache.Verify(c => c.InvalidarAsync(CancellationToken.None), cambios > 0 ? Times.Once() : Times.Never());
+    }
 
     [Fact]
     public async Task QueSeguirseASiMismoDevuelvaAutoSeguimientoSinConsultarUsuarios()
