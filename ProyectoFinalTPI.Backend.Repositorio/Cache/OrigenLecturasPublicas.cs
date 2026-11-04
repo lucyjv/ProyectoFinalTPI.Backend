@@ -10,5 +10,6 @@ public sealed class OrigenLecturasPublicas(ApplicationDbContext db) : IOrigenLec
 public sealed class DetectorCambiosPublicos : IDetectorCambiosPublicos
 {
     public bool HayCambios(DbContext? db) => db is not null && db.ChangeTracker.Entries()
-        .Any(e => (e.Entity is Usuario || e.Entity is Publicacion) && e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted);
+        .Any(e => (e.Entity is Usuario or Publicacion or Lugar or Logro or Logros_Usuarios)
+            && e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted);
 }

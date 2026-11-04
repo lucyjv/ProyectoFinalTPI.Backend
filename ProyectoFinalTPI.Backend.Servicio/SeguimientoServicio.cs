@@ -1,4 +1,5 @@
 using Neo4j.Driver;
+using ProyectoFinalTPI.Backend.Repositorio.Cache;
 using ProyectoFinalTPI.Backend.Dtos.Usuario;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
@@ -47,6 +48,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
 
         private readonly IUsuarioRepositorio _usuarioRepositorio;
+        private readonly IInvalidadorLecturasPublicas? _cache;
         private readonly IDriver _neo4jDriver;
         private readonly INotificacionServicio _notificacionServicio;
         private readonly ILogroServicio _logroServicio;
@@ -55,12 +57,14 @@ namespace ProyectoFinalTPI.Backend.Servicio
             IUsuarioRepositorio usuarioRepositorio,
             IDriver neo4jDriver,
             ILogroServicio logroServicio,
-            INotificacionServicio notificacionServicio)
+            INotificacionServicio notificacionServicio,
+            IInvalidadorLecturasPublicas? cache = null)
         {
             _usuarioRepositorio = usuarioRepositorio;
             _neo4jDriver = neo4jDriver;
             _logroServicio = logroServicio;
             _notificacionServicio = notificacionServicio;
+            _cache = cache;
         }
         #region Operaciones públicas
         public async Task<ResultadoSeguimiento> SeguirUsuario(
@@ -72,6 +76,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
             if (!await CrearRelacionNeo4jAsync(idUsuario, idUsuarioASeguir))
                 return ResultadoSeguimiento.SinCambios;
 
+            if (_cache is not null) await _cache.InvalidarAsync(CancellationToken.None);
             await _notificacionServicio.NotificarNuevoSeguidorAsync(idUsuarioASeguir, idUsuario, cancellationToken);
             await VerificarLogros(idUsuario, idUsuarioASeguir);
 
@@ -85,6 +90,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
             if (validacion.HasValue) return validacion.Value;
 
             var relacionEliminada = await EliminarRelacionNeo4jAsync(idUsuario, idUsuarioASeguir);
+            if (relacionEliminada && _cache is not null) await _cache.InvalidarAsync(CancellationToken.None);
             return relacionEliminada ? ResultadoSeguimiento.Aplicado : ResultadoSeguimiento.SinCambios;
         }
 
