@@ -6,6 +6,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using ProyectoFinalTPI.Backend.Controllers;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
+using ProyectoFinalTPI.Backend.Dtos.Publicacion;
+using ProyectoFinalTPI.Backend.Dtos.Usuario;
 using ProyectoFinalTPI.Backend.Requests.Publicaciones;
 using Xunit;
 
@@ -123,6 +125,26 @@ public class EtiquetadoPublicacionControllerTests
         Assert.DoesNotContain("detalle interno", contenido);
     }
 
+    [Fact]
+    public async Task Obtener_etiquetas_devuelve_200_con_lista_de_usuarios()
+    {
+        var servicio = new EtiquetadoFake
+        {
+            UsuariosEtiquetados = new List<AutorResumenDto>
+            {
+                new() { Id = 10, Username = "nostalgico10" },
+                new() { Id = 20, Username = "nostalgico20" }
+            }
+        };
+        var controller = CrearController(servicio);
+
+        var resultado = await controller.ObtenerUsuariosEtiquetados(25, CancellationToken.None);
+        var okResult = Assert.IsType<OkObjectResult>(resultado);
+        var usuarios = Assert.IsAssignableFrom<IReadOnlyCollection<AutorResumenDto>>(okResult.Value);
+
+        Assert.Equal(2, usuarios.Count);
+    }
+
     private static PublicacionesController CrearController(EtiquetadoFake servicio)
     {
         return new PublicacionesController(
@@ -151,6 +173,37 @@ public class EtiquetadoPublicacionControllerTests
             return Error is null
                 ? Task.FromResult(CantidadCreada)
                 : Task.FromException<int>(Error);
+        }
+
+        public IReadOnlyCollection<AutorResumenDto> UsuariosEtiquetados { get; set; } = Array.Empty<AutorResumenDto>();
+        public bool DesetiquetarResultado { get; set; } = true;
+
+        public Task<IReadOnlyCollection<AutorResumenDto>> ObtenerUsuariosEtiquetados(
+            int publicacionId, CancellationToken cancellationToken = default)
+        {
+            return Error is null
+                ? Task.FromResult(UsuariosEtiquetados)
+                : Task.FromException<IReadOnlyCollection<AutorResumenDto>>(Error);
+        }
+
+        public Task<bool> DesetiquetarUsuario(
+            int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
+        {
+            return Error is null
+                ? Task.FromResult(DesetiquetarResultado)
+                : Task.FromException<bool>(Error);
+        }
+
+        public Task CompletarEtiquetas(
+            IReadOnlyCollection<PublicacionDetalleDto> publicaciones, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task<List<PublicacionDetalleDto>> ObtenerPublicacionesDondeEstaEtiquetado(
+            int usuarioId, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new List<PublicacionDetalleDto>());
         }
     }
 }

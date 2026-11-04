@@ -290,6 +290,95 @@ public class NotificacionServicioTests
             It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    // ── NotificarEtiquetadoEnPublicacionAsync ──────────────────────────
+
+    [Fact]
+    public async Task NotificarEtiquetado_guarda_notificacion_cuando_no_existe_una_pendiente()
+    {
+        var (repoMock, _, pushMock, servicio) = CrearServicio();
+        Notificacion? guardada = null;
+
+        repoMock.Setup(r => r.ExisteNotificacionPendienteAsync(
+                It.IsAny<int>(),
+                TipoNotificacion.EtiquetadoEnPublicacion,
+                It.IsAny<int?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        repoMock.Setup(r => r.GuardarAsync(
+                It.IsAny<Notificacion>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<Notificacion, CancellationToken>((n, _) => guardada = n)
+            .Returns(Task.CompletedTask);
+
+        await servicio.NotificarEtiquetadoEnPublicacionAsync(
+            usuarioDestinatarioId: 10,
+            publicacionId: 42,
+            emisorId: 5);
+
+        Assert.NotNull(guardada);
+        Assert.Equal(10, guardada!.UsuarioDestinatarioId);
+        Assert.Equal(TipoNotificacion.EtiquetadoEnPublicacion, guardada.Tipo);
+        Assert.Equal(42, guardada.PublicacionId);
+        Assert.Equal(5, guardada.EmisorId);
+        Assert.False(guardada.Leida);
+
+        pushMock.Verify(p => p.EnviarAsync(
+            10,
+            It.Is<NotificacionDto>(dto =>
+                dto.Tipo == TipoNotificacion.EtiquetadoEnPublicacion &&
+                dto.PublicacionId == 42 &&
+                dto.EmisorId == 5),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task NotificarEtiquetado_no_guarda_cuando_ya_existe_una_pendiente()
+    {
+        var (repoMock, _, pushMock, servicio) = CrearServicio();
+
+        repoMock.Setup(r => r.ExisteNotificacionPendienteAsync(
+                10,
+                TipoNotificacion.EtiquetadoEnPublicacion,
+                42,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        await servicio.NotificarEtiquetadoEnPublicacionAsync(
+            usuarioDestinatarioId: 10,
+            publicacionId: 42,
+            emisorId: 5);
+
+        repoMock.Verify(r => r.GuardarAsync(
+            It.IsAny<Notificacion>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+
+        pushMock.Verify(p => p.EnviarAsync(
+            It.IsAny<int>(),
+            It.IsAny<NotificacionDto>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task NotificarEtiquetado_no_guarda_si_destinatario_es_el_mismo_emisor()
+    {
+        var (repoMock, _, pushMock, servicio) = CrearServicio();
+
+        await servicio.NotificarEtiquetadoEnPublicacionAsync(
+            usuarioDestinatarioId: 5,
+            publicacionId: 42,
+            emisorId: 5);
+
+        repoMock.Verify(r => r.GuardarAsync(
+            It.IsAny<Notificacion>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+
+        pushMock.Verify(p => p.EnviarAsync(
+            It.IsAny<int>(),
+            It.IsAny<NotificacionDto>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     // ── ObtenerNotificacionesAsync ────────────────────────────────────────────
 
     [Fact]

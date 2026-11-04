@@ -7,6 +7,7 @@ using ProyectoFinalTPI.Backend.Dtos;
 using ProyectoFinalTPI.Backend.Dtos.Comentario;
 using ProyectoFinalTPI.Backend.Dtos.Mapa;
 using ProyectoFinalTPI.Backend.Dtos.Publicacion;
+using ProyectoFinalTPI.Backend.Dtos.Usuario;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Requests.Publicaciones;
@@ -688,6 +689,26 @@ namespace ProyectoFinalTPI.Backend.Tests
                 PublicacionId = publicacionId;
                 UsuariosIds = usuariosIds;
                 return Error == null ? Task.FromResult(Cantidad) : Task.FromException<int>(Error);
+            }
+
+            public Task<IReadOnlyCollection<AutorResumenDto>> ObtenerUsuariosEtiquetados(int publicacionId, CancellationToken cancellationToken = default)
+            {
+                return Task.FromResult<IReadOnlyCollection<AutorResumenDto>>(Array.Empty<AutorResumenDto>());
+            }
+
+            public Task<bool> DesetiquetarUsuario(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
+            {
+                return Task.FromResult(true);
+            }
+
+            public Task CompletarEtiquetas(IReadOnlyCollection<PublicacionDetalleDto> publicaciones, CancellationToken cancellationToken = default)
+            {
+                return Task.CompletedTask;
+            }
+
+            public Task<List<PublicacionDetalleDto>> ObtenerPublicacionesDondeEstaEtiquetado(int usuarioId, CancellationToken cancellationToken = default)
+            {
+                return Task.FromResult(new List<PublicacionDetalleDto>());
             }
         }
     }

@@ -40,5 +40,6 @@ namespace ProyectoFinalTPI.Backend.Dtos.Publicacion
 
         public PublicacionResumenDto? PublicacionOriginal { get; set; }
         public RepostInfoEmergenteDto? ReposteadoPor { get; set; }
+        public List<AutorResumenDto> UsuariosEtiquetados { get; set; } = new();
     }
 }
