@@ -20,6 +20,27 @@ public class CacheLecturasPublicasTests
     private void PrepararGeneracion() => _almacen.Setup(a => a.GetAsync(Generacion, It.IsAny<CancellationToken>())).ReturnsAsync(Encoding.UTF8.GetBytes("actual"));
     private static RedisConnectionException Caida() => new(ConnectionFailureType.UnableToConnect, "Sin conexión");
 
+    [Theory]
+    [InlineData("mapa:pines:v1", 30)]
+    [InlineData("perfil:7", 10)]
+    [InlineData("perfil:completo:id:v1:7", 10)]
+    [InlineData("perfil:completo:username:v1:ana", 10)]
+    [InlineData("resumen:5", 2)]
+    public async Task QueCadaTipoDeLecturaRespeteSuVencimiento(string clave, int minutos)
+    {
+        PrepararGeneracion();
+        var claveRedis = $"publico:actual:{clave}";
+        _almacen.Setup(a => a.GetAsync(claveRedis, default)).ReturnsAsync((byte[]?)null);
+        _fuente.Setup(f => f.Consultar()).ReturnsAsync("nuevo");
+        _almacen.Setup(a => a.SetAsync(claveRedis, It.IsAny<byte[]>(), It.IsAny<DistributedCacheEntryOptions>(), default))
+            .Returns(Task.CompletedTask);
+
+        await Crear().Obtener(clave, _fuente.Object.Consultar, default);
+
+        _almacen.Verify(a => a.SetAsync(claveRedis, It.IsAny<byte[]>(),
+            It.Is<DistributedCacheEntryOptions>(o => o.AbsoluteExpirationRelativeToNow == TimeSpan.FromMinutes(minutos)), default), Times.Once);
+    }
+
     [Fact]
     public async Task QueSeDevuelvaLaEntradaCacheadaSinConsultarLaFuente()
     {
