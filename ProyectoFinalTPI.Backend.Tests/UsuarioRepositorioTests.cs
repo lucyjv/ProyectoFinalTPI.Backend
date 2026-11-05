@@ -58,6 +58,19 @@ public class UsuarioRepositorioTests : IDisposable
     }
 
     [Fact]
+    public async Task QueLasConsultasPublicasExcluyanUsuariosDadosDeBaja()
+    {
+        await SeedUsuariosAsync();
+        var usuario = await _context.Usuarios.SingleAsync(u => u.Id == 1);
+        usuario.EstaEliminado = true;
+        await _context.SaveChangesAsync();
+        _context.ChangeTracker.Clear();
+        Assert.Null(await _repositorio.ObtenerPorIdAsync(1));
+        Assert.False(await _repositorio.ExisteUsuario(1));
+        Assert.Empty(await _repositorio.BuscarPorUsernameAsync("usuario1", 10));
+    }
+
+    [Fact]
     public async Task QueExisteUsuarioRetorneTrueCuandoUsuarioExiste()
     {
         //Arrange

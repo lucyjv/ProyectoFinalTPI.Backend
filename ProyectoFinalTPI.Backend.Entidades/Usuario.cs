@@ -8,6 +8,8 @@ namespace ProyectoFinalTPI.Backend.Entidades
         public string Email { get; set; } = string.Empty;
         public string Contraseña { get; set; } = string.Empty;
         public bool EsAdmin { get; set; }
+        public bool EstaEliminado { get; set; }
+        public DateTime? FechaEliminacion { get; set; }
         public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;
 
     }

@@ -92,6 +92,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
             modelBuilder.HasPostgresExtension("postgis");
 
             modelBuilder.Entity<Publicacion>().HasIndex(p => p.Fecha);
+            modelBuilder.Entity<Publicacion>().HasIndex(p => new { p.Categoria, p.EstaOculto, p.FechaCreación });
             modelBuilder.Entity<Publicacion>().Property(p => p.PermitirMomentosAutomaticos).HasDefaultValue(true);
             modelBuilder.Entity<Publicacion>().Property(p => p.VersionContenido).HasDefaultValue(1L).IsConcurrencyToken();
             modelBuilder.ApplyConfiguration(new ConfiguracionTrabajoAnalisis());
@@ -114,6 +115,9 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
             modelBuilder.Entity<Usuario>()
                 .HasIndex(usuario => usuario.Username)
                 .IsUnique();
+
+            modelBuilder.Entity<Usuario>()
+                .HasIndex(usuario => new { usuario.EstaEliminado, usuario.FechaCreacion });
 
             modelBuilder.Entity<SesionUsuario>(entity =>
             {

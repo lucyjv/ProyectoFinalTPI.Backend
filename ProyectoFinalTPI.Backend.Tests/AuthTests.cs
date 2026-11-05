@@ -219,6 +219,31 @@ public class AuthServicioTests
     }
 
     [Fact]
+    public async Task QueFalleElLoginDeUsuarioDadoDeBaja()
+    {
+        _repositorioMock.Setup(r => r.ObtenerPorEmailAsync("baja@example.com", default))
+            .ReturnsAsync(new Usuario_Personal
+            {
+                Email = "baja@example.com", Contraseña = "hash", EstaEliminado = true
+            });
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            CrearServicio().LoginAsync(CrearLoginDto("baja@example.com", "cualquiera")));
+    }
+
+    [Fact]
+    public async Task QueFalleElLoginDeUsuarioSuspendido()
+    {
+        _repositorioMock.Setup(r => r.ObtenerPorEmailAsync("suspendido@example.com", default))
+            .ReturnsAsync(new Usuario_Personal
+            {
+                Email = "suspendido@example.com", Contraseña = "hash",
+                SuspendidoHasta = DateTime.UtcNow.AddDays(1)
+            });
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            CrearServicio().LoginAsync(CrearLoginDto("suspendido@example.com", "cualquiera")));
+    }
+
+    [Fact]
     public async Task QueElLoginExitosoDevuelvaDatosDelUsuario()
     {
         //Arrange

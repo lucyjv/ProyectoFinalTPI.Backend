@@ -162,6 +162,21 @@ namespace ProyectoFinalTPI.Backend.Servicio
             await EnviarAsync(usuarioDestinatarioId, notificacion, emisorId, cancellationToken);
         }
 
+        public async Task NotificarAdministrativaAsync(
+            int usuarioDestinatarioId, int? publicacionId = null,
+            CancellationToken cancellationToken = default)
+        {
+            var notificacion = new Notificacion
+            {
+                UsuarioDestinatarioId = usuarioDestinatarioId,
+                PublicacionId = publicacionId,
+                Tipo = TipoNotificacion.Administrativa,
+                FechaCreacion = DateTime.UtcNow
+            };
+            await _repositorio.GuardarAsync(notificacion, cancellationToken);
+            await EnviarAsync(usuarioDestinatarioId, notificacion, null, cancellationToken);
+        }
+
         /// <inheritdoc/>
         public async Task<IEnumerable<NotificacionDto>> ObtenerNotificacionesAsync(
             int usuarioId, CancellationToken cancellationToken = default)
