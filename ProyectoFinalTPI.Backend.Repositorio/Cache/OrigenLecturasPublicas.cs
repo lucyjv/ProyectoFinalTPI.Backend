@@ -4,7 +4,7 @@ using ProyectoFinalTPI.Backend.Repositorio.Data;
 namespace ProyectoFinalTPI.Backend.Repositorio.Cache;
 public sealed class OrigenLecturasPublicas(ApplicationDbContext db) : IOrigenLecturasPublicas
 {
-    public Task<Usuario?> ObtenerUsuario(int id, CancellationToken ct) => db.Usuarios.AsNoTracking().SingleOrDefaultAsync(u => u.Id == id, ct);
+    public Task<Usuario?> ObtenerUsuario(int id, CancellationToken ct) => db.Usuarios.AsNoTracking().SingleOrDefaultAsync(u => u.Id == id && !u.EstaEliminado, ct);
     public Task<bool> EsPublicacionVisible(int id, CancellationToken ct) => db.Publicaciones.AsNoTracking().AnyAsync(p => p.Id == id && !p.EstaOculto, ct);
 }
 public sealed class DetectorCambiosPublicos : IDetectorCambiosPublicos

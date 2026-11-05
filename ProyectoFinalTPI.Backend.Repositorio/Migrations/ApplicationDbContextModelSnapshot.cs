@@ -624,6 +624,8 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
 
                     b.HasIndex("UsuarioId");
 
+                    b.HasIndex("Categoria", "EstaOculto", "FechaCreación");
+
                     b.ToTable("Publicaciones");
                 });
 
@@ -815,7 +817,13 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Property<bool>("EsAdmin")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("EstaEliminado")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("FechaEliminacion")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("FotoPerfilUrl")
@@ -837,6 +845,8 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
 
                     b.HasIndex("Username")
                         .IsUnique();
+
+                    b.HasIndex("EstaEliminado", "FechaCreacion");
 
                     b.ToTable("Usuario", (string)null);
 

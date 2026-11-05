@@ -129,6 +129,15 @@ builder.Services.AddScoped<IInteresServicio, InteresServicio>();
 builder.Services.AddScoped<ILogroServicio, LogroServicio>();
 builder.Services.AddScoped<ILogrosUsuariosRepositorio, LogrosUsuariosRepositorio>();
 
+builder.Services.AddScoped<IAdminPublicacionRepositorio, AdminPublicacionRepositorio>();
+builder.Services.AddScoped<IAdminUsuarioRepositorio, AdminUsuarioRepositorio>();
+builder.Services.AddScoped<IAdminComentarioRepositorio, AdminComentarioRepositorio>();
+builder.Services.AddScoped<IAdminEstadisticaRepositorio, AdminEstadisticaRepositorio>();
+builder.Services.AddScoped<IAdminPublicacionServicio, AdminPublicacionServicio>();
+builder.Services.AddScoped<IAdminUsuarioServicio, AdminUsuarioServicio>();
+builder.Services.AddScoped<IAdminComentarioServicio, AdminComentarioServicio>();
+builder.Services.AddScoped<IAdminEstadisticaServicio, AdminEstadisticaServicio>();
+
 builder.Services.AddScoped<IUsuarioServicio, UsuarioServicio>();
 
 builder.Services.AddMemoryCache();
@@ -193,8 +202,13 @@ var claveJwt = builder.Configuration["Jwt:Clave"]
         ? "clave-de-testing-no-usar-en-produccion-32ch"
         : throw new InvalidOperationException("Jwt:Clave no está configurada. Ejecutá: dotnet user-secrets set \"Jwt:Clave\" \"<clave-de-al-menos-32-caracteres>\""));
 
-builder.Services.AddAuthorization(options => options.AddPolicy("AdministrarAnalisis", policy =>
-    policy.RequireAuthenticatedUser().RequireClaim("esAdmin", "true")));
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("AdministrarAnalisis", policy =>
+        policy.RequireAuthenticatedUser().RequireClaim("esAdmin", "true"));
+    options.AddPolicy("AdministrarPanel", policy =>
+        policy.RequireAuthenticatedUser().RequireClaim("esAdmin", "true"));
+});
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>

@@ -68,6 +68,10 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Servicio
             int usuarioDestinatarioId, int emisorId,
             CancellationToken cancellationToken = default);
 
+        Task NotificarAdministrativaAsync(
+            int usuarioDestinatarioId, int? publicacionId = null,
+            CancellationToken cancellationToken = default);
+
         /// <summary>
         /// Devuelve todas las notificaciones no expiradas del usuario autenticado,
         /// ordenadas de más reciente a más antigua.
