@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
+using System.ComponentModel.DataAnnotations;
 using ProyectoFinalTPI.Backend.Dtos.Grupo;
 using ProyectoFinalTPI.Backend.Dtos.Publicacion;
 using ProyectoFinalTPI.Backend.Extensions;
@@ -150,17 +152,19 @@ public class GruposController(IGrupoServicio grupoServicio) : ControllerBase
     }
 
     [Authorize]
-    [HttpDelete("{grupoId:int}/integrantes/{usuarioIdAEliminar:int}")]
+    [HttpDelete("{grupoId:int}/integrantes")]
     [SwaggerOperation(
         Summary = "Expulsa a un integrante del grupo.",
-        Description = "Requiere autenticacion. Solo el creador puede eliminar integrantes y no puede expulsarse a si mismo. Los recuerdos publicados por la persona expulsada se conservan.")]
+        Description = "Requiere autenticacion. Recibe el grupo en la ruta y usuarioIdAEliminar como query obligatorio y positivo; no recibe body. Solo el creador puede eliminar integrantes y no puede expulsarse a si mismo. Los recuerdos publicados por la persona expulsada se conservan.")]
     [SwaggerResponse(StatusCodes.Status204NoContent, "Integrante eliminado del grupo.")]
     [SwaggerResponse(StatusCodes.Status400BadRequest, "Los identificadores no son validos o se intento expulsar al creador.", typeof(ProblemDetails))]
     [SwaggerResponse(StatusCodes.Status401Unauthorized, "Se requiere una autenticacion valida.")]
     [SwaggerResponse(StatusCodes.Status403Forbidden, "El usuario autenticado no es el creador del grupo.", typeof(ProblemDetails))]
     [SwaggerResponse(StatusCodes.Status404NotFound, "El grupo no existe o el usuario no es integrante.", typeof(ProblemDetails))]
     public async Task<IActionResult> Expulsar(
-        int grupoId, int usuarioIdAEliminar, CancellationToken cancellationToken = default)
+        [FromRoute] int grupoId,
+        [FromQuery, BindRequired, Range(1, int.MaxValue)] int usuarioIdAEliminar,
+        CancellationToken cancellationToken = default)
     {
         var usuarioId = User.ObtenerUsuarioId();
         if (!usuarioId.HasValue) return Unauthorized();

@@ -367,10 +367,27 @@ reemplazarla por un `ProblemDetails`.
 | `GET` | `/api/publicaciones/{id}/resumen` | Devuelve una vista resumida para mostrar al seleccionar un pin. |
 | `GET` | `/api/publicaciones/{id}` | Devuelve el detalle de una publicación, con descripción completa, autor, multimedia y ubicación. |
 | `GET` | `/api/publicaciones/{id}/comentarios` | Devuelve los comentarios visibles de una publicación, paginados y ordenados del más reciente al más antiguo. |
-| `POST` | `/api/publicaciones/{publicacionId}/comentarios` | Crea un comentario asociado a la publicación indicada en la URL. Recibe contenido y usuarioId en JSON. |
+| `POST` | `/api/publicaciones/{publicacionId}/comentarios` | Crea un comentario o respuesta. Recibe `contenido` y `comentarioPadreId` opcional en JSON; el usuario se obtiene del JWT. |
+| `GET` | `/api/comentarios/respuestas/{comentarioId}?publicacionId=25` | Lista respuestas directas con `cursor` y `limite` (por defecto 3, máximo 20). |
+| `DELETE` | `/api/comentarios/{comentarioId}?publicacionId=25` | Elimina lógicamente un comentario propio. Requiere JWT. |
+| `PUT` | `/api/comentarios/{comentarioId}/reaccion?publicacionId=25` | Establece la reacción propia; recibe `tipo` en JSON. Requiere JWT. |
+| `DELETE` | `/api/comentarios/{comentarioId}/reaccion?publicacionId=25` | Quita la reacción propia. Requiere JWT. |
+
+Las rutas de comentarios tienen como máximo tres segmentos sin contar `/api`. Los identificadores dentro de la ruta se reciben con `[FromRoute]`; `publicacionId` es obligatorio y positivo en `[FromQuery]` para respuestas, eliminación y reacciones. Los cuerpos JSON se reciben con `[FromBody]`. La creación devuelve `Location: /api/comentarios/{comentarioId}?publicacionId={publicacionId}`. Las rutas anidadas anteriores para respuestas, eliminación y reacciones fueron reemplazadas; backend y frontend deben actualizarse juntos.
 
 Las consultas públicas excluyen las publicaciones ocultas. Los comentarios se consultan por separado del detalle.
 Las etiquetas se almacenan en Neo4j como relaciones entre los nodos `Usuario` y `Publicacion`, cuyos datos maestros permanecen en PostgreSQL.
+
+### Consultas de publicaciones guardadas y hashtags
+
+| Método | Ruta | Parámetros |
+|---|---|---|
+| `GET` | `/api/publicaciones/guardadas/{usuarioId}` | `usuarioId` positivo por `[FromRoute]`. |
+| `GET` | `/api/publicaciones/hashtags/{hashtag}` | Texto del hashtag por `[FromRoute]`; `cursor` y `limite` por `[FromQuery]`. |
+| `GET` | `/api/publicaciones/tendencias/hashtags` | `limite` por query, por defecto 5. |
+| `GET` | `/api/publicaciones/buscar/hashtags` | `q` y `limite` por query, límite por defecto 10. |
+
+Estas rutas tienen tres segmentos sin contar `/api` y no reciben body. El hashtag se codifica como un segmento de URL (por ejemplo, `música` como `m%C3%BAsica`); no es un ID numérico. Búsqueda y tendencias tienen rutas independientes para que `buscar` y `tendencias` también puedan consultarse como hashtags. Las rutas anteriores de guardadas y publicaciones por hashtag fueron reemplazadas, al igual que las rutas anteriores de búsqueda y tendencias; backend y frontend deben actualizarse juntos. Se conservan las respuestas, permisos y reglas de paginación existentes.
 
 ### Red de recuerdos: integración de frontend (paso 1)
 
@@ -887,6 +904,19 @@ GET /api/publicaciones/25/comentarios?limite=20
 Si “Para vos” no encuentra recomendaciones visibles, muestra publicaciones generales visibles ordenadas por fecha de creación de más nueva a más antigua (y por ID descendente en caso de empate). No requiere que el usuario haya creado publicaciones ni dado likes.
 
 Para recargar “Para vos”, se realiza otra petición sin cursor. Esto genera una nueva selección. Cada sesión conserva hasta 500 publicaciones por defecto, también cuando usa el listado general, y vence a los 30 minutos; si deja de estar disponible, el endpoint devuelve `410 Gone`.
+
+### Expulsar integrantes de un grupo
+
+```http
+DELETE /api/grupos/4/integrantes?usuarioIdAEliminar=20
+Authorization: Bearer <token-del-creador>
+```
+
+La ruta tiene tres segmentos sin contar `/api`. `grupoId` se recibe por `[FromRoute]` y `usuarioIdAEliminar` por `[FromQuery]`, obligatorio y mayor que cero. No se envía body ni el ID de quien realiza la operación: se obtiene del JWT. Solo el creador puede expulsar y no puede expulsarse a sí mismo. Se elimina únicamente la membresía; se conservan el usuario y sus recuerdos.
+
+Devuelve `204 No Content` al completar la expulsión; `400` por identificadores inválidos o intento de expulsar al creador, `401` sin autenticación, `403` si quien realiza la operación no es el creador y `404` si el grupo o la membresía no existen. Los errores de validación de query incluyen `ValidationProblemDetails`; los errores de negocio usan `ProblemDetails`. Repetir la expulsión devuelve `404` porque la membresía ya no existe. El frontend puede utilizar esta ruta y recargar `GET /api/grupos/4/integrantes` tras recibir `204`.
+
+Esta ruta reemplaza a `DELETE /api/grupos/{grupoId}/integrantes/{usuarioIdAEliminar}`. Actualmente no tiene un consumidor de expulsión en el frontend.
 
 ### Endpoints de seguimiento
 
