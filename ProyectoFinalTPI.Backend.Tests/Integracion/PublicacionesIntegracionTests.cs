@@ -54,6 +54,94 @@ public class PublicacionesIntegracionTests : IClassFixture<PostgisFixture>
     };
 
     [Fact]
+    public async Task RutasDeComentariosPermitenResponderReaccionarYEliminarConPublicacionPorQuery()
+    {
+        await using var factory = new PublicacionesApiFactory(_postgres);
+        using var client = factory.CreateClient();
+        using var scope = factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        context.Publicaciones.Add(new Publicacion
+        {
+            Id = 1, Titulo = "Recuerdo", Usuario = usuario, Lugar = lugar,
+            Fecha = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+        });
+        context.Publicaciones.Add(new Publicacion
+        {
+            Id = 2, Titulo = "Otro recuerdo", Usuario = usuario, Lugar = lugar,
+            Fecha = new DateTime(2001, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+        });
+        await context.SaveChangesAsync();
+        await AutenticarAsync(client);
+
+        using var creacion = await client.PostAsJsonAsync("/api/publicaciones/1/comentarios",
+            new { contenido = "Comentario raíz" });
+        Assert.Equal(HttpStatusCode.Created, creacion.StatusCode);
+        var raiz = (await creacion.Content.ReadFromJsonAsync<ComentarioDto>())!;
+        Assert.Equal($"/api/comentarios/{raiz.Id}?publicacionId=1", creacion.Headers.Location!.OriginalString);
+        for (var i = 0; i < 2; i++)
+        {
+            using var respuesta = await client.PostAsJsonAsync("/api/publicaciones/1/comentarios",
+                new { contenido = $"Respuesta {i}", comentarioPadreId = raiz.Id });
+            Assert.Equal(HttpStatusCode.Created, respuesta.StatusCode);
+        }
+
+        var rutaRespuestas = $"/api/comentarios/respuestas/{raiz.Id}?publicacionId=1&limite=1";
+        var primera = await client.GetFromJsonAsync<ResultadoPaginadoDto<ComentarioDto>>(rutaRespuestas);
+        Assert.NotNull(primera);
+        var respuestaPrimera = Assert.Single(primera.Items);
+        Assert.True(primera.HayMas);
+        var segunda = await client.GetFromJsonAsync<ResultadoPaginadoDto<ComentarioDto>>(
+            rutaRespuestas + "&cursor=" + Uri.EscapeDataString(primera.SiguienteCursor!));
+        Assert.NotNull(segunda);
+        Assert.NotEqual(respuestaPrimera.Id, Assert.Single(segunda.Items).Id);
+        Assert.False(segunda.HayMas);
+
+        using var otraPublicacion = await client.GetAsync($"/api/comentarios/respuestas/{raiz.Id}?publicacionId=2");
+        Assert.Equal(HttpStatusCode.NotFound, otraPublicacion.StatusCode);
+        var rutaReaccion = $"/api/comentarios/{raiz.Id}/reaccion?publicacionId=1";
+        using var reaccion = await client.PutAsJsonAsync(rutaReaccion, new { tipo = "love" });
+        Assert.Equal(HttpStatusCode.OK, reaccion.StatusCode);
+        Assert.Equal("love", (await reaccion.Content.ReadFromJsonAsync<ComentarioDto>())!.ReaccionActual);
+        using var quitarReaccion = await client.DeleteAsync(rutaReaccion);
+        Assert.Equal(HttpStatusCode.OK, quitarReaccion.StatusCode);
+        Assert.Null((await quitarReaccion.Content.ReadFromJsonAsync<ComentarioDto>())!.ReaccionActual);
+
+        var autorizacion = client.DefaultRequestHeaders.Authorization;
+        client.DefaultRequestHeaders.Authorization = null;
+        using var anonimo = await client.DeleteAsync($"/api/comentarios/{raiz.Id}?publicacionId=1");
+        Assert.Equal(HttpStatusCode.Unauthorized, anonimo.StatusCode);
+        client.DefaultRequestHeaders.Authorization = autorizacion;
+        using var eliminacion = await client.DeleteAsync($"/api/comentarios/{raiz.Id}?publicacionId=1");
+        Assert.Equal(HttpStatusCode.NoContent, eliminacion.StatusCode);
+        context.ChangeTracker.Clear();
+        Assert.True((await context.Set<Comentario>().FindAsync(raiz.Id))!.EstaEliminado);
+    }
+
+    [Theory]
+    [InlineData("GET", "/api/comentarios/respuestas/8")]
+    [InlineData("DELETE", "/api/comentarios/8")]
+    [InlineData("PUT", "/api/comentarios/8/reaccion")]
+    [InlineData("DELETE", "/api/comentarios/8/reaccion")]
+    public async Task RutasDeComentariosRechazanPublicacionPorQueryAusenteOInvalida(string metodo, string ruta)
+    {
+        await using var factory = new PublicacionesApiFactory(_postgres);
+        using var client = factory.CreateClient();
+        using var scope = factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        context.Usuarios.Add(usuario);
+        await context.SaveChangesAsync();
+        await AutenticarAsync(client);
+
+        foreach (var query in new[] { "", "?publicacionId=0", "?publicacionId=-1", "?publicacionId=abc", "?publicacionId=" })
+        {
+            using var request = new HttpRequestMessage(new HttpMethod(metodo), ruta + query);
+            if (metodo == "PUT") request.Content = JsonContent.Create(new { tipo = "love" });
+            using var response = await client.SendAsync(request);
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        }
+    }
+
+    [Fact]
     public async Task HashtagAgrupaPublicacionesVisiblesConCoincidenciaExactaYPaginacion()
     {
         await using var factory = new PublicacionesApiFactory(_postgres);

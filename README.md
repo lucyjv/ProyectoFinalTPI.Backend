@@ -367,7 +367,13 @@ reemplazarla por un `ProblemDetails`.
 | `GET` | `/api/publicaciones/{id}/resumen` | Devuelve una vista resumida para mostrar al seleccionar un pin. |
 | `GET` | `/api/publicaciones/{id}` | Devuelve el detalle de una publicación, con descripción completa, autor, multimedia y ubicación. |
 | `GET` | `/api/publicaciones/{id}/comentarios` | Devuelve los comentarios visibles de una publicación, paginados y ordenados del más reciente al más antiguo. |
-| `POST` | `/api/publicaciones/{publicacionId}/comentarios` | Crea un comentario asociado a la publicación indicada en la URL. Recibe contenido y usuarioId en JSON. |
+| `POST` | `/api/publicaciones/{publicacionId}/comentarios` | Crea un comentario o respuesta. Recibe `contenido` y `comentarioPadreId` opcional en JSON; el usuario se obtiene del JWT. |
+| `GET` | `/api/comentarios/respuestas/{comentarioId}?publicacionId=25` | Lista respuestas directas con `cursor` y `limite` (por defecto 3, máximo 20). |
+| `DELETE` | `/api/comentarios/{comentarioId}?publicacionId=25` | Elimina lógicamente un comentario propio. Requiere JWT. |
+| `PUT` | `/api/comentarios/{comentarioId}/reaccion?publicacionId=25` | Establece la reacción propia; recibe `tipo` en JSON. Requiere JWT. |
+| `DELETE` | `/api/comentarios/{comentarioId}/reaccion?publicacionId=25` | Quita la reacción propia. Requiere JWT. |
+
+Las rutas de comentarios tienen como máximo tres segmentos sin contar `/api`. Los identificadores dentro de la ruta se reciben con `[FromRoute]`; `publicacionId` es obligatorio y positivo en `[FromQuery]` para respuestas, eliminación y reacciones. Los cuerpos JSON se reciben con `[FromBody]`. La creación devuelve `Location: /api/comentarios/{comentarioId}?publicacionId={publicacionId}`. Las rutas anidadas anteriores para respuestas, eliminación y reacciones fueron reemplazadas; backend y frontend deben actualizarse juntos.
 
 Las consultas públicas excluyen las publicaciones ocultas. Los comentarios se consultan por separado del detalle.
 Las etiquetas se almacenan en Neo4j como relaciones entre los nodos `Usuario` y `Publicacion`, cuyos datos maestros permanecen en PostgreSQL.

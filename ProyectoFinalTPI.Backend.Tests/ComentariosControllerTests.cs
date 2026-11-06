@@ -104,7 +104,7 @@ public class ComentariosControllerTests
 
         //Assert
         var created = Assert.IsType<CreatedResult>(resultado);
-        Assert.Equal("/api/publicaciones/42/comentarios/5", created.Location);
+        Assert.Equal("/api/comentarios/5?publicacionId=42", created.Location);
         var dto = Assert.IsType<ComentarioDto>(created.Value);
         Assert.Equal(5, dto.Id);
         _comentarioServicioMock.Verify(s => s.Crear(It.IsAny<Comentario>(), It.IsAny<CancellationToken>()), Times.Once);
