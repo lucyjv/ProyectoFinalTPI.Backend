@@ -377,6 +377,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
         {
             ValidarIdUsuario(usuarioId);
             ValidarLimite(limite);
+            // los .completar()  para tiempos de las etapas de Application insights
 
             using var total = new TelemetriaFeed("para-vos");
             try
@@ -385,12 +386,17 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 int posicion;
                 using (var etapa = new TelemetriaFeed(cursor is null ? "sesion-nueva" : "sesion-existente"))
                 {
+                    // Obtiene la sesion del feed y la posicion
+                    // La sesion: IDs de los recuerdos recomendados para el usuario, ordenados por ranking y fecha de creacion 
+                    // La posición: donde seguir leyendoas
                     (sesion, posicion) = await ObtenerSesionFeed(usuarioId, cursor, cancellationToken);
                     etapa.Completar();
                 }
                 using var pagina = new TelemetriaFeed("pagina");
+
+                //carga los datos de los recuerdos que corresponde mostrar
                 var resultado = await ObtenerPaginaFeed(sesion, posicion, usuarioId, limite, cancellationToken);
-                pagina.Completar();
+                pagina.Completar(); 
                 total.Completar();
                 return resultado;
             }
@@ -804,6 +810,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
         private async Task<(SesionFypDto Sesion, int Posicion)> ObtenerSesionFeed(
             int usuarioId, string? cursor, CancellationToken cancellationToken)
         {
+            //un feed nuevo o continuar con el que ya tenemos abierto ?
             var cursorDecodificado = CursorFypCodec.Leer(cursor);
 
             SesionFypDto sesion;
@@ -811,16 +818,19 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
             if (cursorDecodificado == null)
             {
+                // SIN CURSOR: obtenemos un ranking nuevo y guardaMOS los IDs ordenados en una sesión
                 var recomendaciones = _proveedorRanking is not null
                     ? await _proveedorRanking.ObtenerAsync(usuarioId, cancellationToken)
                     : await new GeneradorRankingFeed(_publicacionRepositorio,
                         Options.Create(_opcionesFeed)).GenerarAsync(usuarioId, cancellationToken);
+
                 sesion = await _sesionFypRepositorio.CrearAsync(usuarioId, recomendaciones, cancellationToken);
 
                 posicion = 0;
             }
             else
             {
+                // CON CURSOR: obtenemos la sesion existente y la posicion del cursor|  
                 sesion = await _sesionFypRepositorio.ObtenerAsync(cursorDecodificado.SesionId, usuarioId, cancellationToken)
                     ?? throw new SesionFypNoDisponibleException();
 
@@ -838,6 +848,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
         private async Task<ResultadoPaginadoDto<PublicacionDetalleDto>> ObtenerPaginaFeed(
             SesionFypDto sesion, int posicion, int usuarioId, int limite, CancellationToken cancellationToken)
+        // convertir los IDs de la sesion en una pagina de recuerdos para mostrar.
         {
             var items = new List<PublicacionDetalleDto>();
             var tamanioLote = limite + 1;
@@ -862,8 +873,6 @@ namespace ProyectoFinalTPI.Backend.Servicio
                         id,
                         out var publicacion))
                     {
-                        // Encontramos otra publicación visible:
-                        // la página actual ya está completa.
                         if (items.Count == limite)
                         {
                             await CompletarInteraccionesPaginaFeed(items, usuarioId, cancellationToken);
@@ -882,7 +891,6 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
                     posicion++;
                 }
-                // Si hay bajas u ocultamientos, avanzamos en lotes mayores sin consultar ID por ID.
                 tamanioLote = Math.Min(50, tamanioLote * 2);
             }
 
