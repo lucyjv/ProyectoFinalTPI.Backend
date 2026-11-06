@@ -548,9 +548,13 @@ namespace ProyectoFinalTPI.Backend.Tests
                 .Setup(s => s.ObtenerSeguidosIdsAsync(10, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new[] { 20, 30 });
 
+            var fecha = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
             var feed = new List<PublicacionDetalleDto>
             {
-                new() { Id = 1 }, new() { Id = 2 }, new() { Id = 3 }, new() { Id = 4 }
+                new() { Id = 1, FechaCreacion = fecha },
+                new() { Id = 2, FechaCreacion = fecha },
+                new() { Id = 3, FechaCreacion = fecha },
+                new() { Id = 4, FechaCreacion = fecha }
             };
 
             _publicacionRepositorioMock
@@ -562,7 +566,11 @@ namespace ProyectoFinalTPI.Backend.Tests
 
             //Assert
             _seguimientoMock.Verify(s => s.ObtenerSeguidosIdsAsync(10, It.IsAny<CancellationToken>()), Times.Once);
-            Assert.Equal(new[] { 1, 2, 3, 4 }, result.Items.Select(p => p.Id));
+            _publicacionRepositorioMock.Verify(r => r.ObtenerFeedSeguidos(
+                It.Is<IReadOnlyCollection<int>>(ids => ids.Count == 2 && ids.Contains(20) && ids.Contains(30)),
+                null, 20, It.IsAny<CancellationToken>()), Times.Once);
+            // A igual fecha, el feed desempata por ID de mayor a menor.
+            Assert.Equal(new[] { 4, 3, 2, 1 }, result.Items.Select(p => p.Id));
         }
 
         [Fact]
