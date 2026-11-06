@@ -77,7 +77,7 @@ public class GruposControllerTests
     }
 
     [Fact]
-    public async Task QueExpulsarEnvieCreadorAutenticadoEIntegranteDeLaRuta()
+    public async Task QueExpulsarEnvieCreadorAutenticadoEIntegranteDeLaQuery()
     {
         //Arrange
         var controller = CrearController(10);

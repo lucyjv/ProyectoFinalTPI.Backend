@@ -101,7 +101,7 @@ namespace ProyectoFinalTPI.Backend.Controllers
             return Ok(publicaciones);
         }
 
-        [HttpGet("usuario/{usuarioId:int}/guardadas")]
+        [HttpGet("guardadas/{usuarioId:int}")]
         [SwaggerOperation(
             Summary = "Obtiene las publicaciones guardadas por un usuario.",
             Description = "Devuelve el listado de publicaciones guardadas por el usuario indicado, con información de likes, reposts y puntuaciones."
@@ -109,7 +109,7 @@ namespace ProyectoFinalTPI.Backend.Controllers
         [SwaggerResponse(StatusCodes.Status200OK, "Listado de publicaciones guardadas del usuario.", typeof(List<PublicacionDetalleDto>))]
         [SwaggerResponse(StatusCodes.Status400BadRequest, "El identificador del usuario no es válido.", typeof(ProblemDetails))]
         public async Task<ActionResult<List<PublicacionDetalleDto>>> ObtenerGuardadasPorUsuario(
-            int usuarioId,
+            [FromRoute] int usuarioId,
             CancellationToken cancellationToken)
         {
             var publicaciones = await _publicacionServicio.ObtenerGuardadasPorUsuarioId(
@@ -117,13 +117,13 @@ namespace ProyectoFinalTPI.Backend.Controllers
             return Ok(publicaciones);
         }
 
-        [HttpGet("hashtags/{hashtag}/publicaciones")]
+        [HttpGet("hashtags/{hashtag}")]
         [SwaggerOperation(Summary = "Obtiene todas las publicaciones visibles de un hashtag.",
             Description = "Busca el hashtag en las descripciones, sin crear grupos ni almacenar etiquetas por separado. Orden cronológico y paginación por cursor.")]
         [SwaggerResponse(StatusCodes.Status200OK, "Página de publicaciones.", typeof(ResultadoPaginadoDto<PublicacionDetalleDto>))]
         [SwaggerResponse(StatusCodes.Status400BadRequest, "El hashtag, cursor o límite no es válido.")]
         public async Task<ActionResult<ResultadoPaginadoDto<PublicacionDetalleDto>>> ObtenerPorHashtag(
-            string hashtag, [FromQuery] string? cursor = null, [FromQuery] int limite = 20,
+            [FromRoute] string hashtag, [FromQuery] string? cursor = null, [FromQuery] int limite = 20,
             CancellationToken cancellationToken = default)
         {
             try
@@ -137,7 +137,7 @@ namespace ProyectoFinalTPI.Backend.Controllers
             }
         }
 
-        [HttpGet("hashtags/tendencias")]
+        [HttpGet("tendencias/hashtags")]
         [SwaggerOperation(Summary = "Obtiene los hashtags más usados en los últimos siete días.")]
         [SwaggerResponse(StatusCodes.Status200OK, "Tendencias semanales.", typeof(List<TendenciaHashtagDto>))]
         public async Task<ActionResult<List<TendenciaHashtagDto>>> ObtenerTendenciasHashtags(
@@ -147,7 +147,7 @@ namespace ProyectoFinalTPI.Backend.Controllers
             return Ok(await _publicacionServicio.ObtenerTendenciasHashtags(limite, cancellationToken));
         }
 
-        [HttpGet("hashtags/buscar")]
+        [HttpGet("buscar/hashtags")]
         [SwaggerOperation(Summary = "Busca hashtags existentes por prefijo.")]
         [SwaggerResponse(StatusCodes.Status200OK, "Hashtags encontrados.", typeof(List<TendenciaHashtagDto>))]
         [SwaggerResponse(StatusCodes.Status400BadRequest, "La búsqueda o límite no es válido.")]
