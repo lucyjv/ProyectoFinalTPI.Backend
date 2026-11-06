@@ -151,20 +151,20 @@ public class PublicacionesIntegracionTests : IClassFixture<PostgisFixture>
         await SembrarPublicacionesConHashtags(context);
 
         var primera = await client.GetFromJsonAsync<ResultadoPaginadoDto<PublicacionDetalleDto>>(
-            "/api/publicaciones/hashtags/amanecer/publicaciones?limite=1");
+            "/api/publicaciones/hashtags/amanecer?limite=1");
         Assert.NotNull(primera);
         Assert.Equal(1, Assert.Single(primera.Items).Id);
         Assert.True(primera.HayMas);
 
         var segunda = await client.GetFromJsonAsync<ResultadoPaginadoDto<PublicacionDetalleDto>>(
-            "/api/publicaciones/hashtags/amanecer/publicaciones?limite=1&cursor=" +
+            "/api/publicaciones/hashtags/amanecer?limite=1&cursor=" +
             Uri.EscapeDataString(primera.SiguienteCursor!));
         Assert.NotNull(segunda);
         Assert.Equal(2, Assert.Single(segunda.Items).Id);
         Assert.True(segunda.HayMas);
 
         var tercera = await client.GetFromJsonAsync<ResultadoPaginadoDto<PublicacionDetalleDto>>(
-            "/api/publicaciones/hashtags/amanecer/publicaciones?limite=1&cursor=" +
+            "/api/publicaciones/hashtags/amanecer?limite=1&cursor=" +
             Uri.EscapeDataString(segunda.SiguienteCursor!));
         Assert.NotNull(tercera);
         Assert.Equal(6, Assert.Single(tercera.Items).Id);
@@ -181,18 +181,54 @@ public class PublicacionesIntegracionTests : IClassFixture<PostgisFixture>
         await SembrarPublicacionesConHashtags(context);
 
         var tendencias = await client.GetFromJsonAsync<List<TendenciaHashtagDto>>(
-            "/api/publicaciones/hashtags/tendencias");
+            "/api/publicaciones/tendencias/hashtags");
         Assert.NotNull(tendencias);
         var amanecer = Assert.Single(tendencias.Where(t => t.Hashtag == "amanecer"));
         Assert.Equal(2, amanecer.CantidadPublicaciones);
         Assert.Equal(1, amanecer.CantidadAutores);
 
         var buscados = await client.GetFromJsonAsync<List<TendenciaHashtagDto>>(
-            "/api/publicaciones/hashtags/buscar?q=aman");
+            "/api/publicaciones/buscar/hashtags?q=aman");
         Assert.NotNull(buscados);
         Assert.Equal("amanecer", buscados[0].Hashtag);
         Assert.Equal(3, buscados[0].CantidadPublicaciones);
         Assert.Contains(buscados, t => t.Hashtag == "amaneceres" && t.CantidadPublicaciones == 1);
+    }
+
+    [Theory]
+    [InlineData("buscar")]
+    [InlineData("tendencias")]
+    public async Task HashtagsPuedenUsarNombresDeLasOperacionesSinColisionar(string hashtag)
+    {
+        await using var factory = new PublicacionesApiFactory(_postgres);
+        using var client = factory.CreateClient();
+
+        var pagina = await client.GetFromJsonAsync<ResultadoPaginadoDto<PublicacionDetalleDto>>(
+            $"/api/publicaciones/hashtags/{hashtag}?limite=1");
+
+        Assert.NotNull(pagina);
+        Assert.Empty(pagina.Items);
+        Assert.False(pagina.HayMas);
+    }
+
+    [Theory]
+    [InlineData(17, HttpStatusCode.OK)]
+    [InlineData(0, HttpStatusCode.BadRequest)]
+    [InlineData(-1, HttpStatusCode.BadRequest)]
+    public async Task GuardadasRecibeUsuarioEnLaRutaSimplificada(int usuarioId, HttpStatusCode esperado)
+    {
+        await using var factory = new PublicacionesApiFactory(_postgres);
+        using var client = factory.CreateClient();
+
+        using var respuesta = await client.GetAsync($"/api/publicaciones/guardadas/{usuarioId}");
+
+        Assert.Equal(esperado, respuesta.StatusCode);
+        if (esperado == HttpStatusCode.OK)
+        {
+            var publicaciones = await respuesta.Content.ReadFromJsonAsync<List<PublicacionDetalleDto>>();
+            Assert.NotNull(publicaciones);
+            Assert.Empty(publicaciones);
+        }
     }
 
     private async Task SembrarPublicacionesConHashtags(ApplicationDbContext context)
