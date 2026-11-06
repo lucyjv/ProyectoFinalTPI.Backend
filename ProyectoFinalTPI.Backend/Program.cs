@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Neo4j.Driver;
+using ProyectoFinalTPI.Backend.Interfaces.Configuracion;
 using NetTopologySuite;
 using Npgsql;
 using ProyectoFinalTPI.Backend.Entidades;
@@ -84,6 +85,11 @@ builder.Services.AddSingleton<IDriver>(provider =>
 });
 
 builder.Services.AddScoped<IPublicacionRepositorio, PublicacionRepositorio>();
+builder.Services.AddOptions<OpcionesNeo4j>()
+    .Bind(builder.Configuration.GetSection(OpcionesNeo4j.Seccion))
+    .Validate(opciones => opciones.TiempoMaximoConsultaFeedSegundos is > 0 and <= 120,
+        "Neo4j:TiempoMaximoConsultaFeedSegundos debe estar entre 1 y 120.")
+    .ValidateOnStart();
 builder.Services.AddScoped<IRelacionRecuerdosRepositorio, RelacionRecuerdosRepositorio>();
 builder.Services.AddScoped<IRelacionRecuerdosServicio, RelacionRecuerdosServicio>();
 builder.Services.AddScoped<IMomentoRepositorio, MomentoRepositorio>();
@@ -103,10 +109,21 @@ builder.Services.AddHostedService<AnalisisRecuerdosWorker>();
 builder.Services.Configure<OpcionesPublicacion>(
     builder.Configuration.GetSection(OpcionesPublicacion.Seccion));
 builder.Services.AddScoped<IPublicacionServicio, PublicacionServicio>();
+builder.Services.AddScoped<IGeneradorRankingFeed, GeneradorRankingFeed>();
+builder.Services.AddSingleton<IProveedorRankingFeed, CoordinadorRankingFeed>();
 builder.Services.AddOptions<FeedRecomendacionesOptions>()
     .Bind(builder.Configuration.GetSection(FeedRecomendacionesOptions.Seccion))
     .Validate(opciones => opciones.DiasDeExclusionDeImpresiones > 0
         && opciones.CantidadMaximaCandidatas > 0
+        && opciones.CantidadMaximaCandidatas <= 2000
+        && opciones.CantidadMaximaSemillas is > 0 and <= 500
+        && opciones.DiasDeHistorialParaSemillas is > 0 and <= 3650
+        && opciones.VecinosPorSemilla is > 0 and <= 100
+        && opciones.PublicacionesPorVecino is > 0 and <= 100
+        && opciones.PorcentajeCandidatasColaborativas is >= 0 and <= 100
+        && opciones.CantidadMaximaLotesGenerales is > 0 and <= 10
+        && opciones.CantidadMaximaLotesSeguidos is > 0 and <= 10
+        && opciones.TiempoMaximoGeneracionSegundos is > 0 and <= 120
         && opciones.PesoLike >= 0
         && opciones.PesoPuntuacion >= 0
         && opciones.PesoEtiqueta >= 0

@@ -5,12 +5,13 @@ namespace ProyectoFinalTPI.Backend.Servicio
 {
     internal static class CursorCronologicoCodec
     {
-        public static string Crear(DateTime fechaCreacion, int id)
+        public static string Crear(DateTime fechaCreacion, int id, int reposteadorId = 0)
         {
             var cursor = new CursorCronologicoDto
             {
                 FechaCreacion = fechaCreacion,
-                Id = id
+                Id = id,
+                ReposteadorId = reposteadorId
             };
 
             var bytes = JsonSerializer.SerializeToUtf8Bytes(cursor);
@@ -49,7 +50,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
                     JsonSerializer.Deserialize<CursorCronologicoDto>(bytes);
 
                 if (cursor == null ||
-                    cursor.Id <= 0 ||
+                    cursor.Id <= 0 || cursor.ReposteadorId < 0 ||
                     cursor.FechaCreacion == default ||
                     cursor.FechaCreacion.Kind != DateTimeKind.Utc)
                 {

@@ -24,14 +24,14 @@ public class SesionFypRepositorioTests : IDisposable
     #region Creación de Sesión FYP
 
     [Fact]
-    public void QueCrearGuardeSesionEnCacheCuandoDatosSonValidos()
+    public async Task QueCrearGuardeSesionEnCacheCuandoDatosSonValidos()
     {
         //Arrange
         int usuarioId = 1;
         var publicacionesIds = new List<int> { 10, 20, 30 };
 
         //Act
-        var sesion = _repositorio.Crear(usuarioId, publicacionesIds);
+        var sesion = await _repositorio.CrearAsync(usuarioId, publicacionesIds);
 
         //Assert
         Assert.NotNull(sesion);
@@ -45,14 +45,14 @@ public class SesionFypRepositorioTests : IDisposable
     }
 
     [Fact]
-    public void QueCrearElimineIdsDuplicados()
+    public async Task QueCrearElimineIdsDuplicados()
     {
         //Arrange
         int usuarioId = 1;
         var publicacionesIds = new List<int> { 10, 20, 10, 30, 20 };
 
         //Act
-        var sesion = _repositorio.Crear(usuarioId, publicacionesIds);
+        var sesion = await _repositorio.CrearAsync(usuarioId, publicacionesIds);
 
         //Assert
         Assert.NotNull(sesion);
@@ -63,38 +63,38 @@ public class SesionFypRepositorioTests : IDisposable
     }
 
     [Fact]
-    public void QueCrearLanceArgumentNullExceptionCuandoListaEsNull()
+    public async Task QueCrearLanceArgumentNullExceptionCuandoListaEsNull()
     {
         //Arrange
         int usuarioId = 1;
         IReadOnlyCollection<int> publicacionesIds = null!;
 
         //Act & Assert
-        Assert.Throws<ArgumentNullException>(() => _repositorio.Crear(usuarioId, publicacionesIds));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => _repositorio.CrearAsync(usuarioId, publicacionesIds));
     }
 
     [Theory]
     [InlineData(0)]
     [InlineData(-5)]
-    public void QueCrearLanceArgumentExceptionCuandoUsuarioIdEsInvalido(int usuarioIdInvalido)
+    public async Task QueCrearLanceArgumentExceptionCuandoUsuarioIdEsInvalido(int usuarioIdInvalido)
     {
         //Arrange
         var publicacionesIds = new List<int> { 10, 20 };
 
         //Act & Assert
-        var excepcion = Assert.Throws<ArgumentException>(() => _repositorio.Crear(usuarioIdInvalido, publicacionesIds));
+        var excepcion = await Assert.ThrowsAsync<ArgumentException>(() => _repositorio.CrearAsync(usuarioIdInvalido, publicacionesIds));
         Assert.Contains("El ID del usuario debe ser mayor que cero", excepcion.Message);
     }
 
     [Fact]
-    public void QueCrearLanceArgumentExceptionCuandoAlgunPublicacionIdEsInvalido()
+    public async Task QueCrearLanceArgumentExceptionCuandoAlgunPublicacionIdEsInvalido()
     {
         //Arrange
         int usuarioId = 1;
         var publicacionesIds = new List<int> { 10, 0, 20 };
 
         //Act & Assert
-        var excepcion = Assert.Throws<ArgumentException>(() => _repositorio.Crear(usuarioId, publicacionesIds));
+        var excepcion = await Assert.ThrowsAsync<ArgumentException>(() => _repositorio.CrearAsync(usuarioId, publicacionesIds));
         Assert.Contains("Los IDs de publicaciones deben ser mayores que cero", excepcion.Message);
     }
 
@@ -103,15 +103,15 @@ public class SesionFypRepositorioTests : IDisposable
     #region Obtención de Sesión FYP
 
     [Fact]
-    public void QueObtenerRetorneSesionCuandoExisteYPerteneceAlUsuario()
+    public async Task QueObtenerRetorneSesionCuandoExisteYPerteneceAlUsuario()
     {
         //Arrange
         int usuarioId = 1;
         var publicacionesIds = new List<int> { 10, 20, 30 };
-        var sesionCreada = _repositorio.Crear(usuarioId, publicacionesIds);
+        var sesionCreada = await _repositorio.CrearAsync(usuarioId, publicacionesIds);
 
         //Act
-        var sesionObtenida = _repositorio.Obtener(sesionCreada.Id, usuarioId);
+        var sesionObtenida = await _repositorio.ObtenerAsync(sesionCreada.Id, usuarioId);
 
         //Assert
         Assert.NotNull(sesionObtenida);
@@ -120,30 +120,30 @@ public class SesionFypRepositorioTests : IDisposable
     }
 
     [Fact]
-    public void QueObtenerRetorneNullCuandoSesionNoExiste()
+    public async Task QueObtenerRetorneNullCuandoSesionNoExiste()
     {
         //Arrange
         var idInexistente = Guid.NewGuid();
         int usuarioId = 1;
 
         //Act
-        var sesionObtenida = _repositorio.Obtener(idInexistente, usuarioId);
+        var sesionObtenida = await _repositorio.ObtenerAsync(idInexistente, usuarioId);
 
         //Assert
         Assert.Null(sesionObtenida);
     }
 
     [Fact]
-    public void QueObtenerRetorneNullCuandoSesionEsDeOtroUsuario()
+    public async Task QueObtenerRetorneNullCuandoSesionEsDeOtroUsuario()
     {
         //Arrange
         int usuarioOriginalId = 1;
         int usuarioInvasorId = 2;
         var publicacionesIds = new List<int> { 10, 20 };
-        var sesionCreada = _repositorio.Crear(usuarioOriginalId, publicacionesIds);
+        var sesionCreada = await _repositorio.CrearAsync(usuarioOriginalId, publicacionesIds);
 
         //Act
-        var sesionObtenida = _repositorio.Obtener(sesionCreada.Id, usuarioInvasorId);
+        var sesionObtenida = await _repositorio.ObtenerAsync(sesionCreada.Id, usuarioInvasorId);
 
         //Assert
         Assert.Null(sesionObtenida);

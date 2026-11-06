@@ -17,10 +17,11 @@ namespace ProyectoFinalTPI.Backend.Repositorio
             _cache = cache;
         }
 
-        public SesionFypDto Crear(
+        public Task<SesionFypDto> CrearAsync(
             int usuarioId,
-            IReadOnlyCollection<int> publicacionesIds)
+            IReadOnlyCollection<int> publicacionesIds, CancellationToken cancellationToken = default)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             ArgumentNullException.ThrowIfNull(publicacionesIds);
 
             if (usuarioId <= 0)
@@ -63,34 +64,35 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                 sesion,
                 opciones);
 
-            return sesion;
+            return Task.FromResult(sesion);
         }
 
-        public SesionFypDto? Obtener(
+        public Task<SesionFypDto?> ObtenerAsync(
             Guid sesionId,
-            int usuarioId)
+            int usuarioId, CancellationToken cancellationToken = default)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var clave = ObtenerClave(sesionId);
 
             if (!_cache.TryGetValue<SesionFypDto>(
                 clave,
                 out var sesion))
             {
-                return null;
+                return Task.FromResult<SesionFypDto?>(null);
             }
 
             if (sesion == null || sesion.UsuarioId != usuarioId)
             {
-                return null;
+                return Task.FromResult<SesionFypDto?>(null);
             }
 
             if (sesion.FechaExpiracion <= DateTime.UtcNow)
             {
                 _cache.Remove(clave);
-                return null;
+                return Task.FromResult<SesionFypDto?>(null);
             }
 
-            return sesion;
+            return Task.FromResult<SesionFypDto?>(sesion);
         }
 
         private static string ObtenerClave(Guid sesionId)

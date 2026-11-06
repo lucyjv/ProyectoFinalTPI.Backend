@@ -13,18 +13,20 @@ public sealed class SesionFypRedisRepositorio(IDistributedCache cache) : ISesion
 {
     private static readonly TimeSpan Duracion = TimeSpan.FromMinutes(30);
 
-    public SesionFypDto Crear(int usuarioId, IReadOnlyCollection<int> publicacionesIds)
+    public async Task<SesionFypDto> CrearAsync(int usuarioId, IReadOnlyCollection<int> publicacionesIds,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         ArgumentNullException.ThrowIfNull(publicacionesIds);
         if (usuarioId <= 0) throw new ArgumentException("El ID del usuario debe ser mayor que cero.");
         if (publicacionesIds.Any(id => id <= 0)) throw new ArgumentException("Los IDs de publicaciones deben ser mayores que cero.");
         var registro = new Registro(Guid.NewGuid(), usuarioId, DateTime.UtcNow.Add(Duracion), publicacionesIds.Distinct().ToArray());
         try
         {
-            TelemetriaRedis.Medir("crear", () =>
+            await TelemetriaRedis.MedirAsync("crear", async () =>
             {
-                cache.Set(Clave(registro.Id), JsonSerializer.SerializeToUtf8Bytes(registro),
-                    new DistributedCacheEntryOptions { AbsoluteExpiration = new DateTimeOffset(registro.Expira) });
+                await cache.SetAsync(Clave(registro.Id), JsonSerializer.SerializeToUtf8Bytes(registro),
+                    new DistributedCacheEntryOptions { AbsoluteExpiration = new DateTimeOffset(registro.Expira) }, cancellationToken);
                 return true;
             });
         }
@@ -32,10 +34,12 @@ public sealed class SesionFypRedisRepositorio(IDistributedCache cache) : ISesion
         return Convertir(registro);
     }
 
-    public SesionFypDto? Obtener(Guid sesionId, int usuarioId)
+    public async Task<SesionFypDto?> ObtenerAsync(Guid sesionId, int usuarioId,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         byte[]? bytes;
-        try { bytes = TelemetriaRedis.Medir("leer", () => cache.Get(Clave(sesionId))); }
+        try { bytes = await TelemetriaRedis.MedirAsync("leer", () => cache.GetAsync(Clave(sesionId), cancellationToken)); }
         catch (RedisException ex) { throw new AlmacenSesionNoDisponibleException(ex); }
         if (bytes is null) return null;
         Registro? registro;

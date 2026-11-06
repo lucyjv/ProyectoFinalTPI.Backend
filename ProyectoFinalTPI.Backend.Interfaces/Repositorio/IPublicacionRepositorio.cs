@@ -35,9 +35,26 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Repositorio
             IReadOnlyCollection<int> publicacionesIds, int? usuarioId, CancellationToken cancellationToken = default);
         Task<IReadOnlyList<RecomendacionPublicacionDto>> ObtenerRecomendacionesFeed(
             int usuarioId, int cantidadMaxima, long vistasDesdeUnixMs,
-            PesosRecomendacionFeedDto pesos, CancellationToken cancellationToken = default);
-        Task<IReadOnlyList<InteraccionFeedDto>> ObtenerInteraccionesFeed(
-            int usuarioId, CancellationToken cancellationToken = default);
+            PesosRecomendacionFeedDto pesos, IReadOnlyCollection<int> semillasIds,
+            LimitesExploracionFeedDto limites, CancellationToken cancellationToken = default);
+        Task<IReadOnlyList<InteraccionFeedDto>> ObtenerSemillasFeed(
+            int usuarioId, long actividadDesdeUnixMs, int cantidadMaxima, CancellationToken cancellationToken = default);
+        Task<IReadOnlyList<InteraccionFeedDto>> ObtenerInteraccionesCandidatasFeed(
+            int usuarioId, IReadOnlyCollection<int> publicacionesIds, CancellationToken cancellationToken = default);
+        Task<IReadOnlyList<InteraccionFeedDto>> ObtenerVistasFeed(
+            int usuarioId, long vistasDesdeUnixMs, bool recientes, int cantidadMaxima,
+            CancellationToken cancellationToken = default);
+        Task<List<CaracteristicasFeedDto>> ObtenerCaracteristicasFeed(
+            IReadOnlyCollection<int> publicacionesIds, CancellationToken cancellationToken = default);
+        Task<List<CaracteristicasFeedDto>> ObtenerCandidatasGeneralesFeed(
+            DateTime fechaCorte, CursorCronologicoDto? cursor, int limite, CancellationToken cancellationToken = default);
+        Task<List<int>> ObtenerIdsVisibles(
+            IReadOnlyCollection<int> publicacionesIds, CancellationToken cancellationToken = default);
+        Task<IReadOnlyDictionary<int, ResumenInteraccionesFeedDto>> ObtenerResumenInteraccionesFeed(
+            IReadOnlyCollection<int> publicacionesIds, int usuarioId, CancellationToken cancellationToken = default);
+        Task<IReadOnlyList<(int PublicacionId, int ReposteadorId, string ReposteadorUsername, DateTime Fecha)>> ObtenerRepostsDeSeguidosPaginados(
+            IReadOnlyCollection<int> autoresIds, CursorCronologicoDto? cursor, int limite,
+            CancellationToken cancellationToken = default);
         Task RegistrarImpresionesFeed(int usuarioId, IReadOnlyCollection<int> publicacionesIds,
             CancellationToken cancellationToken = default);
         Task<List<PublicacionDetalleDto>> ObtenerPublicacionesParaVos(IReadOnlyCollection<CategoriaEnum> categorias,

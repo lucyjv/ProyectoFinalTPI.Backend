@@ -9,6 +9,9 @@ internal sealed class TelemetriaFeed : IDisposable
     private static readonly ActivitySource Fuente = new("Nostalgiar.Feed");
     private static readonly Meter Medidor = new("Nostalgiar.Feed");
     private static readonly Histogram<double> Duracion = Medidor.CreateHistogram<double>("feed.etapa.duracion", "ms");
+    private static readonly Histogram<long> Cantidad = Medidor.CreateHistogram<long>("feed.elementos", "{elemento}");
+    public static void RegistrarCantidad(string etapa, long cantidad) => Cantidad.Record(cantidad,
+        new KeyValuePair<string, object?>("etapa", etapa));
     private readonly string etapa;
     private readonly long inicio = Stopwatch.GetTimestamp();
     private readonly Activity? actividad;

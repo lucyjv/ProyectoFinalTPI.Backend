@@ -9,12 +9,14 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Repositorio
 {
     public interface ISesionFypRepositorio
     {
-        SesionFypDto Crear(
+        Task<SesionFypDto> CrearAsync(
             int usuarioId,
-            IReadOnlyCollection<int> publicacionesIds);
+            IReadOnlyCollection<int> publicacionesIds,
+            CancellationToken cancellationToken = default);
 
-        SesionFypDto? Obtener(
+        Task<SesionFypDto?> ObtenerAsync(
             Guid sesionId,
-            int usuarioId);
+            int usuarioId,
+            CancellationToken cancellationToken = default);
     }
 }

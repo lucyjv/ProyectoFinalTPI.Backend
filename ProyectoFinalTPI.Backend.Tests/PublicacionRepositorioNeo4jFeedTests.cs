@@ -87,7 +87,7 @@ public class PublicacionRepositorioNeo4jFeedTests
 
         //Act
         var resultado = await repositorio.ObtenerRecomendacionesFeed(
-            10, 50, vistasDesde, new PesosRecomendacionFeedDto(4, 5, 2));
+            10, 50, vistasDesde, new PesosRecomendacionFeedDto(4, 5, 2), new[] { 1, 2 }, new LimitesExploracionFeedDto(20, 25));
 
         //Assert
         Assert.Empty(resultado);
@@ -113,7 +113,7 @@ public class PublicacionRepositorioNeo4jFeedTests
     #region Interacciones del Feed
 
     [Fact]
-    public async Task QueInteraccionesConsultenLikesPuntuacionesYVistas()
+    public async Task QueSemillasConsultenLikesYPuntuacionesSinCargarVistas()
     {
         //Arrange
         ConfigurarCursor();
@@ -121,14 +121,19 @@ public class PublicacionRepositorioNeo4jFeedTests
         var repositorio = new PublicacionRepositorio(contexto, _driverMock.Object);
 
         //Act
-        var resultado = await repositorio.ObtenerInteraccionesFeed(10);
+        var resultado = await repositorio.ObtenerSemillasFeed(10, 0, 100);
 
         //Assert
         Assert.Empty(resultado);
         Assert.NotNull(_queryEjecutada);
         Assert.Contains("LE_GUSTA", _queryEjecutada);
         Assert.Contains("PUNTUO", _queryEjecutada);
-        Assert.Contains("VIO", _queryEjecutada);
+        Assert.DoesNotContain("VIO", _queryEjecutada);
+        Assert.DoesNotContain("CALL", _queryEjecutada);
+        Assert.DoesNotContain("UNION", _queryEjecutada);
+        Assert.Contains("[interaccion:LE_GUSTA|PUNTUO]", _queryEjecutada);
+        Assert.Contains("LIMIT $cantidadMaxima", _queryEjecutada);
+        Assert.Equal(100, Parametro<int>(_parametrosEjecutados, "cantidadMaxima"));
         Assert.Equal(10, Parametro<int>(_parametrosEjecutados, "usuarioId"));
     }
 
@@ -154,7 +159,7 @@ public class PublicacionRepositorioNeo4jFeedTests
         var repositorio = new PublicacionRepositorio(contexto, _driverMock.Object);
 
         //Act
-        var interaccion = Assert.Single(await repositorio.ObtenerInteraccionesFeed(10));
+        var interaccion = Assert.Single(await repositorio.ObtenerSemillasFeed(10, 0, 100));
 
         //Assert
         Assert.Equal(42, interaccion.PublicacionId);

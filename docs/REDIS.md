@@ -4,6 +4,8 @@ Alcance: sesiones del feed (30 minutos), datos públicos del perfil y resúmenes
 
 El backend usa los contratos `ISesionFypRepositorio`, `IPerfilPublicoConsulta` e `IResumenPublicacionConsulta`. Las implementaciones de infraestructura gestionan Redis y EF; los servicios conservan sus operaciones y completan contadores, logros y estados del visitante en cada petición. No se serializan credenciales de usuarios.
 
+Las sesiones del feed usan `CrearAsync` y `ObtenerAsync`, con cancelación. La optimización del ranking y sus límites se detallan en [OPTIMIZACION-FEED.md](OPTIMIZACION-FEED.md).
+
 ## Configuración
 
 Fuera de Compose, Redis está desactivado por defecto. Para habilitarlo:

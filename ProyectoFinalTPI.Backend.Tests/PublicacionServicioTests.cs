@@ -28,6 +28,7 @@ namespace ProyectoFinalTPI.Backend.Tests
         private readonly List<SesionFypDto> _sesionesCreadas = new();
         private readonly List<(int PublicacionId, int ReposteadorId, string ReposteadorUsername, DateTime Fecha)> _repostsSeguidos = new();
         private int? _ultimoPuntajeGuardado;
+        private readonly List<InteraccionFeedDto> _interaccionesFeed = new();
         private readonly PublicacionServicio _servicio;
 
         public PublicacionServicioTests()
@@ -72,21 +73,63 @@ namespace ProyectoFinalTPI.Backend.Tests
                     _catalogoPublicaciones.Where(p => ids.Contains(p.Id)).ToList());
 
             _publicacionRepositorioMock
-                .Setup(r => r.ObtenerInteraccionesFeed(It.IsAny<int>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(Array.Empty<InteraccionFeedDto>());
-
+                .Setup(r => r.ObtenerSemillasFeed(It.IsAny<int>(), It.IsAny<long>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((int _, long _, int maximo, CancellationToken _) => (IReadOnlyList<InteraccionFeedDto>)_interaccionesFeed
+                    .Where(i => i.DioLike || i.MiPuntuacion >= 3).Take(maximo).ToArray());
             _publicacionRepositorioMock
-                .Setup(r => r.ObtenerRecomendacionesFeed(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<long>(), It.IsAny<PesosRecomendacionFeedDto>(), It.IsAny<CancellationToken>()))
+                .Setup(r => r.ObtenerInteraccionesCandidatasFeed(It.IsAny<int>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((int _, IReadOnlyCollection<int> ids, CancellationToken _) =>
+                    (IReadOnlyList<InteraccionFeedDto>)_interaccionesFeed.Where(i => ids.Contains(i.PublicacionId)).ToArray());
+            _publicacionRepositorioMock
+                .Setup(r => r.ObtenerVistasFeed(It.IsAny<int>(), It.IsAny<long>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((int _, long desde, bool recientes, int maximo, CancellationToken _) =>
+                    (IReadOnlyList<InteraccionFeedDto>)_interaccionesFeed.Where(i => i.UltimaImpresionUnixMs.HasValue
+                        && (i.UltimaImpresionUnixMs >= desde) == recientes)
+                        .OrderBy(i => i.UltimaImpresionUnixMs).Take(maximo).ToArray());
+            _publicacionRepositorioMock
+                .Setup(r => r.ObtenerCaracteristicasFeed(It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((IReadOnlyCollection<int> ids, CancellationToken _) => _catalogoPublicaciones
+                    .Where(p => ids.Contains(p.Id)).Select(Caracteristicas).ToList());
+            _publicacionRepositorioMock
+                .Setup(r => r.ObtenerCandidatasGeneralesFeed(It.IsAny<DateTime>(), It.IsAny<CursorCronologicoDto?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((DateTime corte, CursorCronologicoDto? cursor, int maximo, CancellationToken _) => _catalogoPublicaciones
+                    .Where(p => p.FechaCreacion <= corte && (cursor is null || p.FechaCreacion < cursor.FechaCreacion
+                        || (p.FechaCreacion == cursor.FechaCreacion && p.Id < cursor.Id)))
+                    .OrderByDescending(p => p.FechaCreacion).ThenByDescending(p => p.Id).Take(maximo).Select(Caracteristicas).ToList());
+            _publicacionRepositorioMock
+                .Setup(r => r.ObtenerIdsVisibles(It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((IReadOnlyCollection<int> ids, CancellationToken _) => _catalogoPublicaciones.Where(p => ids.Contains(p.Id)).Select(p => p.Id).ToList());
+            _publicacionRepositorioMock
+                .Setup(r => r.ObtenerResumenInteraccionesFeed(It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                .Returns(async (IReadOnlyCollection<int> ids, int usuario, CancellationToken ct) =>
+                {
+                    var likes = await _publicacionRepositorioMock.Object.ObtenerResumenLikes(ids, usuario, ct);
+                    var puntos = await _publicacionRepositorioMock.Object.ObtenerResumenPuntuaciones(ids, usuario, ct);
+                    var reposts = await _publicacionRepositorioMock.Object.ObtenerResumenReposts(ids, usuario, ct);
+                    var guardados = await _publicacionRepositorioMock.Object.ObtenerResumenGuardados(ids, usuario, ct);
+                    return (IReadOnlyDictionary<int, ResumenInteraccionesFeedDto>)ids.Distinct().ToDictionary(id => id, id => new ResumenInteraccionesFeedDto
+                    {
+                        CantidadLikes = likes[id].Cantidad, DioLike = likes[id].DioLike,
+                        PuntosTotales = puntos[id].PuntosTotales, MiPuntuacion = puntos[id].MiPuntuacion,
+                        CantidadReposts = reposts[id].Cantidad, DioRepost = reposts[id].DioRepost, Guardada = guardados[id]
+                    });
+                });
+            _publicacionRepositorioMock
+                .Setup(r => r.ObtenerFeedSeguidos(It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CursorCronologicoDto?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new List<PublicacionDetalleDto>());
+            _publicacionRepositorioMock
+                .Setup(r => r.ObtenerRepostsDeSeguidosPaginados(It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CursorCronologicoDto?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((IReadOnlyCollection<int> autores, CursorCronologicoDto? cursor, int maximo, CancellationToken _) =>
+                    (IReadOnlyList<(int PublicacionId, int ReposteadorId, string ReposteadorUsername, DateTime Fecha)>)_repostsSeguidos
+                        .Where(r => autores.Contains(r.ReposteadorId) && (cursor is null || r.Fecha < cursor.FechaCreacion
+                            || (r.Fecha == cursor.FechaCreacion && (r.PublicacionId < cursor.Id
+                                || (r.PublicacionId == cursor.Id && r.ReposteadorId < cursor.ReposteadorId)))))
+                        .OrderByDescending(r => r.Fecha).ThenByDescending(r => r.PublicacionId).ThenByDescending(r => r.ReposteadorId)
+                        .Take(maximo + 1).ToArray());
+            _publicacionRepositorioMock
+                .Setup(r => r.ObtenerRecomendacionesFeed(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<long>(), It.IsAny<PesosRecomendacionFeedDto>(),
+                    It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<LimitesExploracionFeedDto>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Array.Empty<RecomendacionPublicacionDto>());
-
-            _publicacionRepositorioMock
-                .Setup(r => r.ObtenerPublicacionesParaVos(It.IsAny<IReadOnlyCollection<CategoriaEnum>>(), It.IsAny<DateTime>(), It.IsAny<CursorCronologicoDto?>(), It.IsAny<int>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync((IReadOnlyCollection<CategoriaEnum> _, DateTime fechaCorte, CursorCronologicoDto? _, int limite, IReadOnlyCollection<int> excluirIds, CancellationToken _) =>
-                    _catalogoPublicaciones
-                        .Where(p => p.FechaCreacion <= fechaCorte && !excluirIds.Contains(p.Id))
-                        .OrderByDescending(p => p.FechaCreacion).ThenByDescending(p => p.Id)
-                        .Take(limite + 1)
-                        .ToList());
 
             _publicacionRepositorioMock
                 .Setup(r => r.PuntuarPublicacion(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
@@ -118,8 +161,8 @@ namespace ProyectoFinalTPI.Backend.Tests
 
             // Configuración en memoria para simular sesiones FYP
             _sesionFypRepositorioMock
-                .Setup(s => s.Crear(It.IsAny<int>(), It.IsAny<IReadOnlyCollection<int>>()))
-                .Returns((int usuarioId, IReadOnlyCollection<int> publicacionesIds) =>
+                .Setup(s => s.CrearAsync(It.IsAny<int>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((int usuarioId, IReadOnlyCollection<int> publicacionesIds, CancellationToken _) =>
                 {
                     var sesion = new SesionFypDto(Guid.NewGuid(), usuarioId, DateTime.UtcNow.AddMinutes(30), publicacionesIds);
                     _sesionesCreadas.Add(sesion);
@@ -127,8 +170,8 @@ namespace ProyectoFinalTPI.Backend.Tests
                 });
 
             _sesionFypRepositorioMock
-                .Setup(s => s.Obtener(It.IsAny<Guid>(), It.IsAny<int>()))
-                .Returns((Guid sesionId, int usuarioId) =>
+                .Setup(s => s.ObtenerAsync(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((Guid sesionId, int usuarioId, CancellationToken _) =>
                     _sesionesCreadas.SingleOrDefault(s => s.Id == sesionId && s.UsuarioId == usuarioId));
 
             _servicio = new PublicacionServicio(
@@ -141,6 +184,12 @@ namespace ProyectoFinalTPI.Backend.Tests
                 _notificacionMock.Object,
                 _logroMock.Object);
         }
+
+        private static CaracteristicasFeedDto Caracteristicas(PublicacionDetalleDto p) => new()
+        {
+            Id = p.Id, Categoria = p.Categoria, FechaCreacion = p.FechaCreacion,
+            Latitud = p.Lugar?.Latitud ?? 0, Longitud = p.Lugar?.Longitud ?? 0
+        };
 
         #region Helpers Reutilizables
 
@@ -606,7 +655,7 @@ namespace ProyectoFinalTPI.Backend.Tests
         {
             //Arrange
             _publicacionRepositorioMock
-                .Setup(r => r.ObtenerRecomendacionesFeed(10, 500, It.IsAny<long>(), It.IsAny<PesosRecomendacionFeedDto>(), It.IsAny<CancellationToken>()))
+                .Setup(r => r.ObtenerRecomendacionesFeed(10, 500, It.IsAny<long>(), It.IsAny<PesosRecomendacionFeedDto>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<LimitesExploracionFeedDto>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new[]
                 {
                     new RecomendacionPublicacionDto { PublicacionId = 7, PuntajeColaborativo = 2 },
@@ -635,7 +684,7 @@ namespace ProyectoFinalTPI.Backend.Tests
         {
             //Arrange
             _publicacionRepositorioMock
-                .Setup(r => r.ObtenerRecomendacionesFeed(10, 500, It.IsAny<long>(), It.IsAny<PesosRecomendacionFeedDto>(), It.IsAny<CancellationToken>()))
+                .Setup(r => r.ObtenerRecomendacionesFeed(10, 500, It.IsAny<long>(), It.IsAny<PesosRecomendacionFeedDto>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<LimitesExploracionFeedDto>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new[]
                 {
                     new RecomendacionPublicacionDto { PublicacionId = 7, PuntajeColaborativo = 3 },
@@ -657,7 +706,7 @@ namespace ProyectoFinalTPI.Backend.Tests
 
             //Assert
             Assert.Equal(3, Assert.Single(result.Items).Id);
-            _publicacionRepositorioMock.Verify(r => r.ObtenerRecomendacionesFeed(10, 500, It.IsAny<long>(), It.IsAny<PesosRecomendacionFeedDto>(), It.IsAny<CancellationToken>()), Times.Once);
+            _publicacionRepositorioMock.Verify(r => r.ObtenerRecomendacionesFeed(10, 500, It.IsAny<long>(), It.IsAny<PesosRecomendacionFeedDto>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<LimitesExploracionFeedDto>(), It.IsAny<CancellationToken>()), Times.Once);
             Assert.Single(_sesionesCreadas);
         }
 
@@ -666,7 +715,7 @@ namespace ProyectoFinalTPI.Backend.Tests
         {
             //Arrange
             _publicacionRepositorioMock
-                .SetupSequence(r => r.ObtenerRecomendacionesFeed(10, 500, It.IsAny<long>(), It.IsAny<PesosRecomendacionFeedDto>(), It.IsAny<CancellationToken>()))
+                .SetupSequence(r => r.ObtenerRecomendacionesFeed(10, 500, It.IsAny<long>(), It.IsAny<PesosRecomendacionFeedDto>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<LimitesExploracionFeedDto>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new[]
                 {
                     new RecomendacionPublicacionDto { PublicacionId = 7, PuntajeColaborativo = 2 },
@@ -690,7 +739,7 @@ namespace ProyectoFinalTPI.Backend.Tests
             var result = await _servicio.ObtenerPublicacionesParaVos(10, null, 1);
 
             //Assert
-            _publicacionRepositorioMock.Verify(r => r.ObtenerRecomendacionesFeed(10, 500, It.IsAny<long>(), It.IsAny<PesosRecomendacionFeedDto>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
+            _publicacionRepositorioMock.Verify(r => r.ObtenerRecomendacionesFeed(10, 500, It.IsAny<long>(), It.IsAny<PesosRecomendacionFeedDto>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<LimitesExploracionFeedDto>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
             Assert.Equal(2, _sesionesCreadas.Count);
             Assert.NotEqual(_sesionesCreadas[0].Id, _sesionesCreadas[1].Id);
             Assert.Equal(3, Assert.Single(result.Items).Id);
@@ -700,7 +749,7 @@ namespace ProyectoFinalTPI.Backend.Tests
         public async Task QueNoSeContinueUnaSesionConUnaPosicionFueraDeRango()
         {
             //Arrange
-            var sesion = _sesionFypRepositorioMock.Object.Crear(10, new[] { 7, 3 });
+            var sesion = await _sesionFypRepositorioMock.Object.CrearAsync(10, new[] { 7, 3 });
             var cursorDto = new CursorFypDto { SesionId = sesion.Id, Posicion = 3 };
             var cursor = Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(cursorDto))
                 .TrimEnd('=').Replace('+', '-').Replace('/', '_');
@@ -715,7 +764,7 @@ namespace ProyectoFinalTPI.Backend.Tests
         {
             //Arrange
             _publicacionRepositorioMock
-                .Setup(r => r.ObtenerRecomendacionesFeed(10, 500, It.IsAny<long>(), It.IsAny<PesosRecomendacionFeedDto>(), It.IsAny<CancellationToken>()))
+                .Setup(r => r.ObtenerRecomendacionesFeed(10, 500, It.IsAny<long>(), It.IsAny<PesosRecomendacionFeedDto>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<LimitesExploracionFeedDto>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new[]
                 {
                     new RecomendacionPublicacionDto { PublicacionId = 9, PuntajeColaborativo = 3 },
@@ -746,7 +795,7 @@ namespace ProyectoFinalTPI.Backend.Tests
                 .ToArray();
 
             _publicacionRepositorioMock
-                .Setup(r => r.ObtenerRecomendacionesFeed(10, 500, It.IsAny<long>(), It.IsAny<PesosRecomendacionFeedDto>(), It.IsAny<CancellationToken>()))
+                .Setup(r => r.ObtenerRecomendacionesFeed(10, 500, It.IsAny<long>(), It.IsAny<PesosRecomendacionFeedDto>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<LimitesExploracionFeedDto>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(recomendaciones);
 
             _catalogoPublicaciones.AddRange(new[]
@@ -804,9 +853,7 @@ namespace ProyectoFinalTPI.Backend.Tests
         public async Task QueUnaPuntuacionAltaAporteAfinidadDeCategoriaSinLimitarLaDecada()
         {
             //Arrange
-            _publicacionRepositorioMock
-                .Setup(r => r.ObtenerInteraccionesFeed(10, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new[]
+            _interaccionesFeed.AddRange(new[]
                 {
                     new InteraccionFeedDto { PublicacionId = 1, MiPuntuacion = 5 }
                 });
@@ -829,9 +876,7 @@ namespace ProyectoFinalTPI.Backend.Tests
         public async Task QueUnLikeFavorezcaPublicacionesCercanasAlLugarDeLaSemilla()
         {
             //Arrange
-            _publicacionRepositorioMock
-                .Setup(r => r.ObtenerInteraccionesFeed(10, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new[]
+            _interaccionesFeed.AddRange(new[]
                 {
                     new InteraccionFeedDto { PublicacionId = 1, DioLike = true }
                 });
@@ -855,7 +900,7 @@ namespace ProyectoFinalTPI.Backend.Tests
         {
             //Arrange
             _publicacionRepositorioMock
-                .Setup(r => r.ObtenerRecomendacionesFeed(10, 500, It.IsAny<long>(), It.IsAny<PesosRecomendacionFeedDto>(), It.IsAny<CancellationToken>()))
+                .Setup(r => r.ObtenerRecomendacionesFeed(10, 500, It.IsAny<long>(), It.IsAny<PesosRecomendacionFeedDto>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<LimitesExploracionFeedDto>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new[]
                 {
                     new RecomendacionPublicacionDto { PublicacionId = 2, PuntajeColaborativo = 10 },
@@ -898,8 +943,8 @@ namespace ProyectoFinalTPI.Backend.Tests
 
             PesosRecomendacionFeedDto? pesosEnviados = null;
             _publicacionRepositorioMock
-                .Setup(r => r.ObtenerRecomendacionesFeed(10, 500, It.IsAny<long>(), It.IsAny<PesosRecomendacionFeedDto>(), It.IsAny<CancellationToken>()))
-                .Callback<int, int, long, PesosRecomendacionFeedDto, CancellationToken>((_, _, _, pesos, _) => pesosEnviados = pesos)
+                .Setup(r => r.ObtenerRecomendacionesFeed(10, 500, It.IsAny<long>(), It.IsAny<PesosRecomendacionFeedDto>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<LimitesExploracionFeedDto>(), It.IsAny<CancellationToken>()))
+                .Callback<int, int, long, PesosRecomendacionFeedDto, IReadOnlyCollection<int>, LimitesExploracionFeedDto, CancellationToken>((_, _, _, pesos, _, _, _) => pesosEnviados = pesos)
                 .ReturnsAsync(Array.Empty<RecomendacionPublicacionDto>());
 
             //Act
@@ -914,16 +959,14 @@ namespace ProyectoFinalTPI.Backend.Tests
         public async Task QueElFeedExcluyaLikesYPuntuacionesInclusoSiSonRecomendados()
         {
             //Arrange
-            _publicacionRepositorioMock
-                .Setup(r => r.ObtenerInteraccionesFeed(10, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new[]
+            _interaccionesFeed.AddRange(new[]
                 {
                     new InteraccionFeedDto { PublicacionId = 1, DioLike = true },
                     new InteraccionFeedDto { PublicacionId = 2, MiPuntuacion = 1 }
                 });
 
             _publicacionRepositorioMock
-                .Setup(r => r.ObtenerRecomendacionesFeed(10, 500, It.IsAny<long>(), It.IsAny<PesosRecomendacionFeedDto>(), It.IsAny<CancellationToken>()))
+                .Setup(r => r.ObtenerRecomendacionesFeed(10, 500, It.IsAny<long>(), It.IsAny<PesosRecomendacionFeedDto>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<LimitesExploracionFeedDto>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new[]
                 {
                     new RecomendacionPublicacionDto { PublicacionId = 1, PuntajeColaborativo = 3 },
@@ -950,9 +993,7 @@ namespace ProyectoFinalTPI.Backend.Tests
         {
             //Arrange
             var ahora = DateTimeOffset.UtcNow;
-            _publicacionRepositorioMock
-                .Setup(r => r.ObtenerInteraccionesFeed(10, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new[]
+            _interaccionesFeed.AddRange(new[]
                 {
                     new InteraccionFeedDto { PublicacionId = 2, UltimaImpresionUnixMs = ahora.AddDays(-15).ToUnixTimeMilliseconds() },
                     new InteraccionFeedDto { PublicacionId = 3, UltimaImpresionUnixMs = ahora.AddDays(-1).ToUnixTimeMilliseconds() }
@@ -976,9 +1017,7 @@ namespace ProyectoFinalTPI.Backend.Tests
         public async Task QueUnaVistaRecienteCompleteLaPaginaSiNoHayContenidoNuevo()
         {
             //Arrange
-            _publicacionRepositorioMock
-                .Setup(r => r.ObtenerInteraccionesFeed(10, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new[]
+            _interaccionesFeed.AddRange(new[]
                 {
                     new InteraccionFeedDto
                     {
@@ -1008,8 +1047,8 @@ namespace ProyectoFinalTPI.Backend.Tests
             long vistasDesdeEnviadas = 0;
 
             _publicacionRepositorioMock
-                .Setup(r => r.ObtenerRecomendacionesFeed(10, 500, It.IsAny<long>(), It.IsAny<PesosRecomendacionFeedDto>(), It.IsAny<CancellationToken>()))
-                .Callback<int, int, long, PesosRecomendacionFeedDto, CancellationToken>((_, _, vistas, _, _) => vistasDesdeEnviadas = vistas)
+                .Setup(r => r.ObtenerRecomendacionesFeed(10, 500, It.IsAny<long>(), It.IsAny<PesosRecomendacionFeedDto>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<LimitesExploracionFeedDto>(), It.IsAny<CancellationToken>()))
+                .Callback<int, int, long, PesosRecomendacionFeedDto, IReadOnlyCollection<int>, LimitesExploracionFeedDto, CancellationToken>((_, _, vistas, _, _, _, _) => vistasDesdeEnviadas = vistas)
                 .ReturnsAsync(Array.Empty<RecomendacionPublicacionDto>());
 
             //Act
@@ -1018,6 +1057,137 @@ namespace ProyectoFinalTPI.Backend.Tests
             //Assert
             var despues = DateTimeOffset.UtcNow.AddDays(-14).ToUnixTimeMilliseconds();
             Assert.InRange(vistasDesdeEnviadas, antes, despues);
+        }
+
+        #endregion
+
+        #region Optimización y Paginación del Feed
+
+        [Fact]
+        public async Task QueElRankingNoCargueDetallesHastaConstruirLaPagina()
+        {
+            //Arrange
+            _catalogoPublicaciones.AddRange(Enumerable.Range(1, 1000).Select(id => PublicacionFeed(id, CategoriaEnum.Cine, 2000)));
+            //Act
+            var resultado = await _servicio.ObtenerPublicacionesParaVos(10, null, 20);
+            //Assert
+            Assert.Equal(20, resultado.Items.Count);
+            Assert.Equal(500, Assert.Single(_sesionesCreadas).PublicacionesIds.Count);
+            _publicacionRepositorioMock.Verify(r => r.ObtenerPublicacionesPorIds(
+                It.Is<IReadOnlyCollection<int>>(ids => ids.Count == 21), It.IsAny<CancellationToken>()), Times.Once);
+            _publicacionRepositorioMock.Verify(r => r.ObtenerVistasFeed(It.IsAny<int>(), It.IsAny<long>(),
+                It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task QueUnaPuntuacionFueraDeLasSemillasSigaExcluida()
+        {
+            //Arrange
+            _interaccionesFeed.Add(new() { PublicacionId = 2, MiPuntuacion = 1 });
+            _catalogoPublicaciones.AddRange(new[] { PublicacionFeed(1, CategoriaEnum.Cine, 2000), PublicacionFeed(2, CategoriaEnum.Cine, 2000) });
+            //Act
+            var resultado = await _servicio.ObtenerPublicacionesParaVos(10, null, 20);
+            //Assert
+            Assert.Equal(1, Assert.Single(resultado.Items).Id);
+            _publicacionRepositorioMock.Verify(r => r.ObtenerInteraccionesCandidatasFeed(10,
+                It.Is<IReadOnlyCollection<int>>(ids => ids.Contains(2)), It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task QueElHistorialDeSemillasTengaVentanaYTope()
+        {
+            //Arrange
+            var antes = DateTimeOffset.UtcNow.AddDays(-180).ToUnixTimeMilliseconds();
+            //Act
+            await _servicio.ObtenerPublicacionesParaVos(10, null, 20);
+            var despues = DateTimeOffset.UtcNow.AddDays(-180).ToUnixTimeMilliseconds();
+            _publicacionRepositorioMock.Verify(r => r.ObtenerSemillasFeed(10,
+                It.Is<long>(desde => desde >= antes && desde <= despues), 100, It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task QueLaBusquedaGeneralNoRecorraTodoUnHistorialDePuntuaciones()
+        {
+            //Arrange
+            _catalogoPublicaciones.AddRange(Enumerable.Range(1, 2500).Select(id => PublicacionFeed(id, CategoriaEnum.Cine, 2000)));
+            _interaccionesFeed.AddRange(Enumerable.Range(1, 2500).Select(id => new InteraccionFeedDto { PublicacionId = id, MiPuntuacion = 1 }));
+            //Act
+            var resultado = await _servicio.ObtenerPublicacionesParaVos(10, null, 20);
+            //Assert
+            Assert.Empty(resultado.Items);
+            _publicacionRepositorioMock.Verify(r => r.ObtenerCandidatasGeneralesFeed(It.IsAny<DateTime>(),
+                It.IsAny<CursorCronologicoDto?>(), 500, It.IsAny<CancellationToken>()), Times.Exactly(4));
+            _publicacionRepositorioMock.Verify(r => r.ObtenerPublicacionesPorIds(It.IsAny<IReadOnlyCollection<int>>(),
+                It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task QueLasPaginasConCursorIncluyanGuardadosYReposts()
+        {
+            //Arrange
+            _catalogoPublicaciones.AddRange(new[] { PublicacionFeed(1, CategoriaEnum.Cine, 2000), PublicacionFeed(2, CategoriaEnum.Cine, 2000) });
+            _publicacionRepositorioMock.Setup(r => r.ObtenerResumenInteraccionesFeed(It.IsAny<IReadOnlyCollection<int>>(),
+                10, It.IsAny<CancellationToken>())).ReturnsAsync(new Dictionary<int, ResumenInteraccionesFeedDto>
+                { [2] = new() { Guardada = true, DioRepost = true, CantidadReposts = 7 } });
+            //Act
+            var resultado = await _servicio.ObtenerPublicacionesParaVos(10, null, 1);
+            //Assert
+            Assert.NotNull(resultado.SiguienteCursor);
+            var publicacion = Assert.Single(resultado.Items);
+            Assert.True(publicacion.Guardada);
+            Assert.True(publicacion.DioRepost);
+            Assert.Equal(7, publicacion.CantidadReposts);
+        }
+
+        [Fact]
+        public async Task QueRegistrarImpresionesConsulteSoloIdsVisibles()
+        {
+            //Arrange
+            ConfigurarUsuarioExiste(10);
+            _catalogoPublicaciones.Add(PublicacionFeed(1, CategoriaEnum.Cine, 2000));
+            //Act
+            await _servicio.RegistrarImpresionesFeed(10, new[] { 1, 2 });
+            _publicacionRepositorioMock.Verify(r => r.ObtenerPublicacionesPorIds(It.IsAny<IReadOnlyCollection<int>>(),
+                It.IsAny<CancellationToken>()), Times.Never);
+            _publicacionRepositorioMock.Verify(r => r.RegistrarImpresionesFeed(10,
+                It.Is<IReadOnlyCollection<int>>(ids => ids.SequenceEqual(new[] { 1 })), It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task QueDosRepostsDeLaMismaPublicacionYFechaNoSePierdanEntrePaginas()
+        {
+            //Arrange
+            var fecha = DateTime.UtcNow;
+            _seguimientoMock.Setup(s => s.ObtenerSeguidosIdsAsync(10, It.IsAny<CancellationToken>())).ReturnsAsync(new[] { 11, 12 });
+            _catalogoPublicaciones.Add(PublicacionFeed(42, CategoriaEnum.Cine, 2000));
+            _repostsSeguidos.Add((42, 12, "usuario12", fecha));
+            _repostsSeguidos.Add((42, 11, "usuario11", fecha));
+            //Act
+            var primera = await _servicio.ObtenerFeedSeguidos(10, null, 1);
+            var segunda = await _servicio.ObtenerFeedSeguidos(10, primera.SiguienteCursor, 1);
+            //Assert
+            Assert.Equal(12, Assert.Single(primera.Items).ReposteadoPor!.UsuarioId);
+            Assert.Equal(11, Assert.Single(segunda.Items).ReposteadoPor!.UsuarioId);
+            Assert.Null(segunda.SiguienteCursor);
+            _publicacionRepositorioMock.Verify(r => r.ObtenerRepostsDeSeguidos(It.IsAny<IReadOnlyCollection<int>>(),
+                It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task QueUnLoteDeRepostsOcultosConserveUnCursorParaSeguirAvanzando()
+        {
+            //Arrange
+            _seguimientoMock.Setup(s => s.ObtenerSeguidosIdsAsync(10, It.IsAny<CancellationToken>())).ReturnsAsync(new[] { 11 });
+            var fecha = DateTime.UtcNow;
+            _repostsSeguidos.AddRange(Enumerable.Range(1, 20).Select(id => (id, 11, "usuario11", fecha.AddSeconds(-id))));
+            //Act
+            var resultado = await _servicio.ObtenerFeedSeguidos(10, null, 1);
+            //Assert
+            Assert.Empty(resultado.Items);
+            Assert.NotNull(resultado.SiguienteCursor);
+            var segunda = await _servicio.ObtenerFeedSeguidos(10, resultado.SiguienteCursor, 1);
+            Assert.Empty(segunda.Items);
+            Assert.NotEqual(resultado.SiguienteCursor, segunda.SiguienteCursor);
         }
 
         #endregion
