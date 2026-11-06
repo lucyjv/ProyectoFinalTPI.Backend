@@ -1,9 +1,12 @@
+using ProyectoFinalTPI.Backend.Infraestructura;
+using ProyectoFinalTPI.Backend.Repositorio.Cache;
 using System.Text;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Neo4j.Driver;
+using ProyectoFinalTPI.Backend.Interfaces.Configuracion;
 using NetTopologySuite;
 using Npgsql;
 using ProyectoFinalTPI.Backend.Entidades;
@@ -18,11 +21,7 @@ using ProyectoFinalTPI.Backend.Swagger;
 
 var builder = WebApplication.CreateBuilder(args);
 
-if (args.Contains("--probar-gemini"))
-{
-    await PruebaGemini.Ejecutar(builder.Configuration);
-    return;
-}
+ProyectoFinalTPI.Backend.Monitoreo.RegistroMonitoreo.Agregar(builder);
 
 if (args.Contains("--previsualizar-reprocesamiento"))
 {
@@ -67,11 +66,14 @@ builder.Services.AddControllersWithViews(options =>
     options.ValueProviderFactories.Insert(0, new ProyectoFinalTPI.Backend.Requests.InvariantFormValueProviderFactory());
 });
 
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
+builder.Services.AddDbContext<ApplicationDbContext>((provider, options) =>
+{
+    if (builder.Configuration.GetValue<bool>("Redis:Habilitado")) options.AddInterceptors(provider.GetRequiredService<InvalidacionPublicaInterceptor>());
     options.UseNpgsql(
         builder.Configuration.GetConnectionString("PostgresConnection"),
         npgsqlOptions => npgsqlOptions.UseNetTopologySuite()
-    ));
+    );
+});
 
 builder.Services.AddSingleton<IDriver>(provider =>
 {
@@ -83,6 +85,11 @@ builder.Services.AddSingleton<IDriver>(provider =>
 });
 
 builder.Services.AddScoped<IPublicacionRepositorio, PublicacionRepositorio>();
+builder.Services.AddOptions<OpcionesNeo4j>()
+    .Bind(builder.Configuration.GetSection(OpcionesNeo4j.Seccion))
+    .Validate(opciones => opciones.TiempoMaximoConsultaFeedSegundos is > 0 and <= 120,
+        "Neo4j:TiempoMaximoConsultaFeedSegundos debe estar entre 1 y 120.")
+    .ValidateOnStart();
 builder.Services.AddScoped<IRelacionRecuerdosRepositorio, RelacionRecuerdosRepositorio>();
 builder.Services.AddScoped<IRelacionRecuerdosServicio, RelacionRecuerdosServicio>();
 builder.Services.AddScoped<IMomentoRepositorio, MomentoRepositorio>();
@@ -92,41 +99,31 @@ builder.Services.AddScoped<IGestionDuplicadosMomentoServicio, GestionDuplicadosM
 builder.Services.AddScoped<IExploracionMomentosRepositorio, MomentoRepositorio>();
 builder.Services.AddScoped<IExploracionMomentosServicio, ExploracionMomentosServicio>();
 builder.Services.AddSingleton(TimeProvider.System);
-builder.Services.AddOptions<OpcionesAnalisisRecuerdos>()
-    .Bind(builder.Configuration.GetSection("AnalisisRecuerdos"))
-    .Configure(o =>
-    {
-        if (builder.Environment.EnvironmentName == "Testing" && builder.Configuration["AnalisisRecuerdos:Habilitado"] == null)
-            o.Habilitado = false;
-    })
-    .ValidateDataAnnotations()
-    .Validate(o => o.ReservaSegundos > o.TiempoMaximoSegundos + 5, "La reserva debe superar el tiempo máximo de análisis en más de 5 segundos.")
-    .ValidateOnStart();
+builder.Services.AddAnalisisRecuerdosIa(builder.Configuration);
 builder.Services.AddScoped<ITrabajoAnalisisRepositorio, TrabajoAnalisisRepositorio>();
 builder.Services.AddScoped<IReprocesamientoRecuerdosRepositorio, ReprocesamientoRecuerdosRepositorio>();
 builder.Services.AddScoped<IReprocesamientoRecuerdosServicio, ReprocesamientoRecuerdosServicio>();
-builder.Services.AddScoped<ICatalogoAnalisisRepositorio, CatalogoAnalisisRepositorio>();
-builder.Services.AddOptions<OpcionesGemini>()
-    .Bind(builder.Configuration.GetSection("Gemini"))
-    .Configure(o => { if (builder.Environment.EnvironmentName == "Testing") o.Habilitado = false; })
-    .ValidateDataAnnotations()
-    .Validate(o => !o.Habilitado || !string.IsNullOrWhiteSpace(o.ApiKey), "Gemini:ApiKey es obligatoria al habilitar Gemini.")
-    .ValidateOnStart();
-builder.Services.AddSingleton<ControlCuotaGemini>();
-builder.Services.AddHttpClient<AnalizadorRecuerdoGemini>(http => http.Timeout = Timeout.InfiniteTimeSpan)
-    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
-builder.Services.AddScoped<IAnalizadorRecuerdo>(sp =>
-    sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<OpcionesGemini>>().Value.Habilitado
-        ? sp.GetRequiredService<AnalizadorRecuerdoGemini>() : new AnalizadorRecuerdoSinProveedor());
+builder.Services.AddScoped<ICatalogoAnalisisRepositorio, MomentoRepositorio>();
 builder.Services.AddScoped<IAnalisisRecuerdosServicio, AnalisisRecuerdosServicio>();
 builder.Services.AddHostedService<AnalisisRecuerdosWorker>();
 builder.Services.Configure<OpcionesPublicacion>(
     builder.Configuration.GetSection(OpcionesPublicacion.Seccion));
 builder.Services.AddScoped<IPublicacionServicio, PublicacionServicio>();
+builder.Services.AddScoped<IGeneradorRankingFeed, GeneradorRankingFeed>();
+builder.Services.AddSingleton<IProveedorRankingFeed, CoordinadorRankingFeed>();
 builder.Services.AddOptions<FeedRecomendacionesOptions>()
     .Bind(builder.Configuration.GetSection(FeedRecomendacionesOptions.Seccion))
     .Validate(opciones => opciones.DiasDeExclusionDeImpresiones > 0
         && opciones.CantidadMaximaCandidatas > 0
+        && opciones.CantidadMaximaCandidatas <= 2000
+        && opciones.CantidadMaximaSemillas is > 0 and <= 500
+        && opciones.DiasDeHistorialParaSemillas is > 0 and <= 3650
+        && opciones.VecinosPorSemilla is > 0 and <= 100
+        && opciones.PublicacionesPorVecino is > 0 and <= 100
+        && opciones.PorcentajeCandidatasColaborativas is >= 0 and <= 100
+        && opciones.CantidadMaximaLotesGenerales is > 0 and <= 10
+        && opciones.CantidadMaximaLotesSeguidos is > 0 and <= 10
+        && opciones.TiempoMaximoGeneracionSegundos is > 0 and <= 120
         && opciones.PesoLike >= 0
         && opciones.PesoPuntuacion >= 0
         && opciones.PesoEtiqueta >= 0
@@ -144,9 +141,19 @@ builder.Services.AddScoped<IUsuarioRepositorio, UsuarioRepositorio>();
 builder.Services.AddScoped<ISesionUsuarioRepositorio, SesionUsuarioRepositorio>();
 builder.Services.AddScoped<ISeguimientoServicio, SeguimientoServicio>();
 builder.Services.AddScoped<IMultimediaServicio, MultimediaServicio>();
+builder.Services.AddScoped<IFotoPerfilAlmacenamiento, FotoPerfilCloudinaryAlmacenamiento>();
 builder.Services.AddScoped<IInteresServicio, InteresServicio>();
 builder.Services.AddScoped<ILogroServicio, LogroServicio>();
 builder.Services.AddScoped<ILogrosUsuariosRepositorio, LogrosUsuariosRepositorio>();
+
+builder.Services.AddScoped<IAdminPublicacionRepositorio, AdminPublicacionRepositorio>();
+builder.Services.AddScoped<IAdminUsuarioRepositorio, AdminUsuarioRepositorio>();
+builder.Services.AddScoped<IAdminComentarioRepositorio, AdminComentarioRepositorio>();
+builder.Services.AddScoped<IAdminEstadisticaRepositorio, AdminEstadisticaRepositorio>();
+builder.Services.AddScoped<IAdminPublicacionServicio, AdminPublicacionServicio>();
+builder.Services.AddScoped<IAdminUsuarioServicio, AdminUsuarioServicio>();
+builder.Services.AddScoped<IAdminComentarioServicio, AdminComentarioServicio>();
+builder.Services.AddScoped<IAdminEstadisticaServicio, AdminEstadisticaServicio>();
 
 builder.Services.AddScoped<IUsuarioServicio, UsuarioServicio>();
 
@@ -158,9 +165,30 @@ builder.Services.AddHttpClient("GooglePhotos", client => client.Timeout = TimeSp
 builder.Services.AddSingleton<GooglePhotosService>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<GooglePhotosService>());
 
-builder.Services.AddSingleton<
-    ISesionFypRepositorio,
-    SesionFypRepositorio>();
+if (builder.Configuration.GetValue<bool>("Redis:Habilitado"))
+{
+    var conexionRedis = builder.Configuration["Redis:ConnectionString"];
+    if (string.IsNullOrWhiteSpace(conexionRedis))
+        throw new InvalidOperationException("Redis:ConnectionString es obligatoria cuando Redis está habilitado.");
+    builder.Services.AddStackExchangeRedisCache(options =>
+    {
+        options.Configuration = conexionRedis;
+        options.InstanceName = "nostalgiar:v1:";
+    });
+    builder.Services.AddSingleton<ISesionFypRepositorio, SesionFypRedisRepositorio>();
+    builder.Services.AddSingleton<CacheLecturasPublicas>();
+    builder.Services.AddSingleton<ICacheLecturasPublicas>(p => p.GetRequiredService<CacheLecturasPublicas>());
+    builder.Services.AddSingleton<IInvalidadorLecturasPublicas>(p => p.GetRequiredService<CacheLecturasPublicas>());
+    builder.Services.AddSingleton<IDetectorCambiosPublicos, DetectorCambiosPublicos>();
+    builder.Services.AddScoped<IOrigenLecturasPublicas, OrigenLecturasPublicas>();
+    builder.Services.AddScoped<InvalidacionPublicaInterceptor>();
+    builder.Services.AddScoped<IPerfilPublicoConsulta, PerfilPublicoConsulta>();
+    builder.Services.AddScoped<IResumenPublicacionConsulta, ResumenPublicacionConsulta>();
+}
+else
+{
+    builder.Services.AddSingleton<ISesionFypRepositorio, SesionFypRepositorio>();
+}
 
 // Auth
 builder.Services.AddScoped<IAuthServicio, AuthServicio>();
@@ -191,8 +219,13 @@ var claveJwt = builder.Configuration["Jwt:Clave"]
         ? "clave-de-testing-no-usar-en-produccion-32ch"
         : throw new InvalidOperationException("Jwt:Clave no está configurada. Ejecutá: dotnet user-secrets set \"Jwt:Clave\" \"<clave-de-al-menos-32-caracteres>\""));
 
-builder.Services.AddAuthorization(options => options.AddPolicy("AdministrarAnalisis", policy =>
-    policy.RequireAuthenticatedUser().RequireClaim("esAdmin", "true")));
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("AdministrarAnalisis", policy =>
+        policy.RequireAuthenticatedUser().RequireClaim("esAdmin", "true"));
+    options.AddPolicy("AdministrarPanel", policy =>
+        policy.RequireAuthenticatedUser().RequireClaim("esAdmin", "true"));
+});
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -280,6 +313,16 @@ builder.Services.AddSwaggerGen(options =>
 
 var app = builder.Build();
 
+// Inicialización explícita del entorno local de Compose, antes de iniciar workers o HTTP.
+if (args.Contains("--initialize-docker"))
+{
+    if (!app.Environment.IsDevelopment())
+        throw new InvalidOperationException("--initialize-docker requiere el entorno Development.");
+    await ProyectoFinalTPI.Backend.DockerInitializer.EjecutarAsync(app.Services, app.Environment);
+    await app.DisposeAsync();
+    return;
+}
+
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
@@ -298,7 +341,7 @@ if (!app.Environment.IsDevelopment())
 {
     app.UseHttpsRedirection();
 }
-if (app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment() && builder.Configuration.GetValue("Seed:Habilitado", true))
 {
     ProyectoFinalTPI.Backend.DataSeeder.Seed(app.Services, app.Environment);
 }

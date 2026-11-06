@@ -13,9 +13,12 @@ public class GrupoServicioTests
     private readonly Mock<IUsuarioRepositorio> _usuarios = new();
     private readonly Mock<IPublicacionServicio> _publicaciones = new();
 
+    #region Creación de Grupos
+
     [Fact]
-    public async Task CrearAgregaAlCreadorComoPrimerIntegrante()
+    public async Task QueCrearAgregueAlCreadorComoPrimerIntegrante()
     {
+        //Arrange
         var creador = new Usuario_Personal { Id = 7, Username = "creador" };
         _usuarios.Setup(repositorio => repositorio.ObtenerPorIdAsync(creador.Id))
             .ReturnsAsync(creador);
@@ -24,6 +27,7 @@ public class GrupoServicioTests
             .Callback<Grupo, CancellationToken>((grupo, _) => grupo.Id = 15)
             .ReturnsAsync(15);
 
+        //Act
         var resultado = await CrearServicio().Crear(new Grupo
         {
             Nombre = "Viajes inolvidables",
@@ -32,6 +36,7 @@ public class GrupoServicioTests
             CreadorId = creador.Id
         });
 
+        //Assert
         Assert.Equal(15, resultado.Id);
         Assert.True(resultado.EsCreador);
         Assert.True(resultado.EsIntegrante);
@@ -42,16 +47,46 @@ public class GrupoServicioTests
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    [Fact]
-    public async Task BuscarNormalizaElTextoYMapeaLaRelacionDelUsuario()
+    [Theory]
+    [InlineData(1985)]
+    [InlineData(1890)]
+    [InlineData(2030)]
+    public async Task QueCrearRechaceUnaDecadaInvalida(int decada)
     {
+        //Arrange
+        var grupo = new Grupo
+        {
+            Nombre = "Grupo de prueba",
+            Descripcion = "Descripcion",
+            Decada = decada,
+            CreadorId = 10
+        };
+
+        //Act & Assert
+        await Assert.ThrowsAnyAsync<ArgumentException>(() =>
+            CrearServicio().Crear(grupo));
+
+        _grupos.Verify(repositorio => repositorio.Crear(
+            It.IsAny<Grupo>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    #endregion
+
+    #region Búsqueda de Grupos
+
+    [Fact]
+    public async Task QueBuscarNormaliceElTextoYMapeeLaRelacionDelUsuario()
+    {
+        //Arrange
         var grupo = CrearGrupo();
         _grupos.Setup(repositorio => repositorio.Buscar(
                 "Grupo publico", 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync([grupo]);
 
+        //Act
         var resultado = await CrearServicio().Buscar("  Grupo publico  ", 20, grupo.CreadorId);
 
+        //Assert
         var encontrado = Assert.Single(resultado);
         Assert.True(encontrado.EsCreador);
         Assert.True(encontrado.EsIntegrante);
@@ -63,8 +98,9 @@ public class GrupoServicioTests
     [InlineData("a", 20)]
     [InlineData("busqueda", 0)]
     [InlineData("busqueda", 51)]
-    public async Task BuscarRechazaParametrosInvalidos(string texto, int limite)
+    public async Task QueBuscarRechaceParametrosInvalidos(string texto, int limite)
     {
+        //Arrange & Act & Assert
         await Assert.ThrowsAsync<ArgumentException>(() =>
             CrearServicio().Buscar(texto, limite, null));
 
@@ -72,28 +108,14 @@ public class GrupoServicioTests
             It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    [Theory]
-    [InlineData(1985)]
-    [InlineData(1890)]
-    [InlineData(2030)]
-    public async Task CrearRechazaUnaDecadaInvalida(int decada)
-    {
-        await Assert.ThrowsAnyAsync<ArgumentException>(() =>
-            CrearServicio().Crear(new Grupo
-            {
-                Nombre = "Grupo de prueba",
-                Descripcion = "Descripcion",
-                Decada = decada,
-                CreadorId = 10
-            }));
+    #endregion
 
-        _grupos.Verify(repositorio => repositorio.Crear(
-            It.IsAny<Grupo>(), It.IsAny<CancellationToken>()), Times.Never);
-    }
+    #region Membresía y Expulsión
 
     [Fact]
-    public async Task UnirseEsIdempotenteSiElUsuarioYaEsIntegrante()
+    public async Task QueUnirseSeaIdempotenteSiElUsuarioYaEsIntegrante()
     {
+        //Arrange
         var grupo = CrearGrupo();
         _grupos.Setup(repositorio => repositorio.ObtenerPorId(
                 grupo.Id, It.IsAny<CancellationToken>()))
@@ -105,15 +127,18 @@ public class GrupoServicioTests
                 grupo.Id, 22, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
+        //Act
         await CrearServicio().Unirse(grupo.Id, 22);
 
+        //Assert
         _grupos.Verify(repositorio => repositorio.AgregarIntegrante(
             It.IsAny<GrupoIntegrante>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task UnirseAgregaLaMembresiaSinInvitacion()
+    public async Task QueUnirseAgregueLaMembresiaSinInvitacion()
     {
+        //Arrange
         var grupo = CrearGrupo();
         _grupos.Setup(repositorio => repositorio.ObtenerPorId(
                 grupo.Id, It.IsAny<CancellationToken>()))
@@ -125,8 +150,10 @@ public class GrupoServicioTests
                 grupo.Id, 22, It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
 
+        //Act
         await CrearServicio().Unirse(grupo.Id, 22);
 
+        //Assert
         _grupos.Verify(repositorio => repositorio.AgregarIntegrante(
             It.Is<GrupoIntegrante>(integrante =>
                 integrante.GrupoId == grupo.Id && integrante.UsuarioId == 22),
@@ -134,13 +161,15 @@ public class GrupoServicioTests
     }
 
     [Fact]
-    public async Task IntegranteComunNoPuedeExpulsarAOtroUsuario()
+    public async Task QueIntegranteComunNoPuedaExpulsarAOtroUsuario()
     {
+        //Arrange
         var grupo = CrearGrupo();
         _grupos.Setup(repositorio => repositorio.ObtenerPorId(
                 grupo.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(grupo);
 
+        //Act & Assert
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             CrearServicio().Expulsar(grupo.Id, 22, 30));
 
@@ -149,8 +178,9 @@ public class GrupoServicioTests
     }
 
     [Fact]
-    public async Task CreadorPuedeExpulsarAUnIntegrante()
+    public async Task QueCreadorPuedaExpulsarAUnIntegrante()
     {
+        //Arrange
         var grupo = CrearGrupo();
         var integrante = new GrupoIntegrante { GrupoId = grupo.Id, UsuarioId = 22 };
         _grupos.Setup(repositorio => repositorio.ObtenerPorId(
@@ -160,20 +190,24 @@ public class GrupoServicioTests
                 grupo.Id, integrante.UsuarioId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(integrante);
 
+        //Act
         await CrearServicio().Expulsar(grupo.Id, grupo.CreadorId, integrante.UsuarioId);
 
+        //Assert
         _grupos.Verify(repositorio => repositorio.QuitarIntegrante(
             integrante, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task NoPermiteQueElCreadorAbandoneElGrupo()
+    public async Task QueNoPermitaQueElCreadorAbandoneElGrupo()
     {
+        //Arrange
         var grupo = CrearGrupo();
         _grupos.Setup(repositorio => repositorio.ObtenerPorId(
                 grupo.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(grupo);
 
+        //Act & Assert
         await Assert.ThrowsAsync<ArgumentException>(() =>
             CrearServicio().Salir(grupo.Id, grupo.CreadorId));
 
@@ -181,9 +215,14 @@ public class GrupoServicioTests
             It.IsAny<GrupoIntegrante>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    #endregion
+
+    #region Publicación en Grupos
+
     [Fact]
-    public async Task IntegrantePuedeCrearUnRecuerdoAsociadoAlGrupo()
+    public async Task QueIntegrantePuedaCrearUnRecuerdoAsociadoAlGrupo()
     {
+        //Arrange
         var grupo = CrearGrupo();
         var publicacion = new Publicacion { Titulo = "Un recuerdo" };
         _grupos.Setup(repositorio => repositorio.ObtenerPorId(
@@ -196,8 +235,10 @@ public class GrupoServicioTests
                 It.IsAny<Publicacion>(), null, null, null))
             .ReturnsAsync(99);
 
+        //Act
         var id = await CrearServicio().CrearRecuerdo(grupo.Id, 22, publicacion);
 
+        //Assert
         Assert.Equal(99, id);
         _publicaciones.Verify(servicio => servicio.Crear(
             It.Is<Publicacion>(recuerdo =>
@@ -207,8 +248,9 @@ public class GrupoServicioTests
     }
 
     [Fact]
-    public async Task UsuarioQueNoEsIntegranteNoPuedePublicarEnElGrupo()
+    public async Task QueUsuarioQueNoEsIntegranteNoPuedaPublicarEnElGrupo()
     {
+        //Arrange
         var grupo = CrearGrupo();
         _grupos.Setup(repositorio => repositorio.ObtenerPorId(
                 grupo.Id, It.IsAny<CancellationToken>()))
@@ -217,12 +259,17 @@ public class GrupoServicioTests
                 grupo.Id, 22, It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
 
+        //Act & Assert
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             CrearServicio().CrearRecuerdo(grupo.Id, 22, new Publicacion()));
 
         _publicaciones.Verify(servicio => servicio.Crear(
             It.IsAny<Publicacion>(), It.IsAny<Stream>(), It.IsAny<string>(), null), Times.Never);
     }
+
+    #endregion
+
+    #region Helpers Privados
 
     private GrupoServicio CrearServicio() =>
         new(_grupos.Object, _usuarios.Object, _publicaciones.Object);
@@ -244,4 +291,6 @@ public class GrupoServicioTests
             ]
         };
     }
+
+    #endregion
 }

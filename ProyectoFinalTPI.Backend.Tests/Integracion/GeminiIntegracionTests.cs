@@ -1,9 +1,12 @@
+using ProyectoFinalTPI.Backend.Infraestructura;
+using ProyectoFinalTPI.Backend.Interfaces.Configuracion;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using NetTopologySuite.Geometries;
 using ProyectoFinalTPI.Backend.Dtos.Momento;
 using ProyectoFinalTPI.Backend.Entidades;
@@ -26,7 +29,10 @@ public class GeminiIntegracionTests(PostgisFixture postgres) : IClassFixture<Pos
         ConfigurarServiciosAdicionales = servicios =>
         {
             if (http == null) return;
-            servicios.Configure<OpcionesGemini>(o => { o.Habilitado = true; o.ApiKey = "clave-ficticia"; o.IntervaloMinimoSegundos = 1; });
+            // Los ciclos se ejecutan manualmente para comprobar el catálogo y sus transacciones.
+            foreach (var registro in servicios.Where(d => d.ServiceType == typeof(IHostedService) &&
+                d.ImplementationType == typeof(ProyectoFinalTPI.Backend.Services.AnalisisRecuerdosWorker)).ToArray()) servicios.Remove(registro);
+            servicios.Configure<OpcionesAnalisisRecuerdos>(o => { o.Habilitado = true; o.ApiKey = "clave-ficticia"; o.IntervaloMinimoSegundos = 1; });
             servicios.AddHttpClient<AnalizadorRecuerdoGemini>().ConfigurePrimaryHttpMessageHandler(() => http);
         }
     };

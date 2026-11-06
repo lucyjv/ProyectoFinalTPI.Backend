@@ -17,7 +17,7 @@ public class CatalogoAnalisisRepositorioTests : IDisposable
         _context.Momentos.AddRange(new Momento { Id = 1, Nombre = "Argentina campeón 1986", Alias = [new() { Texto = "México 86", TextoNormalizado = "mexico 86" }] },
             new Momento { Id = 2, Nombre = "Recital de Soda Stereo 1997" });
         await _context.SaveChangesAsync();
-        var repositorio = new CatalogoAnalisisRepositorio(_context);
+        var repositorio = new MomentoRepositorio(_context);
 
         //Act
         var result = await repositorio.BuscarCandidatos("Mi recuerdo de MÉXICO 86", CancellationToken.None);
@@ -37,7 +37,7 @@ public class CatalogoAnalisisRepositorioTests : IDisposable
                 .Select(a => new MomentoAlias { Texto = $"Alias {a}", TextoNormalizado = $"alias {a}" }).ToList()
         });
         await _context.SaveChangesAsync();
-        var repositorio = new CatalogoAnalisisRepositorio(_context);
+        var repositorio = new MomentoRepositorio(_context);
 
         //Act
         var result = await repositorio.BuscarCandidatos("Mundial", CancellationToken.None);
@@ -47,6 +47,24 @@ public class CatalogoAnalisisRepositorioTests : IDisposable
         Assert.All(result, m => Assert.Equal(8, m.Alias.Length));
         Assert.Equal(1, result[0].Id);
         Assert.Equal(40, result[^1].Id);
+    }
+
+    [Theory]
+    [InlineData("#catar2022")]
+    [InlineData("#Qatar2022")]
+    [InlineData("#Mexico86")]
+    public async Task QueUnAnioDentroDeUnHashtagRecupereElMomentoDelCatalogo(string hashtag)
+    {
+        var anio = hashtag.EndsWith("86") ? 1986 : 2022;
+        _context.Momentos.AddRange(
+            new Momento { Id = 1, Nombre = $"Argentina campeón del mundo {anio}" },
+            new Momento { Id = 2, Nombre = "Recital de Soda Stereo 1997" });
+        await _context.SaveChangesAsync();
+
+        var candidatos = await new MomentoRepositorio(_context).BuscarCandidatos(
+            $"OTRA ESTRELLA MAS. Messi nos traía la 3ra estrella y éramos campeones del mundo {hashtag}", CancellationToken.None);
+
+        Assert.Equal(1, Assert.Single(candidatos).Id);
     }
 
     public void Dispose() => _context.Dispose();

@@ -6,6 +6,13 @@ namespace ProyectoFinalTPI.Backend.Mappings;
 
 public static class PublicacionMappings
 {
+    public static Point? ToUbicacionGps(this CrearPublicacionRequest request)
+    {
+        return request.GpsLatitud.HasValue && request.GpsLongitud.HasValue
+            ? new Point(request.GpsLongitud.Value, request.GpsLatitud.Value) { SRID = 4326 }
+            : null;
+    }
+
     public static Publicacion ToPublicacion(this CrearPublicacionRequest request, int autorId)
     {
         return new Publicacion

@@ -21,8 +21,10 @@ public sealed class ManejoExcepcionesMiddleware(
         {
             var (estado, titulo, detalle) = exception switch
             {
+                NombreUsuarioEnUsoException => (409, "Nombre de usuario en uso", exception.Message),
                 ConflictoCatalogoException => (409, "Conflicto de catálogo", exception.Message),
                 AnalisisNoDisponibleException => (503, "Análisis no disponible", exception.Message),
+                AlmacenSesionNoDisponibleException => (503, "Feed no disponible", exception.Message),
                 ConflictoRelacionesException => (409, "Conflicto de relaciones", exception.Message),
                 ArgumentException => (400, "Solicitud inválida", exception.Message),
                 UnauthorizedAccessException => (403, "Acceso denegado", exception.Message),

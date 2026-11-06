@@ -60,6 +60,7 @@ namespace ProyectoFinalTPI.Backend.Entidades
         AscensoCategoria,
         MensajesCorreo,
         MensajeChat,
+        Administrativa,
         EtiquetadoEnPublicacion
     }
 }

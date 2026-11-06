@@ -1,3 +1,4 @@
+using ProyectoFinalTPI.Backend.Interfaces.Configuracion;
 using Microsoft.Extensions.Options;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Servicio;

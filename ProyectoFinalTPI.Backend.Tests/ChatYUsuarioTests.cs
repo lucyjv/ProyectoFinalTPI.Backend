@@ -1,48 +1,47 @@
 using Moq;
-using Xunit;
 using ProyectoFinalTPI.Backend.Dtos.Chat;
 using ProyectoFinalTPI.Backend.Dtos.Usuario;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Servicio;
+using Xunit;
 
 namespace ProyectoFinalTPI.Backend.Tests;
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  ChatServicio — ObtenerConversacionesActivasAsync
-// ═══════════════════════════════════════════════════════════════════════════
-
 public class ChatServicioObtenerConversacionesTests
 {
-    private readonly Mock<IMensajeChatRepositorio> _repositorioMock;
+    private readonly Mock<IMensajeChatRepositorio> _repositorioMock = new();
+    private readonly Mock<INotificacionServicio> _notificacionServicioMock = new();
     private readonly IChatServicio _servicio;
 
     public ChatServicioObtenerConversacionesTests()
     {
-        _repositorioMock = new Mock<IMensajeChatRepositorio>();
-        _servicio = new ChatServicio(_repositorioMock.Object, Mock.Of<INotificacionServicio>());
+        _servicio = new ChatServicio(_repositorioMock.Object, _notificacionServicioMock.Object);
     }
 
+    #region Obtener Conversaciones Activas
+
     [Fact]
-    public async Task ObtenerConversacionesActivasAsync_SinMensajes_DevuelveListaVacia()
+    public async Task QueObtenerConversacionesActivasDevuelvaListaVaciaSiNoHayMensajes()
     {
-        // Arrange
+        //Arrange
         _repositorioMock
             .Setup(r => r.ObtenerConversacionesActivasAsync(1))
             .ReturnsAsync(Enumerable.Empty<MensajeChat>());
 
-        // Act
+        //Act
         var resultado = await _servicio.ObtenerConversacionesActivasAsync(1);
 
-        // Assert
+        //Assert
         Assert.Empty(resultado);
+        _repositorioMock.Verify(r => r.ObtenerConversacionesActivasAsync(1), Times.Once);
     }
 
     [Fact]
-    public async Task ObtenerConversacionesActivasAsync_ConMensajes_DevuelveConversacionesOrdenadas()
+    public async Task QueObtenerConversacionesActivasDevuelvaConversacionesOrdenadasSiHayMensajes()
     {
-        // Arrange: usuario 1 tiene conversaciones con usuario 2 y usuario 3.
+        //Arrange
         var usuario1 = new Usuario { Id = 1, Username = "ana" };
         var usuario2 = new Usuario { Id = 2, Username = "lucia" };
         var usuario3 = new Usuario { Id = 3, Username = "pedro" };
@@ -50,7 +49,6 @@ public class ChatServicioObtenerConversacionesTests
         var ahora = DateTime.UtcNow;
         var mensajes = new List<MensajeChat>
         {
-            // Último mensaje con lucia (usuario 1 envió)
             new()
             {
                 Id = 10, EmisorId = 1, Emisor = usuario1,
@@ -58,7 +56,6 @@ public class ChatServicioObtenerConversacionesTests
                 Contenido = "Hola lucia", FechaEnvio = ahora.AddHours(-1),
                 FechaExpiracion = ahora.AddDays(6)
             },
-            // Último mensaje con pedro (pedro envió)
             new()
             {
                 Id = 20, EmisorId = 3, Emisor = usuario3,
@@ -72,10 +69,10 @@ public class ChatServicioObtenerConversacionesTests
             .Setup(r => r.ObtenerConversacionesActivasAsync(1))
             .ReturnsAsync(mensajes);
 
-        // Act
+        //Act
         var resultado = (await _servicio.ObtenerConversacionesActivasAsync(1)).ToList();
 
-        // Assert
+        //Assert
         Assert.Equal(2, resultado.Count);
 
         var conLucia = resultado.Single(c => c.OtroUsuarioId == 2);
@@ -88,9 +85,9 @@ public class ChatServicioObtenerConversacionesTests
     }
 
     [Fact]
-    public async Task ObtenerConversacionesActivasAsync_UsuarioEsDestinatario_ReconoceOtroUsuarioCorrectamente()
+    public async Task QueObtenerConversacionesActivasReconozcaOtroUsuarioCuandoUsuarioEsDestinatario()
     {
-        // Arrange: usuario 5 recibe un mensaje de usuario 7.
+        //Arrange
         var usuario5 = new Usuario { Id = 5, Username = "mario" };
         var usuario7 = new Usuario { Id = 7, Username = "jose" };
 
@@ -110,10 +107,10 @@ public class ChatServicioObtenerConversacionesTests
             .Setup(r => r.ObtenerConversacionesActivasAsync(5))
             .ReturnsAsync(mensajes);
 
-        // Act
+        //Act
         var resultado = (await _servicio.ObtenerConversacionesActivasAsync(5)).ToList();
 
-        // Assert
+        //Assert
         Assert.Single(resultado);
         Assert.Equal(7, resultado[0].OtroUsuarioId);
         Assert.Equal("jose", resultado[0].OtroUsuarioUsername);
@@ -121,186 +118,195 @@ public class ChatServicioObtenerConversacionesTests
     }
 
     [Fact]
-    public async Task ObtenerConversacionesActivasAsync_LlamaAlRepositorioUnaVez()
+    public async Task QueObtenerConversacionesActivasLlameAlRepositorioUnaVez()
     {
-        // Arrange
+        //Arrange
         _repositorioMock
             .Setup(r => r.ObtenerConversacionesActivasAsync(It.IsAny<int>()))
             .ReturnsAsync(Enumerable.Empty<MensajeChat>());
 
-        // Act
+        //Act
         await _servicio.ObtenerConversacionesActivasAsync(99);
 
-        // Assert
-        _repositorioMock.Verify(
-            r => r.ObtenerConversacionesActivasAsync(99),
-            Times.Once);
+        //Assert
+        _repositorioMock.Verify(r => r.ObtenerConversacionesActivasAsync(99), Times.Once);
     }
-}
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  ChatServicio — EliminarConversacionAsync
-// ═══════════════════════════════════════════════════════════════════════════
+    #endregion
+}
 
 public class ChatServicioEliminarConversacionTests
 {
-    private readonly Mock<IMensajeChatRepositorio> _repositorioMock;
+    private readonly Mock<IMensajeChatRepositorio> _repositorioMock = new();
+    private readonly Mock<INotificacionServicio> _notificacionServicioMock = new();
     private readonly IChatServicio _servicio;
 
     public ChatServicioEliminarConversacionTests()
     {
-        _repositorioMock = new Mock<IMensajeChatRepositorio>();
-        _servicio = new ChatServicio(_repositorioMock.Object, Mock.Of<INotificacionServicio>());
+        _servicio = new ChatServicio(_repositorioMock.Object, _notificacionServicioMock.Object);
     }
 
+    #region Eliminar Conversación
+
     [Fact]
-    public async Task EliminarConversacionAsync_MismoUsuario_LanzaArgumentException()
+    public async Task QueEliminarConversacionConMismoUsuarioLanceArgumentException()
     {
-        // Act & Assert
+        //Arrange
+        var mismoUsuarioId = 5;
+
+        //Act & Assert
         await Assert.ThrowsAsync<ArgumentException>(
-            () => _servicio.EliminarConversacionAsync(5, 5));
+            () => _servicio.EliminarConversacionAsync(mismoUsuarioId, mismoUsuarioId));
     }
 
     [Fact]
-    public async Task EliminarConversacionAsync_MismoUsuario_NoConsultaElRepositorio()
+    public async Task QueEliminarConversacionConMismoUsuarioNoConsulteElRepositorio()
     {
-        // Act
-        await Record.ExceptionAsync(() => _servicio.EliminarConversacionAsync(5, 5));
+        //Arrange
+        var mismoUsuarioId = 5;
 
-        // Assert
+        //Act
+        await Record.ExceptionAsync(() => _servicio.EliminarConversacionAsync(mismoUsuarioId, mismoUsuarioId));
+
+        //Assert
         _repositorioMock.Verify(
             r => r.EliminarConversacionAsync(It.IsAny<int>(), It.IsAny<int>()),
             Times.Never);
     }
 
     [Fact]
-    public async Task EliminarConversacionAsync_SinMensajes_LanzaKeyNotFoundException()
+    public async Task QueEliminarConversacionSinMensajesLanceKeyNotFoundException()
     {
-        // Arrange: el repositorio informa que no había nada que borrar.
+        //Arrange
         _repositorioMock
             .Setup(r => r.EliminarConversacionAsync(1, 2))
             .ReturnsAsync(0);
 
-        // Act & Assert
+        //Act & Assert
         await Assert.ThrowsAsync<KeyNotFoundException>(
             () => _servicio.EliminarConversacionAsync(1, 2));
     }
 
     [Fact]
-    public async Task EliminarConversacionAsync_ConMensajes_CompletaSinExcepcion()
+    public async Task QueEliminarConversacionConMensajesCompleteSinExcepcion()
     {
-        // Arrange
+        //Arrange
         _repositorioMock
             .Setup(r => r.EliminarConversacionAsync(1, 2))
             .ReturnsAsync(3);
 
-        // Act & Assert: no debe lanzar
+        //Act
         var ex = await Record.ExceptionAsync(
             () => _servicio.EliminarConversacionAsync(1, 2));
 
+        //Assert
         Assert.Null(ex);
+        _repositorioMock.Verify(r => r.EliminarConversacionAsync(1, 2), Times.Once);
     }
 
     [Fact]
-    public async Task EliminarConversacionAsync_LlamaAlRepositorioUnaVez()
+    public async Task QueEliminarConversacionLlameAlRepositorioUnaVez()
     {
-        // Arrange
+        //Arrange
         _repositorioMock
             .Setup(r => r.EliminarConversacionAsync(1, 2))
             .ReturnsAsync(1);
 
-        // Act
+        //Act
         await _servicio.EliminarConversacionAsync(1, 2);
 
-        // Assert
-        _repositorioMock.Verify(
-            r => r.EliminarConversacionAsync(1, 2),
-            Times.Once);
+        //Assert
+        _repositorioMock.Verify(r => r.EliminarConversacionAsync(1, 2), Times.Once);
     }
-}
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  UsuarioServicio — ObtenerPorUsernameAsync
-// ═══════════════════════════════════════════════════════════════════════════
+    #endregion
+}
 
 public class UsuarioServicioTests
 {
-    private readonly Mock<IUsuarioRepositorio> _repositorioMock;
+    private readonly Mock<IUsuarioRepositorio> _repositorioMock = new();
+    private readonly Mock<ILogroServicio> _logroServicioMock = new();
     private readonly IUsuarioServicio _servicio;
 
     public UsuarioServicioTests()
     {
-        _repositorioMock = new Mock<IUsuarioRepositorio>();
-        _servicio = new UsuarioServicio(_repositorioMock.Object, Mock.Of<ILogroServicio>());
+        _servicio = new UsuarioServicio(_repositorioMock.Object, _logroServicioMock.Object);
     }
 
+    #region Obtener Por Username
+
     [Fact]
-    public async Task ObtenerPorUsernameAsync_UsuarioExiste_DevuelveDto()
+    public async Task QueObtenerPorUsernameDevuelvaDtoSiUsuarioExiste()
     {
-        // Arrange
+        //Arrange
         var usuario = new Usuario { Id = 2, Username = "lucia" };
         _repositorioMock
             .Setup(r => r.ObtenerPorUsernameAsync("lucia", It.IsAny<CancellationToken>()))
             .ReturnsAsync(usuario);
 
-        // Act
+        //Act
         var resultado = await _servicio.ObtenerPorUsernameAsync("lucia");
 
-        // Assert
+        //Assert
         Assert.Equal(2, resultado.UsuarioId);
         Assert.Equal("lucia", resultado.Username);
     }
 
     [Fact]
-    public async Task ObtenerPorUsernameAsync_UsuarioNoExiste_LanzaKeyNotFoundException()
+    public async Task QueObtenerPorUsernameLanceKeyNotFoundExceptionSiUsuarioNoExiste()
     {
-        // Arrange
+        //Arrange
         _repositorioMock
             .Setup(r => r.ObtenerPorUsernameAsync("noexiste", It.IsAny<CancellationToken>()))
             .ReturnsAsync((Usuario?)null);
 
-        // Act & Assert
+        //Act & Assert
         await Assert.ThrowsAsync<KeyNotFoundException>(
             () => _servicio.ObtenerPorUsernameAsync("noexiste"));
     }
 
     [Fact]
-    public async Task ObtenerPorUsernameAsync_LanzaKeyNotFoundException_MensajeContieneUsername()
+    public async Task QueObtenerPorUsernameLanceKeyNotFoundExceptionConMensajeQueContieneUsername()
     {
-        // Arrange
+        //Arrange
         _repositorioMock
             .Setup(r => r.ObtenerPorUsernameAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Usuario?)null);
 
-        // Act
+        //Act
         var ex = await Record.ExceptionAsync(
             () => _servicio.ObtenerPorUsernameAsync("fantasma"));
 
-        // Assert
+        //Assert
         Assert.IsType<KeyNotFoundException>(ex);
         Assert.Contains("fantasma", ex.Message);
     }
 
     [Fact]
-    public async Task ObtenerPorUsernameAsync_LlamaAlRepositorioUnaVez()
+    public async Task QueObtenerPorUsernameLlameAlRepositorioUnaVez()
     {
-        // Arrange
+        //Arrange
         _repositorioMock
             .Setup(r => r.ObtenerPorUsernameAsync("lucia", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Usuario { Id = 2, Username = "lucia" });
 
-        // Act
+        //Act
         await _servicio.ObtenerPorUsernameAsync("lucia");
 
-        // Assert
+        //Assert
         _repositorioMock.Verify(
             r => r.ObtenerPorUsernameAsync("lucia", It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
+    #endregion
+
+    #region Buscar Usuarios
+
     [Fact]
-    public async Task BuscarAsync_NormalizaYDelegaLaBusquedaParcial()
+    public async Task QueBuscarAsyncNormaliceYDelegueLaBusquedaParcial()
     {
+        //Arrange
         var usuarios = new List<AutorResumenDto>
         {
             new() { Id = 2, Username = "lucia" }
@@ -309,8 +315,10 @@ public class UsuarioServicioTests
             .Setup(r => r.BuscarPorUsernameAsync("luci", 5, It.IsAny<CancellationToken>()))
             .ReturnsAsync(usuarios);
 
+        //Act
         var resultado = await _servicio.BuscarAsync("  luci  ", 5);
 
+        //Assert
         Assert.Same(usuarios, resultado);
         _repositorioMock.Verify(
             r => r.BuscarPorUsernameAsync("luci", 5, It.IsAny<CancellationToken>()),
@@ -321,18 +329,23 @@ public class UsuarioServicioTests
     [InlineData("a", 10)]
     [InlineData("usuario", 0)]
     [InlineData("usuario", 21)]
-    public async Task BuscarAsync_RechazaParametrosInvalidos(string texto, int limite)
+    public async Task QueBuscarAsyncRechaceParametrosInvalidos(string texto, int limite)
     {
+        //Arrange & Act & Assert
         await Assert.ThrowsAnyAsync<ArgumentException>(() => _servicio.BuscarAsync(texto, limite));
         _repositorioMock.Verify(
             r => r.BuscarPorUsernameAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
+    #endregion
+
+    #region Perfil de Usuario
+
     [Fact]
-    public async Task ObtenerPerfilPorUsernameAsync_UsuarioPersonalExiste_DevuelvePerfilCompleto()
+    public async Task QueObtenerPerfilPorUsernameDevuelvaPerfilCompletoSiUsuarioPersonalExiste()
     {
-        // Arrange
+        //Arrange
         var usuario = new Usuario_Personal
         {
             Id = 17,
@@ -349,10 +362,10 @@ public class UsuarioServicioTests
             .Setup(r => r.ContarPublicacionesVisiblesAsync(17, It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
-        // Act
+        //Act
         var resultado = await _servicio.ObtenerPerfilPorUsernameAsync("nico", null);
 
-        // Assert
+        //Assert
         Assert.Equal(17, resultado.Id);
         Assert.Equal("nico", resultado.Username);
         Assert.Equal("Nico", resultado.Nombre);
@@ -360,4 +373,6 @@ public class UsuarioServicioTests
         Assert.Equal(10, resultado.PuntosNostalgia);
         Assert.Equal(1, resultado.CantidadPublicaciones);
     }
+
+    #endregion
 }

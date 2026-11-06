@@ -46,6 +46,7 @@ jobs:
           --no-build
           --logger "trx;LogFileName=backend-tests.trx"
           --collect:"XPlat Code Coverage"
+          --settings coverage.runsettings
           --results-directory ./TestResults
 
       - name: Upload test results

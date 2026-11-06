@@ -113,7 +113,7 @@ Puede agregarse `--incluir-fallidos`. La salida de esta herramienta muestra solo
 Para usar los endpoints, habilitar el proveedor y el worker, iniciar normalmente el backend, iniciar sesión como administrador y ejecutar GET/POST desde Swagger o la herramienta administrativa. Habilitar el worker permite consumir **cualquier trabajo pendiente de la cola**, incluidas publicaciones nuevas; no solo los seleccionados por esta herramienta. Revisar la cola antes de activar en un entorno con datos reales.
 
 ```powershell
-dotnet user-secrets set "Gemini:Habilitado" "true" --project ProyectoFinalTPI.Backend
+dotnet user-secrets set "AnalisisRecuerdos:ApiKey" "TU_CLAVE_REAL" --project ProyectoFinalTPI.Backend
 dotnet user-secrets set "AnalisisRecuerdos:Habilitado" "true" --project ProyectoFinalTPI.Backend
 ```
 

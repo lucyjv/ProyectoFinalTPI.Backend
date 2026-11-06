@@ -4,6 +4,7 @@ namespace ProyectoFinalTPI.Backend.Dtos.Usuario
     {
         public int Id { get; set; }
         public string Username { get; set; } = string.Empty;
+        public string? FotoPerfilUrl { get; set; }
         public string? Nombre { get; set; }
         public string? Apellido { get; set; }
         public string TipoUsuario { get; set; } = string.Empty;

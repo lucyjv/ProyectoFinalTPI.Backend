@@ -68,6 +68,10 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Servicio
             int usuarioDestinatarioId, int emisorId,
             CancellationToken cancellationToken = default);
 
+        Task NotificarAdministrativaAsync(
+            int usuarioDestinatarioId, int? publicacionId = null,
+            CancellationToken cancellationToken = default);
+
         /// <summary>
         /// Notifica al usuario que fue etiquetado en una publicación.
         /// Solo se genera una notificación por publicación mientras no haya sido leída.

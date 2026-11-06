@@ -117,6 +117,7 @@ public class AuthServicio : IAuthServicio
                 Token = GenerarJwt(usuario, sesionId),
                 UsuarioId = usuario.Id,
                 Username = usuario.Username,
+                FotoPerfilUrl = usuario.FotoPerfilUrl,
                 Email = usuario.Email,
                 EsAdmin = usuario.EsAdmin
             },
@@ -209,11 +210,13 @@ public class AuthServicio : IAuthServicio
         if (!contrasenaValida)
             throw new UnauthorizedAccessException("Email o contraseña incorrectos.");
     }
-    private async Task<Usuario?> ObtenerUsuarioParaLogin(string email, CancellationToken cancellationToken)
+    private async Task<Usuario> ObtenerUsuarioParaLogin(string email, CancellationToken cancellationToken)
     {
         var usuario = await _usuarioRepositorio.ObtenerPorEmailAsync(NormalizarEmail(email), cancellationToken);
         if (usuario is null)
             throw new UnauthorizedAccessException("Email o contraseña incorrectos.");
+        if (usuario.EstaEliminado || usuario is Usuario_Interactivo { SuspendidoHasta: { } hasta } && hasta > DateTime.UtcNow)
+            throw new UnauthorizedAccessException("La cuenta no está habilitada.");
         return usuario;
     }
     private async Task<SesionUsuario> ObtenerSesionParaRenovar(string refreshToken, CancellationToken cancellationToken)

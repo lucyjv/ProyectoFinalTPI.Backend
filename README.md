@@ -1,6 +1,20 @@
 # ProyectoFinalTPI.Backend
 
+## Frontend, API y bases con Docker
+
+Desde esta carpeta, con Docker Desktop iniciado:
+
+```powershell
+docker compose up --build -d
+```
+
+Aplicación en http://localhost:3001 y Swagger en http://localhost:5199/swagger.
+Crea PostgreSQL/PostGIS y Neo4j propios, aplica migraciones y carga datos de demostración.
+Requiere el frontend en `../Web/ProyectoFinalTPI`. Ver [configuración y operación](docs/DOCKER.md).
+
 ## Cobertura de tests
+
+`coverage.runsettings` limita la medición a los ensamblados `ProyectoFinalTPI.Backend*`, excluyendo el proyecto de tests y las bibliotecas externas. Lo utilizan `coverage.ps1` y CI. Para ejecutar manualmente: `dotnet test --settings coverage.runsettings --collect:"XPlat Code Coverage"`. En Visual Studio se puede seleccionar desde Test > Configure Run Settings > Select Solution Wide runsettings File. Si se utiliza otra extensión para mostrar cobertura, configurar ese mismo archivo en la extensión. Volver a generar el informe después de cambiar filtros: los informes anteriores conservan sus resultados.
 
 Coverlet recolecta la cobertura y ReportGenerator genera un informe HTML. Desde la raíz:
 
@@ -78,6 +92,8 @@ Cada integrante debe configurar las credenciales en su propia computadora y usua
    ```
 
    Los valores son ejemplos, no credenciales válidas. El proyecto ya tiene `UserSecretsId`: **no ejecutar `dotnet user-secrets init`**. Para actualizar una credencial, repetir el comando correspondiente con el nuevo valor. Los comandos con valores reales pueden quedar en el historial de la terminal; no compartirlo.
+
+5. Para activar la detección automática de momentos, completar también la [configuración de IA mediante User Secrets](#configurar-la-ia-en-desarrollo-user-secrets). Es opcional para iniciar la aplicación: sin habilitarla, los trabajos de análisis quedan pendientes.
 
 #### Ejecución y verificación
 
@@ -351,10 +367,27 @@ reemplazarla por un `ProblemDetails`.
 | `GET` | `/api/publicaciones/{id}/resumen` | Devuelve una vista resumida para mostrar al seleccionar un pin. |
 | `GET` | `/api/publicaciones/{id}` | Devuelve el detalle de una publicación, con descripción completa, autor, multimedia y ubicación. |
 | `GET` | `/api/publicaciones/{id}/comentarios` | Devuelve los comentarios visibles de una publicación, paginados y ordenados del más reciente al más antiguo. |
-| `POST` | `/api/publicaciones/{publicacionId}/comentarios` | Crea un comentario asociado a la publicación indicada en la URL. Recibe contenido y usuarioId en JSON. |
+| `POST` | `/api/publicaciones/{publicacionId}/comentarios` | Crea un comentario o respuesta. Recibe `contenido` y `comentarioPadreId` opcional en JSON; el usuario se obtiene del JWT. |
+| `GET` | `/api/comentarios/respuestas/{comentarioId}?publicacionId=25` | Lista respuestas directas con `cursor` y `limite` (por defecto 3, máximo 20). |
+| `DELETE` | `/api/comentarios/{comentarioId}?publicacionId=25` | Elimina lógicamente un comentario propio. Requiere JWT. |
+| `PUT` | `/api/comentarios/{comentarioId}/reaccion?publicacionId=25` | Establece la reacción propia; recibe `tipo` en JSON. Requiere JWT. |
+| `DELETE` | `/api/comentarios/{comentarioId}/reaccion?publicacionId=25` | Quita la reacción propia. Requiere JWT. |
+
+Las rutas de comentarios tienen como máximo tres segmentos sin contar `/api`. Los identificadores dentro de la ruta se reciben con `[FromRoute]`; `publicacionId` es obligatorio y positivo en `[FromQuery]` para respuestas, eliminación y reacciones. Los cuerpos JSON se reciben con `[FromBody]`. La creación devuelve `Location: /api/comentarios/{comentarioId}?publicacionId={publicacionId}`. Las rutas anidadas anteriores para respuestas, eliminación y reacciones fueron reemplazadas; backend y frontend deben actualizarse juntos.
 
 Las consultas públicas excluyen las publicaciones ocultas. Los comentarios se consultan por separado del detalle.
 Las etiquetas se almacenan en Neo4j como relaciones entre los nodos `Usuario` y `Publicacion`, cuyos datos maestros permanecen en PostgreSQL.
+
+### Consultas de publicaciones guardadas y hashtags
+
+| Método | Ruta | Parámetros |
+|---|---|---|
+| `GET` | `/api/publicaciones/guardadas/{usuarioId}` | `usuarioId` positivo por `[FromRoute]`. |
+| `GET` | `/api/publicaciones/hashtags/{hashtag}` | Texto del hashtag por `[FromRoute]`; `cursor` y `limite` por `[FromQuery]`. |
+| `GET` | `/api/publicaciones/tendencias/hashtags` | `limite` por query, por defecto 5. |
+| `GET` | `/api/publicaciones/buscar/hashtags` | `q` y `limite` por query, límite por defecto 10. |
+
+Estas rutas tienen tres segmentos sin contar `/api` y no reciben body. El hashtag se codifica como un segmento de URL (por ejemplo, `música` como `m%C3%BAsica`); no es un ID numérico. Búsqueda y tendencias tienen rutas independientes para que `buscar` y `tendencias` también puedan consultarse como hashtags. Las rutas anteriores de guardadas y publicaciones por hashtag fueron reemplazadas, al igual que las rutas anteriores de búsqueda y tendencias; backend y frontend deben actualizarse juntos. Se conservan las respuestas, permisos y reglas de paginación existentes.
 
 ### Red de recuerdos: integración de frontend (paso 1)
 
@@ -615,13 +648,13 @@ La selección admite hasta 50 Id positivos sin repetir; los omitidos quedan rech
 
 Ambos listados usan `items`, `siguienteCursor`, `hayMas` y límite 1-50 (20 por defecto). La búsqueda ordena por Id ascendente; los recuerdos por fecha del recuerdo e Id descendentes. No reutilizar cursores entre consultas/contextos. Un GET desde un repost resuelve al original visible; guardar usando el `publicacionId` de la respuesta.
 
-Aplicar `20261021144634_AgregarCorreccionMomentos` mediante el comando habitual de `database update`. La generación automática de acontecimientos y la cola se incorporan en entregas posteriores. Ejemplos JSON completos, cliente TypeScript, fechas, errores y pruebas: [Integración de momentos: paso 3](docs/red-recuerdos-paso-3.md).
+Aplicar `20261021144634_AgregarCorreccionMomentos` mediante el comando habitual de `database update`. La generación automática de acontecimientos y la cola se describen en las secciones siguientes. Ejemplos JSON completos, cliente TypeScript, fechas, errores y pruebas: [Integración de momentos: paso 3](docs/red-recuerdos-paso-3.md).
 
 ### Análisis en segundo plano (paso 4)
 
 Crear un recuerdo original visible guarda también un trabajo persistente de análisis, en la misma transacción. El POST conserva `201 { id }` y no espera al analizador. El worker usa reservas con token/vencimiento, reintentos y control de versiones para recuperar interrupciones y descartar resultados de texto desactualizado. Las correcciones del autor siguen teniendo prioridad.
 
-El analizador temporal termina en `sinAnalizador`, sin inventar ni retirar asociaciones. El paso 5 permite habilitar Gemini para detectar y resolver acontecimientos colectivos.
+Con el análisis deshabilitado, los trabajos permanecen pendientes sin consumir intentos. El paso 5 permite habilitar Gemini para detectar y resolver acontecimientos colectivos. El estado histórico `sinAnalizador` se mantiene para trabajos anteriores.
 
 Frontend puede consultar el estado de la versión actual con `GET /api/publicaciones/{id}/analisis` (público):
 
@@ -641,11 +674,65 @@ Aplicar `20261021160638_AgregarColaAnalisisRecuerdos` mediante el comando habitu
 
 Se integró Gemini detrás de `IAnalizadorRecuerdo`, con el modelo configurable `gemini-3.5-flash-lite`. Analiza título/descripción, propone acontecimientos colectivos con evidencia y confianza, reutiliza el catálogo o crea momentos y alias al confirmar el trabajo. El catálogo y los vínculos se guardan juntos; se respetan versiones y correcciones del autor. No requiere nuevas migraciones ni cambios en los endpoints de frontend.
 
-Gemini viene deshabilitado. Guardar `Gemini:ApiKey` en User Secrets del proyecto web y habilitar expresamente `Gemini:Habilitado` para procesar recuerdos reales. El nivel gratuito y sus cuotas dependen del proyecto en AI Studio. Google puede usar contenido enviado en el nivel gratuito para mejorar sus productos; evaluar primero con datos ficticios.
+Gemini viene deshabilitado. Guardar `AnalisisRecuerdos:ApiKey` en User Secrets del proyecto web y habilitar expresamente `AnalisisRecuerdos:Habilitado` para procesar recuerdos reales. El nivel gratuito y sus cuotas dependen del proyecto en AI Studio. Google puede usar contenido enviado en el nivel gratuito para mejorar sus productos; evaluar primero con datos ficticios.
 
-La prueba aislada `dotnet run --project ProyectoFinalTPI.Backend --no-launch-profile -- --probar-gemini`, ejecutada en Development, envía tres ejemplos ficticios y no abre ni modifica la base. La clave no se envía al frontend. Cambiar luego `Gemini:Modelo` permite evaluar otro modelo compatible sin modificar la cola ni sus endpoints.
+La integración HTTP vive en `ProyectoFinalTPI.Backend.Infraestructura`. La configuración de IA y del procesamiento se centraliza en `AnalisisRecuerdos`: `Proveedor`, `Modelo` y `ApiKey`. Infraestructura selecciona el adaptador; actualmente solo se admite `Gemini` y un proveedor no implementado se rechaza al iniciar. No se usa la antigua sección `Gemini`. Las pruebas automáticas utilizan HTTP simulado y no consumen cuota.
 
-Configuración completa, ejecución de la prueba, cuotas, privacidad y límites de la canonicalización: [Gemini y acontecimientos colectivos: paso 5](docs/red-recuerdos-paso-5.md).
+#### Recorrido del análisis y guardado
+
+1. Al guardar una publicación original visible, `ApplicationDbContext` guarda también un `TrabajoAnalisisRecuerdo` pendiente. La publicación se devuelve al cliente sin esperar la respuesta de IA.
+2. .NET inicia `AnalisisRecuerdosWorker` mediante `AddHostedService` al arrancar el backend. Si el análisis está habilitado, llama a `AnalisisRecuerdosServicio.ProcesarUno()`, que reserva un trabajo y obtiene la versión vigente del contenido.
+3. El servicio utiliza `IAnalizadorRecuerdo`. `RegistroAnalisisRecuerdos`, en Infraestructura, selecciona su implementación según `AnalisisRecuerdos:Proveedor`; `AnalizadorRecuerdoGemini` prepara la solicitud HTTP, consulta al proveedor y devuelve propuestas en `ResultadoAnalisisRecuerdoDto`.
+4. El servicio valida el resultado y solicita su confirmación a `TrabajoAnalisisRepositorio.Completar()`. Este comprueba nuevamente la reserva, la versión de contenido y las preferencias del autor.
+5. Dentro de esa transacción, `MomentoRepositorio.ResolverPropuestas()` reutiliza momentos existentes o crea los nuevos con sus alias. `TrabajoAnalisisRepositorio` guarda las asociaciones `PublicacionMomento` y actualiza el estado del trabajo. El momento, los alias, los vínculos y el estado se confirman juntos; si falla la transacción, esos cambios se revierten.
+
+`ReglasMomento.cs`, en Entidades, reúne la normalización y la generación de identidad que comparten las capas. El servicio administra tiempos máximos, cancelación y reintentos; la conexión HTTP y los detalles de Gemini quedan en Infraestructura.
+
+#### Configurar la IA en desarrollo (User Secrets)
+
+Cada integrante debe configurar los secretos con su usuario del sistema, en la máquina donde ejecuta el backend. Abrir **PowerShell en la raíz del repositorio** y reemplazar `TU_CLAVE_REAL` por la API key de Gemini:
+
+```powershell
+dotnet user-secrets set "AnalisisRecuerdos:ApiKey" "TU_CLAVE_REAL" --project "./ProyectoFinalTPI.Backend/ProyectoFinalTPI.Backend.csproj"
+dotnet user-secrets set "AnalisisRecuerdos:Habilitado" "true" --project "./ProyectoFinalTPI.Backend/ProyectoFinalTPI.Backend.csproj"
+```
+
+El proyecto web ya tiene `UserSecretsId`; no hace falta ejecutar `dotnet user-secrets init`. Los secretos se guardan fuera del repositorio, no se comparten al hacer pull y estos comandos no modifican `appsettings.json`. No pegar la clave real en ese archivo ni compartir la salida de `dotnet user-secrets list`.
+
+`appsettings.json` conserva `Habilitado: false` como valor predeterminado. En **Development**, User Secrets tiene prioridad sobre ese archivo: el comando anterior establece el valor efectivo en `true`. Las variables de entorno tienen prioridad sobre User Secrets.
+
+El proveedor predeterminado es `Gemini` y el modelo es `gemini-3.5-flash-lite`. Para fijarlos explícitamente en el mismo lugar:
+
+```powershell
+dotnet user-secrets set "AnalisisRecuerdos:Proveedor" "Gemini" --project "./ProyectoFinalTPI.Backend/ProyectoFinalTPI.Backend.csproj"
+dotnet user-secrets set "AnalisisRecuerdos:Modelo" "gemini-3.5-flash-lite" --project "./ProyectoFinalTPI.Backend/ProyectoFinalTPI.Backend.csproj"
+```
+
+Solo Gemini tiene un adaptador implementado. Configurar otro nombre no agrega soporte para ese proveedor: la aplicación rechaza esa configuración al iniciar. Si tenías secretos bajo `Gemini:ApiKey`, `Gemini:Habilitado` o `Gemini:Modelo`, volvé a guardarlos con los nombres `AnalisisRecuerdos:*` de arriba; los anteriores ya no se leen.
+
+**Detener y volver a iniciar el backend** para aplicar la configuración. Si está corriendo en una terminal, detenerlo con `Ctrl + C` y ejecutar:
+
+```powershell
+$env:DOTNET_ENVIRONMENT = "Development"
+$env:ASPNETCORE_ENVIRONMENT = "Development"
+dotnet run --project "./ProyectoFinalTPI.Backend/ProyectoFinalTPI.Backend.csproj" --no-launch-profile
+```
+
+Confirmar en la consola `Hosting environment: Development`. En Visual Studio, los perfiles `http` y `https` de `launchSettings.json` ya utilizan Development: detener y volver a iniciar con uno de esos perfiles. Ese entorno permite que `WebApplication.CreateBuilder` cargue los User Secrets locales.
+
+Para deshabilitar el análisis, ejecutar lo siguiente y reiniciar:
+
+```powershell
+dotnet user-secrets set "AnalisisRecuerdos:Habilitado" "false" --project "./ProyectoFinalTPI.Backend/ProyectoFinalTPI.Backend.csproj"
+```
+
+Con el análisis deshabilitado, la aplicación permite publicar y guarda los trabajos pendientes sin consumir intentos ni llamar al proveedor. Al habilitarlo, el worker puede procesar todos los trabajos pendientes elegibles, no solo las publicaciones nuevas. Habilitar sin una clave configurada impide el arranque; una clave rechazada por el proveedor se detecta al realizar la solicitud, no al validar la configuración local.
+
+#### Comprobar el resultado
+
+Crear una publicación ficticia cuyo título o descripción identifique un acontecimiento colectivo y su año. Consultar `GET /api/publicaciones/{id}/analisis` para seguir el trabajo y `GET /api/publicaciones/{id}/momentos` para obtener sus asociaciones. Mientras se procesa puede verse `pendiente` o `procesando`; una salida válida termina en `completado` o `sinMomento`. Los fallos se reintentan cuando corresponde y terminan en `fallido` si se agotan los intentos o son permanentes. Las correcciones del autor se respetan al confirmar el resultado.
+
+Configuración completa, pruebas, cuotas, privacidad y límites de la canonicalización: [Gemini y acontecimientos colectivos: paso 5](docs/red-recuerdos-paso-5.md).
 
 ### Reprocesar recuerdos existentes por lotes (paso 6)
 
@@ -818,6 +905,19 @@ Si “Para vos” no encuentra recomendaciones visibles, muestra publicaciones g
 
 Para recargar “Para vos”, se realiza otra petición sin cursor. Esto genera una nueva selección. Cada sesión conserva hasta 500 publicaciones por defecto, también cuando usa el listado general, y vence a los 30 minutos; si deja de estar disponible, el endpoint devuelve `410 Gone`.
 
+### Expulsar integrantes de un grupo
+
+```http
+DELETE /api/grupos/4/integrantes?usuarioIdAEliminar=20
+Authorization: Bearer <token-del-creador>
+```
+
+La ruta tiene tres segmentos sin contar `/api`. `grupoId` se recibe por `[FromRoute]` y `usuarioIdAEliminar` por `[FromQuery]`, obligatorio y mayor que cero. No se envía body ni el ID de quien realiza la operación: se obtiene del JWT. Solo el creador puede expulsar y no puede expulsarse a sí mismo. Se elimina únicamente la membresía; se conservan el usuario y sus recuerdos.
+
+Devuelve `204 No Content` al completar la expulsión; `400` por identificadores inválidos o intento de expulsar al creador, `401` sin autenticación, `403` si quien realiza la operación no es el creador y `404` si el grupo o la membresía no existen. Los errores de validación de query incluyen `ValidationProblemDetails`; los errores de negocio usan `ProblemDetails`. Repetir la expulsión devuelve `404` porque la membresía ya no existe. El frontend puede utilizar esta ruta y recargar `GET /api/grupos/4/integrantes` tras recibir `204`.
+
+Esta ruta reemplaza a `DELETE /api/grupos/{grupoId}/integrantes/{usuarioIdAEliminar}`. Actualmente no tiene un consumidor de expulsión en el frontend.
+
 ### Endpoints de seguimiento
 
 | Método | Ruta | Descripción |
@@ -937,3 +1037,7 @@ Método	|   Ruta	|   Descripción
 ### Endpoints de usuarios
 |   Método  |	Ruta    |	Descripción
 |   GET |	/api/usuarios/por-username/{username}   |	Busca un usuario por su username exacto. Devuelve su id y username. Requiere JWT. Devuelve 404 si no existe ningún usuario con ese username.
+
+## Monitoreo
+
+Configuración, activación en Azure, consultas y validación: [Application Insights](docs/APPLICATION_INSIGHTS.md).

@@ -9,7 +9,7 @@ public partial class MomentoRepositorio
 {
     public async Task<IReadOnlyList<CandidatoDuplicadoMomentoDto>> BuscarCandidatos(int id, int limite, CancellationToken ct)
     {
-        var canonico = await CatalogoMomentos.Resolver(db, id, ct);
+        var canonico = await MomentoRepositorio.Resolver(db, id, ct);
         var origen = await db.Momentos.AsNoTracking().Include(m => m.Alias).SingleAsync(m => m.Id == canonico.Id, ct);
         // Comparación del catálogo local: nunca invoca IA ni fusiona a partir de un puntaje.
         // Traer solo metadatos; se filtra por período antes de comparar nombres y alias.
@@ -79,7 +79,7 @@ public partial class MomentoRepositorio
             }
             foreach (var texto in origen.Alias.Select(a => a.Texto).Append(origen.Nombre).Append(destino.Nombre).ToArray())
             {
-                var normalizado = NormalizadorMomento.Normalizar(texto);
+                var normalizado = ReglasMomento.Normalizar(texto);
                 if (!destino.Alias.Any(a => a.TextoNormalizado == normalizado))
                     destino.Alias.Add(new MomentoAlias { Texto = texto, TextoNormalizado = normalizado });
             }
@@ -96,10 +96,10 @@ public partial class MomentoRepositorio
     {
         var origen = await db.Momentos.AsNoTracking().SingleOrDefaultAsync(m => m.Id == origenId, ct)
             ?? throw new KeyNotFoundException("El momento de origen no existe.");
-        var destino = await CatalogoMomentos.Resolver(db, destinoId, ct);
+        var destino = await MomentoRepositorio.Resolver(db, destinoId, ct);
         if (origen.MomentoCanonicoId != null)
         {
-            if ((await CatalogoMomentos.Resolver(db, origenId, ct)).Id == destino.Id) return (origen, destino, true);
+            if ((await MomentoRepositorio.Resolver(db, origenId, ct)).Id == destino.Id) return (origen, destino, true);
             throw new ConflictoCatalogoException("El origen ya fue fusionado en otro momento.");
         }
         if (destino.Id != destinoId) throw new ConflictoCatalogoException("El destino cambió de momento canónico. Volver a previsualizar.");
@@ -117,7 +117,7 @@ public partial class MomentoRepositorio
         {
             if (!visitados.Add(id.Value)) throw new ConflictoCatalogoException("La jerarquía contiene un ciclo.");
             if (id == buscado) return true;
-            id = (await CatalogoMomentos.Resolver(db, id.Value, ct)).MomentoPadreId;
+            id = (await MomentoRepositorio.Resolver(db, id.Value, ct)).MomentoPadreId;
         }
         return false;
     }
@@ -133,8 +133,8 @@ public partial class MomentoRepositorio
 
     private static double Similitud(Momento a, Momento b)
     {
-        var textosA = a.Alias.Select(x => IdentidadMomento.Normalizar(x.Texto)).Append(IdentidadMomento.Normalizar(a.Nombre)).ToArray();
-        var textosB = b.Alias.Select(x => IdentidadMomento.Normalizar(x.Texto)).Append(IdentidadMomento.Normalizar(b.Nombre)).ToArray();
+        var textosA = a.Alias.Select(x => ReglasMomento.NormalizarIdentidad(x.Texto)).Append(ReglasMomento.NormalizarIdentidad(a.Nombre)).ToArray();
+        var textosB = b.Alias.Select(x => ReglasMomento.NormalizarIdentidad(x.Texto)).Append(ReglasMomento.NormalizarIdentidad(b.Nombre)).ToArray();
         return textosA.Max(x => textosB.Max(y =>
         {
             var palabrasA = x.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToHashSet();

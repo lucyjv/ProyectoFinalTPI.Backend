@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Dtos.Usuario;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
@@ -17,13 +18,13 @@ namespace ProyectoFinalTPI.Backend.Repositorio
 
         public async Task<Usuario?> ObtenerPorIdAsync(int id)
         {
-            return await _context.Usuarios.FirstOrDefaultAsync(u => u.Id == id);
+            return await _context.Usuarios.FirstOrDefaultAsync(u => u.Id == id && !u.EstaEliminado);
         }
 
         public async Task<bool> ExisteUsuario(int id, CancellationToken cancellationToken = default)
         {
             return await _context.Usuarios
-                .AnyAsync(u => u.Id == id, cancellationToken);
+                .AnyAsync(u => u.Id == id && !u.EstaEliminado, cancellationToken);
         }
 
         public async Task<List<AutorResumenDto>> ObtenerUsuariosPorIdsAsync(
@@ -36,7 +37,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio
 
             return await _context.Usuarios
                 .AsNoTracking()
-                .Where(u => ids.Contains(u.Id))
+                .Where(u => ids.Contains(u.Id) && !u.EstaEliminado)
                 .Select(u => new AutorResumenDto
                 {
                     Id       = u.Id,
@@ -55,14 +56,14 @@ namespace ProyectoFinalTPI.Backend.Repositorio
 
             return await _context.Usuarios
                 .AsNoTracking()
-                .Where(u => ids.Contains(u.Id))
+                .Where(u => ids.Contains(u.Id) && !u.EstaEliminado)
                 .Select(u => u.Id)
                 .ToListAsync(cancellationToken);
         }
         public async Task<Usuario_Interactivo?> ObtenerYUsuarioInteractivoPorIdAsync(int id)
         {
             return await _context.Set<Usuario_Interactivo>()
-                .FirstOrDefaultAsync(u => u.Id == id);
+                .FirstOrDefaultAsync(u => u.Id == id && !u.EstaEliminado);
         }
 
         public async Task<Usuario?> ObtenerPorEmailAsync(string email, CancellationToken cancellationToken = default)
@@ -96,7 +97,16 @@ namespace ProyectoFinalTPI.Backend.Repositorio
         public async Task ActualizarAsync(Usuario usuario, CancellationToken cancellationToken = default)
         {
             _context.Usuarios.Update(usuario);
-            await _context.SaveChangesAsync(cancellationToken);
+            try
+            {
+                await _context.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException ex) when (ex.InnerException is PostgresException pg
+                && pg.SqlState == PostgresErrorCodes.UniqueViolation
+                && pg.ConstraintName == "IX_Usuario_Username")
+            {
+                throw new NombreUsuarioEnUsoException();
+            }
         }
 
         /// <inheritdoc/>
@@ -107,7 +117,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio
             return await _context.Usuarios
                 .AsNoTracking()
                 .FirstOrDefaultAsync(
-                    u => u.Username.ToLower() == usernameNormalizado,
+                    u => !u.EstaEliminado && u.Username.ToLower() == usernameNormalizado,
                     cancellationToken);
         }
 
@@ -118,7 +128,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio
 
             return await _context.Usuarios
                 .AsNoTracking()
-                .Where(usuario => usuario.Username.ToLower().Contains(textoNormalizado))
+                .Where(usuario => !usuario.EstaEliminado && usuario.Username.ToLower().Contains(textoNormalizado))
                 .OrderByDescending(usuario => usuario.Username.ToLower().StartsWith(textoNormalizado))
                 .ThenBy(usuario => usuario.Username)
                 .Take(limite)

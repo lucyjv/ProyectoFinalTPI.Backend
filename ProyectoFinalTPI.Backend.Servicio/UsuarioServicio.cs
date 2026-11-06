@@ -12,19 +12,106 @@ namespace ProyectoFinalTPI.Backend.Servicio
     public class UsuarioServicio : IUsuarioServicio
     {
         private readonly IUsuarioRepositorio _repositorio;
+        private readonly IPerfilPublicoConsulta? _perfilPublico;
         private readonly ISeguimientoServicio? _seguimientoServicio;
         private readonly ILogroServicio _logroServicio;
         private readonly TimeProvider _timeProvider;
+        private readonly IFotoPerfilAlmacenamiento _fotoPerfilAlmacenamiento;
 
         public UsuarioServicio(
             IUsuarioRepositorio repositorio,
             ILogroServicio logroServicio,
-            ISeguimientoServicio? seguimientoServicio = null, TimeProvider? timeProvider = null)
+            ISeguimientoServicio? seguimientoServicio = null, TimeProvider? timeProvider = null,
+            IFotoPerfilAlmacenamiento? fotoPerfilAlmacenamiento = null, IPerfilPublicoConsulta? perfilPublico = null)
         {
             _repositorio = repositorio;
+            _perfilPublico = perfilPublico;
             _seguimientoServicio = seguimientoServicio;
             _logroServicio = logroServicio;
             _timeProvider = timeProvider ?? TimeProvider.System;
+            _fotoPerfilAlmacenamiento = fotoPerfilAlmacenamiento ?? new FotoPerfilNoConfigurada();
+        }
+
+        public async Task<UsuarioPerfilDto> CambiarUsernamePropioAsync(
+            int usuarioId, string username, CancellationToken cancellationToken = default)
+        {
+            var nuevoUsername = username?.Trim() ?? string.Empty;
+            if (nuevoUsername.Length is < 3 or > 50)
+                throw new ArgumentException("El username debe tener entre 3 y 50 caracteres.", nameof(username));
+
+            var usuario = await _repositorio.ObtenerPorIdAsync(usuarioId)
+                ?? throw new KeyNotFoundException("El usuario no existe.");
+
+            if (!string.Equals(usuario.Username, nuevoUsername, StringComparison.Ordinal))
+            {
+                var existente = await _repositorio.ObtenerPorUsernameAsync(nuevoUsername, cancellationToken);
+                if (existente is not null && existente.Id != usuarioId)
+                    throw new NombreUsuarioEnUsoException();
+
+                usuario.Username = nuevoUsername;
+                await _repositorio.ActualizarAsync(usuario, cancellationToken);
+            }
+
+            return await ConstruirPerfilDto(usuario, usuarioId, cancellationToken);
+        }
+
+        public async Task<UsuarioPerfilDto> CambiarFotoPerfilPropiaAsync(
+            int usuarioId, Stream archivo, string contentType, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(archivo);
+            var usuario = await _repositorio.ObtenerPorIdAsync(usuarioId)
+                ?? throw new KeyNotFoundException("El usuario no existe.");
+
+            const int maxBytes = 2 * 1024 * 1024;
+            using var memoria = new MemoryStream();
+            var buffer = new byte[81920];
+            int leidos;
+            while ((leidos = await archivo.ReadAsync(buffer, cancellationToken)) > 0)
+            {
+                if (memoria.Length + leidos > maxBytes)
+                    throw new ArgumentException("La foto no puede superar 2 MiB.", nameof(archivo));
+                await memoria.WriteAsync(buffer.AsMemory(0, leidos), cancellationToken);
+            }
+
+            var bytes = memoria.ToArray();
+            var extension = DetectarExtension(bytes);
+            if (extension is null)
+                throw new ArgumentException("La foto debe ser JPEG, PNG o WebP válido.", nameof(archivo));
+
+            var tipoEsperado = extension switch
+            {
+                ".jpg" => "image/jpeg",
+                ".png" => "image/png",
+                _ => "image/webp"
+            };
+            if (!string.Equals(contentType, tipoEsperado, StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException("El tipo de contenido no coincide con la foto.", nameof(contentType));
+
+            using var contenido = new MemoryStream(bytes);
+            var url = await _fotoPerfilAlmacenamiento.SubirAsync(
+                contenido, $"usuario-{usuarioId}-{Guid.NewGuid():N}{extension}", cancellationToken);
+            usuario.FotoPerfilUrl = url;
+            await _repositorio.ActualizarAsync(usuario, cancellationToken);
+            return await ConstruirPerfilDto(usuario, usuarioId, cancellationToken);
+        }
+
+        private static string? DetectarExtension(byte[] bytes)
+        {
+            if (bytes.Length >= 3 && bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF)
+                return ".jpg";
+            if (bytes.Length >= 8 && bytes.AsSpan(0, 8).SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }))
+                return ".png";
+            if (bytes.Length >= 12
+                && bytes.AsSpan(0, 4).SequenceEqual("RIFF"u8)
+                && bytes.AsSpan(8, 4).SequenceEqual("WEBP"u8))
+                return ".webp";
+            return null;
+        }
+
+        private sealed class FotoPerfilNoConfigurada : IFotoPerfilAlmacenamiento
+        {
+            public Task<string> SubirAsync(Stream archivo, string nombreArchivo, CancellationToken cancellationToken)
+                => throw new InvalidOperationException("No se configuró el almacenamiento de fotos de perfil.");
         }
 
         #region Operaciones públicas
@@ -54,7 +141,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
             string username, int? usuarioAutenticadoId, CancellationToken cancellationToken = default)
         {
             var usuario = await ObtenerUsuarioPorUsername(username, cancellationToken);
-
+            if (_perfilPublico is not null) usuario = await _perfilPublico.Obtener(usuario.Id, cancellationToken) ?? usuario;
             return await ConstruirPerfilDto(usuario, usuarioAutenticadoId, cancellationToken);
         }
 
@@ -62,7 +149,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
         public async Task<UsuarioPerfilDto> ObtenerPerfilPorIdAsync(
             int usuarioId, int? usuarioAutenticadoId, CancellationToken cancellationToken = default)
         {
-            var usuario = await _repositorio.ObtenerPorIdAsync(usuarioId);
+            var usuario = _perfilPublico is null ? await _repositorio.ObtenerPorIdAsync(usuarioId) : await _perfilPublico.Obtener(usuarioId, cancellationToken);
 
             if (usuario is null)
                 throw new KeyNotFoundException($"No existe ningún usuario con el identificador '{usuarioId}'.");
@@ -136,6 +223,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
             {
                 Id = usuario.Id,
                 Username = usuario.Username,
+                FotoPerfilUrl = usuario.FotoPerfilUrl,
                 CantidadPublicaciones = cantidadPublicaciones,
                 CantidadSeguidores = cantidadSeguidores,
                 CantidadSeguidos = cantidadSeguidos,

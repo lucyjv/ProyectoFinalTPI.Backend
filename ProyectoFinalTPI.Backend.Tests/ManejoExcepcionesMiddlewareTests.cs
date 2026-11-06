@@ -7,9 +7,12 @@ namespace ProyectoFinalTPI.Backend.Tests;
 
 public class ManejoExcepcionesMiddlewareTests
 {
+    #region Manejo de Excepciones
+
     [Fact]
-    public async Task SolicitudCanceladaPropagaLaExcepcionSinEscribirUnError()
+    public async Task QueSolicitudCanceladaPropagueExcepcionSinEscribirError()
     {
+        //Arrange
         using var cancelacion = new CancellationTokenSource();
         cancelacion.Cancel();
         var context = new DefaultHttpContext { RequestAborted = cancelacion.Token };
@@ -19,10 +22,14 @@ public class ManejoExcepcionesMiddlewareTests
         var middleware = new ManejoExcepcionesMiddleware(_ => Task.FromException(error),
             NullLogger<ManejoExcepcionesMiddleware>.Instance);
 
+        //Act
         var resultado = await Assert.ThrowsAsync<OperationCanceledException>(
             () => middleware.InvokeAsync(context));
 
+        //Assert
         Assert.Same(error, resultado);
         Assert.Equal(0, body.Length);
     }
+
+    #endregion
 }
