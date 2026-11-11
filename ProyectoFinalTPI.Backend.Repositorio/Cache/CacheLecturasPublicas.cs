@@ -24,7 +24,10 @@ public sealed class CacheLecturasPublicas(IDistributedCache cache, ILogger<Cache
             var bytes = await cache.GetAsync($"publico:{version}:{clave}", ct);
             if (bytes is not null)
             {
-                try { return JsonSerializer.Deserialize<T>(bytes); }
+                try
+                {
+                    if (JsonSerializer.Deserialize<T>(bytes) is { } entrada) return entrada;
+                }
                 catch (JsonException) { /* Una entrada inválida se reconstruye desde la base. */ }
             }
         }
@@ -38,8 +41,9 @@ public sealed class CacheLecturasPublicas(IDistributedCache cache, ILogger<Cache
         if (valor is null) return null;
         try
         {
+            var minutos = clave.StartsWith("mapa:consulta:v2:", StringComparison.Ordinal) ? 30 : 2;
             await cache.SetAsync($"publico:{version}:{clave}", JsonSerializer.SerializeToUtf8Bytes(valor),
-                new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(2) }, ct);
+                new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(minutos) }, ct);
         }
         catch (RedisException) { logger.LogWarning("No se pudo guardar la caché de {Clave}.", clave); }
         return valor;
@@ -48,12 +52,12 @@ public sealed class CacheLecturasPublicas(IDistributedCache cache, ILogger<Cache
     public void Invalidar()
     {
         try { cache.SetString(Generacion, Guid.NewGuid().ToString("N")); }
-        catch (RedisException) { logger.LogWarning("Falló la invalidación; las entradas públicas vencen en dos minutos."); }
+        catch (RedisException) { logger.LogWarning("Falló la invalidación; las entradas públicas conservan su vencimiento."); }
     }
 
     public async Task InvalidarAsync(CancellationToken ct)
     {
         try { await cache.SetStringAsync(Generacion, Guid.NewGuid().ToString("N"), token: ct); }
-        catch (RedisException) { logger.LogWarning("Falló la invalidación; las entradas públicas vencen en dos minutos."); }
+        catch (RedisException) { logger.LogWarning("Falló la invalidación; las entradas públicas conservan su vencimiento."); }
     }
 }

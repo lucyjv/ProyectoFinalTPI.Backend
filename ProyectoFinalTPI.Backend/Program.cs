@@ -83,7 +83,10 @@ builder.Services.AddSingleton<IDriver>(provider =>
     return GraphDatabase.Driver(uri, AuthTokens.Basic(user, password));
 });
 
-builder.Services.AddScoped<IPublicacionRepositorio, PublicacionRepositorio>();
+var cacheMapaHabilitada = builder.Configuration.GetValue<bool>("Redis:CacheMapaHabilitada");
+builder.Services.AddScoped<IPublicacionRepositorio>(provider => new PublicacionRepositorio(
+    provider.GetRequiredService<ApplicationDbContext>(), provider.GetService<IDriver>(),
+    cacheMapaHabilitada ? provider.GetService<ICacheLecturasPublicas>() : null));
 builder.Services.AddScoped<IRelacionRecuerdosRepositorio, RelacionRecuerdosRepositorio>();
 builder.Services.AddScoped<IRelacionRecuerdosServicio, RelacionRecuerdosServicio>();
 builder.Services.AddScoped<IMomentoRepositorio, MomentoRepositorio>();
