@@ -348,6 +348,12 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Property<int>("EmisorId")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("EstaEliminado")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("FechaEliminacion")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime>("FechaEnvio")
                         .HasColumnType("timestamp with time zone");
 
@@ -689,6 +695,79 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.HasIndex("UsuarioId");
 
                     b.ToTable("reacciones_comentario", (string)null);
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Reporte", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("AccionTomada")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("AdministradorId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ContenidoId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ContenidoSnapshot")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Contexto")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("ContextoId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Detalle")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<int>("Estado")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("FechaResolucion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Motivo")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ObservacionAdministrativa")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<int>("ReportanteId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TipoContenido")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UsuarioReportadoId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AdministradorId");
+
+                    b.HasIndex("UsuarioReportadoId");
+
+                    b.HasIndex("Estado", "FechaCreacion");
+
+                    b.HasIndex("TipoContenido", "ContenidoId");
+
+                    b.HasIndex("ReportanteId", "TipoContenido", "ContenidoId")
+                        .IsUnique()
+                        .HasFilter("\"Estado\" IN (0, 1)");
+
+                    b.ToTable("reportes", (string)null);
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.SesionUsuario", b =>
@@ -1136,6 +1215,32 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Navigation("Comentario");
 
                     b.Navigation("Usuario");
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Reporte", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario", "Administrador")
+                        .WithMany()
+                        .HasForeignKey("AdministradorId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario", "Reportante")
+                        .WithMany()
+                        .HasForeignKey("ReportanteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario", "UsuarioReportado")
+                        .WithMany()
+                        .HasForeignKey("UsuarioReportadoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Administrador");
+
+                    b.Navigation("Reportante");
+
+                    b.Navigation("UsuarioReportado");
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.SesionUsuario", b =>
