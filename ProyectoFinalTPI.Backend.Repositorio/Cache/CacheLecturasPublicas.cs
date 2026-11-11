@@ -41,7 +41,12 @@ public sealed class CacheLecturasPublicas(IDistributedCache cache, ILogger<Cache
         if (valor is null) return null;
         try
         {
-            var minutos = clave.StartsWith("mapa:consulta:v2:", StringComparison.Ordinal) ? 30 : 2;
+            var minutos = clave switch
+            {
+                _ when clave.StartsWith("mapa:consulta:v2:", StringComparison.Ordinal) => 30,
+                _ when clave.StartsWith("perfil:completo:", StringComparison.Ordinal) => 10,
+                _ => 2
+            };
             await cache.SetAsync($"publico:{version}:{clave}", JsonSerializer.SerializeToUtf8Bytes(valor),
                 new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(minutos) }, ct);
         }
