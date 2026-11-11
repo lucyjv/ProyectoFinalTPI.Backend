@@ -136,10 +136,13 @@ builder.Services.AddScoped<IAdminPublicacionRepositorio, AdminPublicacionReposit
 builder.Services.AddScoped<IAdminUsuarioRepositorio, AdminUsuarioRepositorio>();
 builder.Services.AddScoped<IAdminComentarioRepositorio, AdminComentarioRepositorio>();
 builder.Services.AddScoped<IAdminEstadisticaRepositorio, AdminEstadisticaRepositorio>();
+builder.Services.AddScoped<IReporteRepositorio, ReporteRepositorio>();
 builder.Services.AddScoped<IAdminPublicacionServicio, AdminPublicacionServicio>();
 builder.Services.AddScoped<IAdminUsuarioServicio, AdminUsuarioServicio>();
 builder.Services.AddScoped<IAdminComentarioServicio, AdminComentarioServicio>();
 builder.Services.AddScoped<IAdminEstadisticaServicio, AdminEstadisticaServicio>();
+builder.Services.AddScoped<IReporteServicio, ReporteServicio>();
+builder.Services.AddScoped<IAdminReporteServicio, AdminReporteServicio>();
 
 builder.Services.AddScoped<IUsuarioServicio, UsuarioServicio>();
 

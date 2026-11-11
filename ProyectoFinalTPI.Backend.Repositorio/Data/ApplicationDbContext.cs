@@ -30,6 +30,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
         public DbSet<PublicacionMomento> PublicacionesMomentos { get; set; }
         public DbSet<TrabajoAnalisisRecuerdo> TrabajosAnalisisRecuerdos { get; set; }
         public DbSet<Notificacion> Notificaciones { get; set; }
+        public DbSet<Reporte> Reportes { get; set; }
 
         public override int SaveChanges(bool acceptAllChangesOnSuccess)
         {
@@ -170,6 +171,25 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
                     .WithMany(comentario => comentario.Respuestas)
                     .HasForeignKey(comentario => comentario.ComentarioPadreId)
                     .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<Reporte>(entity =>
+            {
+                entity.ToTable("reportes");
+                entity.Property(r => r.ContenidoSnapshot).IsRequired();
+                entity.Property(r => r.Detalle).HasMaxLength(1000);
+                entity.Property(r => r.ObservacionAdministrativa).HasMaxLength(1000);
+                entity.HasIndex(r => new { r.Estado, r.FechaCreacion });
+                entity.HasIndex(r => new { r.TipoContenido, r.ContenidoId });
+                entity.HasIndex(r => new { r.ReportanteId, r.TipoContenido, r.ContenidoId })
+                    .IsUnique()
+                    .HasFilter("\"Estado\" IN (0, 1)");
+                entity.HasOne(r => r.Reportante).WithMany().HasForeignKey(r => r.ReportanteId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(r => r.UsuarioReportado).WithMany().HasForeignKey(r => r.UsuarioReportadoId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(r => r.Administrador).WithMany().HasForeignKey(r => r.AdministradorId)
+                    .OnDelete(DeleteBehavior.Restrict);
             });
 
             modelBuilder.Entity<ReaccionComentario>(entity =>

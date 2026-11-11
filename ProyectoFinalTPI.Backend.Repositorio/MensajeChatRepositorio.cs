@@ -33,6 +33,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                 .Include(m => m.Emisor)
                 .Where(m =>
                     m.FechaExpiracion > ahora &&
+                    !m.EstaEliminado &&
                     (
                         (m.EmisorId == usuarioAId && m.DestinatarioId == usuarioBId) ||
                         (m.EmisorId == usuarioBId && m.DestinatarioId == usuarioAId)
@@ -80,6 +81,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                 .Include(m => m.Destinatario)
                 .Where(m =>
                     m.FechaExpiracion > ahora &&
+                    !m.EstaEliminado &&
                     (m.EmisorId == usuarioId || m.DestinatarioId == usuarioId))
                 .ToListAsync();
 
