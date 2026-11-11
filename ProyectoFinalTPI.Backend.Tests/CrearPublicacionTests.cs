@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Moq;
@@ -67,6 +68,32 @@ public class CrearPublicacionTests
         Assert.Equal(archivo ? "foto.jpg" : null, factory.MediaNombre);
         Assert.Equal(archivo ? null : "https://example.com/foto.jpg", factory.MediaUrl);
         Assert.Equal(archivo ? new byte[] { 1, 2, 3 } : null, factory.MediaBytes);
+    }
+
+    [Theory]
+    [InlineData("Foto", "https://example.com/recuerdo.jpg?token=a%2Bb")]
+    [InlineData("Video", "https://example.com/recuerdo.mp4")]
+    public async Task QueCrearConEnlacePersistaLaUrlSinCredencialesDeCloudinary(string tipo, string url)
+    {
+        await using var factory = new ApiFactory();
+        using var api = factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+        {
+            services.RemoveAll<IMultimediaServicio>();
+            services.AddSingleton<IMultimediaServicio>(new MultimediaServicio(new ConfigurationBuilder().Build()));
+        }));
+        using var client = api.CreateClient();
+        using var scope = api.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        db.Usuarios.Add(new Usuario_Personal { Id = 1, Username = "test", Email = "test@example.com" });
+        await db.SaveChangesAsync();
+        using var form = Form(overrides: new() { ["TipoMultimedia"] = tipo, ["UrlArchivo"] = url });
+
+        using var response = await client.PostAsync("/api/publicaciones", form);
+
+        Assert.True(response.StatusCode == HttpStatusCode.Created, await response.Content.ReadAsStringAsync());
+        var publicacion = await db.Publicaciones.SingleAsync();
+        Assert.Equal(url, publicacion.UrlMultimedia);
+        Assert.Equal(Enum.Parse<MultimediaEnum>(tipo), publicacion.TipoMultimedia);
     }
 
     #endregion
