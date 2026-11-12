@@ -1,10 +1,11 @@
-using ProyectoFinalTPI.Backend.Interfaces.Configuracion;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Diagnostics.Metrics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ProyectoFinalTPI.Backend.Dtos.Momento;
 using ProyectoFinalTPI.Backend.Entidades;
+using ProyectoFinalTPI.Backend.Interfaces.Configuracion;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 
@@ -20,103 +21,189 @@ public class AnalisisRecuerdosServicio(ITrabajoAnalisisRepositorio repositorio, 
     private static readonly Counter<long> Fallos = Medidor.CreateCounter<long>("analisis.trabajos.fallos");
     private static readonly Histogram<double> Duracion = Medidor.CreateHistogram<double>("analisis.duracion", "ms");
 
+    #region Operaciones públicas
+
     public async Task<bool> ProcesarUno(CancellationToken ct)
     {
-        if (!analizador.Disponible) return false;
         var config = opciones.Value;
-        var reserva = await repositorio.Reservar(Ahora(), TimeSpan.FromSeconds(config.ReservaSegundos), config.MaxIntentos, ct);
+        var reserva = await ReservarTrabajo(config, ct);
         if (reserva == null) return false;
-        using var actividad = Fuente.StartActivity("analisis.procesar", ActivityKind.Internal);
+        return await ProcesarReserva(reserva, config, ct);
+    }
+    public async Task<EstadoAnalisisRecuerdoDto> ObtenerEstado(int id, CancellationToken ct)
+    {
+        var original = await ObtenerOriginalVisible(id, ct);
+        return await repositorio.ObtenerEstado(original, ct)
+            ?? throw new KeyNotFoundException(
+                "La publicación no existe o no está disponible.");
+    }
+
+    #endregion
+
+    #region Métodos privados y validaciones
+
+    private Task<ReservaAnalisisDto?> ReservarTrabajo(
+        OpcionesAnalisisRecuerdos config, CancellationToken ct) =>
+        repositorio.Reservar(
+            Ahora(),
+            TimeSpan.FromSeconds(config.ReservaSegundos),
+            config.MaxIntentos,
+            ct);
+    private async Task<bool> ProcesarReserva(
+        ReservaAnalisisDto reserva,
+        OpcionesAnalisisRecuerdos config,
+        CancellationToken ct)
+    {
         var inicio = Stopwatch.GetTimestamp();
         try
         {
-            await ProcesarReserva(reserva, config, ct);
+            await ProcesarContenido(reserva, config, ct);
         }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception error)
         {
             await RegistrarFallo(reserva, error, config, ct);
         }
-        finally { Duracion.Record(Stopwatch.GetElapsedTime(inicio).TotalMilliseconds); }
+        finally
+        {
+            Duracion.Record(
+                Stopwatch.GetElapsedTime(inicio).TotalMilliseconds);
+        }
         return true;
     }
-
-    private async Task ProcesarReserva(ReservaAnalisisDto reserva, OpcionesAnalisisRecuerdos config, CancellationToken ct)
+    private async Task ProcesarContenido(
+        ReservaAnalisisDto reserva,
+        OpcionesAnalisisRecuerdos config,
+        CancellationToken ct)
     {
-        var entrada = await repositorio.ObtenerEntrada(reserva, Ahora(), ct);
+        var entrada = await repositorio.ObtenerEntrada(
+            reserva, Ahora(), ct);
         if (entrada == null)
         {
             await repositorio.Descartar(reserva, Ahora(), ct);
             return;
         }
+        ValidarTamanioEntrada(entrada, config.MaxCaracteresEntrada);
+        await AnalizarYGuardar(reserva, entrada, config, ct);
+    }
+    private async Task AnalizarYGuardar(
+        ReservaAnalisisDto reserva,
+        EntradaAnalisisRecuerdoDto entrada,
+        OpcionesAnalisisRecuerdos config,
+        CancellationToken ct)
+    {
+        using var tiempoMaximo = new CancellationTokenSource(
+            TimeSpan.FromSeconds(config.TiempoMaximoSegundos), reloj);
+        using var vinculada =
+            CancellationTokenSource.CreateLinkedTokenSource(
+                ct, tiempoMaximo.Token);
 
-        ValidarEntrada(entrada, config.MaxCaracteresEntrada);
-        using var tiempoMaximo = new CancellationTokenSource(TimeSpan.FromSeconds(config.TiempoMaximoSegundos), reloj);
-        using var vinculada = CancellationTokenSource.CreateLinkedTokenSource(ct, tiempoMaximo.Token);
-        var resultado = await analizador.Analizar(entrada, vinculada.Token).WaitAsync(vinculada.Token);
+        var resultado = await analizador
+            .Analizar(entrada, vinculada.Token)
+            .WaitAsync(vinculada.Token);
+
         ValidarResultado(resultado);
-
-        await repositorio.Completar(reserva, resultado, analizador.Version, Ahora(), ct);
+        await repositorio.Completar(
+            reserva, resultado, analizador.Version, Ahora(), ct);
         Procesados.Add(1);
     }
-
-    private static void ValidarEntrada(EntradaAnalisisRecuerdoDto entrada, int maxCaracteres)
+    private static void ValidarTamanioEntrada(
+        EntradaAnalisisRecuerdoDto entrada, int maximo)
     {
-        if (entrada.Titulo.Length + entrada.Descripcion.Length > maxCaracteres)
-            throw new ArgumentException("La entrada excede el límite del analizador.");
+        if (entrada.Titulo.Length + entrada.Descripcion.Length > maximo)
+            throw new ArgumentException(
+                "La entrada excede el límite del analizador.");
     }
-
-    private void ValidarResultado(ResultadoAnalisisRecuerdoDto? resultado)
+    private void ValidarResultado(
+        [NotNull] ResultadoAnalisisRecuerdoDto? resultado)
     {
         ValidadorPropuestasMomento.Validar(resultado?.Propuestas);
-        if (resultado == null || resultado.Momentos == null || resultado.Momentos.Count > 50 ||
-            (!resultado.AnalisisRealizado && (resultado.Momentos.Count != 0 || resultado.Propuestas?.Count > 0)) ||
-            resultado.Momentos.Any(m => m == null || m.MomentoId <= 0 || !double.IsFinite(m.Confianza) || m.Confianza < 0 || m.Confianza > 1) ||
-            resultado.Momentos.Select(m => m.MomentoId).Distinct().Count() != resultado.Momentos.Count ||
-            string.IsNullOrWhiteSpace(analizador.Version) || analizador.Version.Length > 100)
-            throw new ArgumentException("El resultado del analizador no es válido.");
+        if (resultado == null ||
+            resultado.Momentos == null ||
+            resultado.Momentos.Count > 50 ||
+            (!resultado.AnalisisRealizado &&
+                (resultado.Momentos.Count != 0 ||
+                    resultado.Propuestas?.Count > 0)) ||
+            resultado.Momentos.Any(m =>
+                m == null ||
+                m.MomentoId <= 0 ||
+                !double.IsFinite(m.Confianza) ||
+                m.Confianza < 0 ||
+                m.Confianza > 1) ||
+            resultado.Momentos.Select(m => m.MomentoId)
+                .Distinct().Count() != resultado.Momentos.Count ||
+            string.IsNullOrWhiteSpace(analizador.Version) ||
+            analizador.Version.Length > 100)
+            throw new ArgumentException(
+                "El resultado del analizador no es válido.");
     }
-
-    private async Task RegistrarFallo(ReservaAnalisisDto reserva, Exception error, OpcionesAnalisisRecuerdos config, CancellationToken ct)
+    private async Task RegistrarFallo(
+        ReservaAnalisisDto reserva,
+        Exception error,
+        OpcionesAnalisisRecuerdos config,
+        CancellationToken ct)
     {
-        var proveedor = error as ErrorProveedorAnalisis;
         var codigo = ObtenerCodigoError(error);
         var ahora = Ahora();
-        var espera = CalcularEsperaReintentoSegundos(reserva.Intentos, config.ReintentoBaseSegundos, proveedor?.ReintentarEn);
-        var maxIntentos = error is ArgumentException or ConflictoCatalogoException || proveedor?.Permanente == true
-            ? 1 : config.MaxIntentos;
+        var espera = CalcularEsperaReintento(
+            reserva.Intentos, error, config);
 
-        await repositorio.RegistrarFallo(reserva, codigo, ahora, ahora.AddSeconds(espera), maxIntentos, ct);
-        Fallos.Add(1, new KeyValuePair<string, object?>("codigo", codigo));
-        Activity.Current?.SetTag("analisis.error.codigo", codigo);
-        Activity.Current?.SetStatus(ActivityStatusCode.Error);
-        // No guardar/loguear títulos, descripciones, prompts ni mensajes arbitrarios del proveedor.
-        logger.LogWarning("Falló el trabajo de análisis {TrabajoId}: {Codigo}", reserva.Id, codigo);
+        await repositorio.RegistrarFallo(
+            reserva, codigo, ahora, ahora.AddSeconds(espera),
+            ObtenerMaxIntentos(error, config.MaxIntentos), ct);
+
+        Fallos.Add(1);
+        // No registrar textos privados del proveedor ni del recuerdo.
+        logger.LogWarning(
+            "Falló el trabajo de análisis {TrabajoId}: {Codigo}",
+            reserva.Id, codigo);
     }
-
-    private static string ObtenerCodigoError(Exception error) => error switch
+    private static string ObtenerCodigoError(Exception error) =>
+        (error as ErrorProveedorAnalisis)?.Codigo ?? error switch
+        {
+            ConflictoCatalogoException => "catalogo_ambiguo",
+            OperationCanceledException => "tiempo_agotado",
+            ArgumentException => "analisis_invalido",
+            _ => "analisis_error"
+        };
+    private static double CalcularEsperaReintento(
+        int intentos, Exception error, OpcionesAnalisisRecuerdos config)
     {
-        ErrorProveedorAnalisis proveedor => proveedor.Codigo,
-        ConflictoCatalogoException => "catalogo_ambiguo",
-        OperationCanceledException => "tiempo_agotado",
-        ArgumentException => "analisis_invalido",
-        _ => "analisis_error"
-    };
+        var espera =
+            Math.Min(
+                300,
+                config.ReintentoBaseSegundos *
+                    Math.Pow(2, intentos - 1))
+            * (0.9 + Random.Shared.NextDouble() * 0.2);
 
-    private static double CalcularEsperaReintentoSegundos(int intentos, int segundosBase, TimeSpan? esperaProveedor)
-    {
-        var espera = Math.Min(300, segundosBase * Math.Pow(2, intentos - 1)) * (0.9 + Random.Shared.NextDouble() * 0.2);
-        return esperaProveedor is { } minimo ? Math.Max(espera, minimo.TotalSeconds) : espera;
+        return error is ErrorProveedorAnalisis { ReintentarEn: { } minimo }
+            ? Math.Max(espera, minimo.TotalSeconds)
+            : espera;
     }
-
-    public async Task<EstadoAnalisisRecuerdoDto> ObtenerEstado(int id, CancellationToken ct)
+    private static int ObtenerMaxIntentos(Exception error, int maximo) =>
+        error is ArgumentException
+            or ConflictoCatalogoException
+            or ErrorProveedorAnalisis { Permanente: true }
+            ? 1
+            : maximo;
+    private async Task<int> ObtenerOriginalVisible(
+        int id, CancellationToken ct)
     {
-        if (id <= 0) throw new ArgumentException("El identificador debe ser positivo.");
-        var original = await relaciones.ObtenerOriginalVisible(id, ct)
-            ?? throw new KeyNotFoundException("La publicación no existe o no está disponible.");
-        return await repositorio.ObtenerEstado(original, ct)
-            ?? throw new KeyNotFoundException("La publicación no existe o no está disponible.");
+        ValidarId(id);
+        return await relaciones.ObtenerOriginalVisible(id, ct)
+            ?? throw new KeyNotFoundException(
+                "La publicación no existe o no está disponible.");
     }
-
+    private static void ValidarId(int id)
+    {
+        if (id <= 0)
+            throw new ArgumentException(
+                "El identificador debe ser positivo.");
+    }
     private DateTime Ahora() => reloj.GetUtcNow().UtcDateTime;
+
+    #endregion
 }

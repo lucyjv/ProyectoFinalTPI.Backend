@@ -26,183 +26,92 @@ namespace ProyectoFinalTPI.Backend.Servicio
             _push = push;
         }
 
+        #region Operaciones públicas
+
         /// <inheritdoc/>
-        public async Task NotificarNuevoSeguidorAsync(
+        public Task NotificarNuevoSeguidorAsync(
             int usuarioDestinatarioId, int nuevoSeguidorId,
-            CancellationToken cancellationToken = default)
-        {
-            var notificacion = new Notificacion
-            {
-                UsuarioDestinatarioId = usuarioDestinatarioId,
-                Tipo = TipoNotificacion.NuevoSeguidor,
-                EmisorId = nuevoSeguidorId,
-                FechaCreacion = DateTime.UtcNow
-            };
-
-            await _repositorio.GuardarAsync(notificacion, cancellationToken);
-            await EnviarAsync(usuarioDestinatarioId, notificacion, nuevoSeguidorId, cancellationToken);
-        }
+            CancellationToken cancellationToken = default) =>
+            GuardarYEnviarAsync(
+                usuarioDestinatarioId,
+                TipoNotificacion.NuevoSeguidor,
+                null, nuevoSeguidorId, cancellationToken);
 
         /// <inheritdoc/>
-        public async Task NotificarComentarioEnPublicacionAsync(
+        public Task NotificarComentarioEnPublicacionAsync(
             int usuarioDestinatarioId, int publicacionId, int comentadorId,
-            CancellationToken cancellationToken = default)
-        {
-            var yaExiste = await _repositorio.ExisteNotificacionPendienteAsync(
+            CancellationToken cancellationToken = default) =>
+            NotificarSiNoHayPendienteAsync(
                 usuarioDestinatarioId,
                 TipoNotificacion.ComentarioEnPublicacion,
-                publicacionId,
-                cancellationToken);
-
-            if (yaExiste) return;
-
-            var notificacion = new Notificacion
-            {
-                UsuarioDestinatarioId = usuarioDestinatarioId,
-                Tipo = TipoNotificacion.ComentarioEnPublicacion,
-                PublicacionId = publicacionId,
-                EmisorId = comentadorId,
-                FechaCreacion = DateTime.UtcNow
-            };
-
-            await _repositorio.GuardarAsync(notificacion, cancellationToken);
-            await EnviarAsync(usuarioDestinatarioId, notificacion, comentadorId, cancellationToken);
-        }
+                publicacionId, comentadorId, cancellationToken);
 
         /// <inheritdoc/>
-        public async Task NotificarPuntuacionEnPublicacionAsync(
+        public Task NotificarPuntuacionEnPublicacionAsync(
             int usuarioDestinatarioId, int publicacionId, int puntuadorId,
-            CancellationToken cancellationToken = default)
-        {
-            var yaExiste = await _repositorio.ExisteNotificacionPendienteAsync(
+            CancellationToken cancellationToken = default) =>
+            NotificarSiNoHayPendienteAsync(
                 usuarioDestinatarioId,
                 TipoNotificacion.PuntuacionEnPublicacion,
-                publicacionId,
-                cancellationToken);
-
-            if (yaExiste) return;
-
-            var notificacion = new Notificacion
-            {
-                UsuarioDestinatarioId = usuarioDestinatarioId,
-                Tipo = TipoNotificacion.PuntuacionEnPublicacion,
-                PublicacionId = publicacionId,
-                EmisorId = puntuadorId,
-                FechaCreacion = DateTime.UtcNow
-            };
-
-            await _repositorio.GuardarAsync(notificacion, cancellationToken);
-            await EnviarAsync(usuarioDestinatarioId, notificacion, puntuadorId, cancellationToken);
-        }
+                publicacionId, puntuadorId, cancellationToken);
 
         /// <inheritdoc/>
-        public async Task NotificarAscensoCategoriaAsync(
+        public Task NotificarAscensoCategoriaAsync(
             int usuarioDestinatarioId,
             CancellationToken cancellationToken = default)
         {
             // PLACEHOLDER: se conectará al sistema de categorías cuando esté listo.
-            var notificacion = new Notificacion
-            {
-                UsuarioDestinatarioId = usuarioDestinatarioId,
-                Tipo = TipoNotificacion.AscensoCategoria,
-                FechaCreacion = DateTime.UtcNow
-            };
-
-            await _repositorio.GuardarAsync(notificacion, cancellationToken);
-            await EnviarAsync(usuarioDestinatarioId, notificacion, null, cancellationToken);
+            return GuardarYEnviarAsync(
+                usuarioDestinatarioId,
+                TipoNotificacion.AscensoCategoria,
+                null, null, cancellationToken);
         }
 
         /// <inheritdoc/>
-        public async Task NotificarMensajesCorreoAsync(
+        public Task NotificarMensajesCorreoAsync(
             int usuarioDestinatarioId,
             CancellationToken cancellationToken = default)
         {
             // PLACEHOLDER: se conectará al módulo de casilla de correo cuando esté listo.
-            var yaExiste = await _repositorio.ExisteNotificacionPendienteAsync(
+            return NotificarSiNoHayPendienteAsync(
                 usuarioDestinatarioId,
                 TipoNotificacion.MensajesCorreo,
-                publicacionId: null,
-                cancellationToken);
-
-            if (yaExiste) return;
-
-            var notificacion = new Notificacion
-            {
-                UsuarioDestinatarioId = usuarioDestinatarioId,
-                Tipo = TipoNotificacion.MensajesCorreo,
-                FechaCreacion = DateTime.UtcNow
-            };
-
-            await _repositorio.GuardarAsync(notificacion, cancellationToken);
-            await EnviarAsync(usuarioDestinatarioId, notificacion, null, cancellationToken);
+                null, null, cancellationToken);
         }
 
         /// <inheritdoc/>
-        public async Task NotificarMensajeChatAsync(
+        public Task NotificarMensajeChatAsync(
             int usuarioDestinatarioId, int emisorId,
-            CancellationToken cancellationToken = default)
-        {
-            var yaExiste = await _repositorio.ExisteNotificacionPendienteAsync(
+            CancellationToken cancellationToken = default) =>
+            NotificarSiNoHayPendienteAsync(
                 usuarioDestinatarioId,
                 TipoNotificacion.MensajeChat,
-                publicacionId: null,
+                null, emisorId, cancellationToken);
+
+        public Task NotificarAdministrativaAsync(
+            int usuarioDestinatarioId, int? publicacionId = null,
+            CancellationToken cancellationToken = default) =>
+            GuardarYEnviarAsync(
+                usuarioDestinatarioId,
+                TipoNotificacion.Administrativa,
+                publicacionId,
+                null,
                 cancellationToken);
 
-            if (yaExiste) return;
-
-            var notificacion = new Notificacion
-            {
-                UsuarioDestinatarioId = usuarioDestinatarioId,
-                Tipo = TipoNotificacion.MensajeChat,
-                EmisorId = emisorId,
-                FechaCreacion = DateTime.UtcNow
-            };
-
-            await _repositorio.GuardarAsync(notificacion, cancellationToken);
-            await EnviarAsync(usuarioDestinatarioId, notificacion, emisorId, cancellationToken);
-        }
-
-        public async Task NotificarAdministrativaAsync(
-            int usuarioDestinatarioId, int? publicacionId = null,
-            CancellationToken cancellationToken = default)
-        {
-            var notificacion = new Notificacion
-            {
-                UsuarioDestinatarioId = usuarioDestinatarioId,
-                PublicacionId = publicacionId,
-                Tipo = TipoNotificacion.Administrativa,
-                FechaCreacion = DateTime.UtcNow
-            };
-            await _repositorio.GuardarAsync(notificacion, cancellationToken);
-            await EnviarAsync(usuarioDestinatarioId, notificacion, null, cancellationToken);
-        }
-
         /// <inheritdoc/>
-        public async Task NotificarEtiquetadoEnPublicacionAsync(
+        public Task NotificarEtiquetadoEnPublicacionAsync(
             int usuarioDestinatarioId, int publicacionId, int emisorId,
             CancellationToken cancellationToken = default)
         {
-            if (usuarioDestinatarioId == emisorId) return;
+            if (usuarioDestinatarioId == emisorId)
+                return Task.CompletedTask;
 
-            var yaExiste = await _repositorio.ExisteNotificacionPendienteAsync(
+            return NotificarSiNoHayPendienteAsync(
                 usuarioDestinatarioId,
                 TipoNotificacion.EtiquetadoEnPublicacion,
                 publicacionId,
+                emisorId,
                 cancellationToken);
-
-            if (yaExiste) return;
-
-            var notificacion = new Notificacion
-            {
-                UsuarioDestinatarioId = usuarioDestinatarioId,
-                Tipo = TipoNotificacion.EtiquetadoEnPublicacion,
-                PublicacionId = publicacionId,
-                EmisorId = emisorId,
-                FechaCreacion = DateTime.UtcNow
-            };
-
-            await _repositorio.GuardarAsync(notificacion, cancellationToken);
-            await EnviarAsync(usuarioDestinatarioId, notificacion, emisorId, cancellationToken);
         }
 
         /// <inheritdoc/>
@@ -230,28 +139,70 @@ namespace ProyectoFinalTPI.Backend.Servicio
             await _repositorio.MarcarTodasComoLeidasAsync(usuarioId, cancellationToken);
         }
 
-        // ── Métodos privados ─────────────────────────────────────────────────
+        #endregion
+
+        #region Métodos privados y validaciones
 
         /// <summary>
         /// Resuelve el username del emisor y delega la entrega en tiempo real a INotificacionPush.
         /// </summary>
+        /// 
+
+        private async Task NotificarSiNoHayPendienteAsync(
+                int destinatarioId, TipoNotificacion tipo,
+                int? publicacionId, int? emisorId,
+                CancellationToken cancellationToken)
+        {
+            if (await _repositorio.ExisteNotificacionPendienteAsync(
+                destinatarioId, tipo, publicacionId, cancellationToken))
+                return;
+
+            await GuardarYEnviarAsync(
+                destinatarioId, tipo, publicacionId,
+                emisorId, cancellationToken);
+        }
+        private async Task GuardarYEnviarAsync(
+            int destinatarioId, TipoNotificacion tipo,
+            int? publicacionId, int? emisorId,
+            CancellationToken cancellationToken)
+        {
+            var notificacion = CrearNotificacion(
+                destinatarioId, tipo, publicacionId, emisorId);
+            await _repositorio.GuardarAsync(
+                notificacion, cancellationToken);
+            await EnviarAsync(
+                destinatarioId, notificacion,
+                emisorId, cancellationToken);
+        }
+        private static Notificacion CrearNotificacion(
+            int destinatarioId, TipoNotificacion tipo,
+            int? publicacionId, int? emisorId) =>
+            new()
+            {
+                UsuarioDestinatarioId = destinatarioId,
+                Tipo = tipo,
+                PublicacionId = publicacionId,
+                EmisorId = emisorId,
+                FechaCreacion = DateTime.UtcNow
+            };
         private async Task EnviarAsync(
             int usuarioDestinatarioId,
             Notificacion notificacion,
             int? emisorId,
             CancellationToken cancellationToken)
         {
-            string? emisorUsername = null;
-            if (emisorId.HasValue)
-            {
-                var emisor = await _usuarioRepositorio.ObtenerPorIdAsync(emisorId.Value);
-                emisorUsername = emisor?.Username;
-            }
-
+            var emisorUsername = await ObtenerUsernameEmisorAsync(emisorId);
             await _push.EnviarAsync(
                 usuarioDestinatarioId,
                 MapearADto(notificacion, emisorUsername),
                 cancellationToken);
+        }
+        private async Task<string?> ObtenerUsernameEmisorAsync(int? emisorId)
+        {
+            if (!emisorId.HasValue) return null;
+            var emisor = await _usuarioRepositorio.ObtenerPorIdAsync(
+                emisorId.Value);
+            return emisor?.Username;
         }
 
         private static NotificacionDto MapearADto(Notificacion notificacion) =>
@@ -269,5 +220,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 EmisorId = notificacion.EmisorId,
                 EmisorUsername = emisorUsername
             };
+
+        #endregion
     }
 }

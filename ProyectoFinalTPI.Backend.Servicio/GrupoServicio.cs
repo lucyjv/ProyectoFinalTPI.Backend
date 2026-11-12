@@ -13,27 +13,23 @@ public class GrupoServicio(
     IUsuarioRepositorio usuarioRepositorio,
     IPublicacionServicio publicacionServicio) : IGrupoServicio
 {
+
+    #region Operaciones públicas
+
     public async Task<IReadOnlyList<GrupoResumenDto>> ObtenerTodos(
         int? usuarioActualId, CancellationToken cancellationToken = default)
     {
         var grupos = await grupoRepositorio.ObtenerTodos(cancellationToken);
         return grupos.Select(grupo => grupo.ToDto(usuarioActualId)).ToList();
     }
-
     public async Task<IReadOnlyList<GrupoResumenDto>> Buscar(
         string texto, int limite, int? usuarioActualId,
         CancellationToken cancellationToken = default)
     {
-        var textoNormalizado = texto?.Trim() ?? string.Empty;
-        if (textoNormalizado.Length is < 2 or > 100)
-            throw new ArgumentException("El texto de busqueda debe tener entre 2 y 100 caracteres.");
-        if (limite is < 1 or > 50)
-            throw new ArgumentException("El limite debe estar entre 1 y 50.");
-
+        string textoNormalizado = ValidarBusqueda(texto, limite);
         var grupos = await grupoRepositorio.Buscar(textoNormalizado, limite, cancellationToken);
         return grupos.Select(grupo => grupo.ToDto(usuarioActualId)).ToList();
     }
-
     public async Task<GrupoResumenDto> ObtenerPorId(
         int grupoId, int? usuarioActualId, CancellationToken cancellationToken = default)
     {
@@ -48,98 +44,63 @@ public class GrupoServicio(
         ValidarDatos(grupo);
         ValidarId(grupo.CreadorId, "creador");
 
-        var creador = await usuarioRepositorio.ObtenerPorIdAsync(grupo.CreadorId)
-            ?? throw new KeyNotFoundException("El usuario creador no existe.");
-
-        grupo.Nombre = grupo.Nombre.Trim();
-        grupo.Descripcion = grupo.Descripcion.Trim();
-        grupo.FechaCreacion = DateTime.UtcNow;
-        grupo.Creador = creador;
-        grupo.Integrantes.Add(new GrupoIntegrante
-        {
-            UsuarioId = creador.Id,
-            Usuario = creador,
-            FechaUnion = grupo.FechaCreacion
-        });
+        var creador = await ObtenerCreador(grupo);
+        PrepararGrupoParaCreacion(grupo, creador);
 
         await grupoRepositorio.Crear(grupo, cancellationToken);
         return grupo.ToDto(creador.Id);
     }
-
     public async Task<GrupoResumenDto> Actualizar(
         int grupoId, int usuarioId, Grupo cambios, CancellationToken cancellationToken = default)
     {
-        ValidarId(grupoId, "grupo");
-        ValidarId(usuarioId, "usuario");
+        ValidarGrupoYUsuario(grupoId, usuarioId);
         ArgumentNullException.ThrowIfNull(cambios);
         ValidarDatos(cambios);
 
-        var grupo = await ObtenerGrupo(grupoId, cancellationToken);
-        ValidarCreador(grupo, usuarioId);
-        grupo.Nombre = cambios.Nombre.Trim();
-        grupo.Descripcion = cambios.Descripcion.Trim();
-        grupo.Decada = cambios.Decada;
+        Grupo grupo = await ObtenerGrupoDelCreador(grupoId, usuarioId, cancellationToken);
+        AplicarCambios(grupo, cambios);
         await grupoRepositorio.Actualizar(grupo, cancellationToken);
         return grupo.ToDto(usuarioId);
     }
 
     public async Task Eliminar(int grupoId, int usuarioId, CancellationToken cancellationToken = default)
     {
-        ValidarId(grupoId, "grupo");
-        ValidarId(usuarioId, "usuario");
-        var grupo = await ObtenerGrupo(grupoId, cancellationToken);
-        ValidarCreador(grupo, usuarioId);
+        ValidarGrupoYUsuario(grupoId,usuarioId);
+        var grupo = await ObtenerGrupoDelCreador(grupoId, usuarioId, cancellationToken);
         await grupoRepositorio.Eliminar(grupo, cancellationToken);
     }
 
     public async Task Unirse(int grupoId, int usuarioId, CancellationToken cancellationToken = default)
     {
-        ValidarId(grupoId, "grupo");
-        ValidarId(usuarioId, "usuario");
+        ValidarGrupoYUsuario(grupoId, usuarioId);
         await ObtenerGrupo(grupoId, cancellationToken);
-        if (!await usuarioRepositorio.ExisteUsuario(usuarioId, cancellationToken))
-            throw new KeyNotFoundException("El usuario no existe.");
+        await VerificarUsuarioExistente(usuarioId, cancellationToken);
         if (await grupoRepositorio.EsIntegrante(grupoId, usuarioId, cancellationToken)) return;
 
-        await grupoRepositorio.AgregarIntegrante(new GrupoIntegrante
-        {
-            GrupoId = grupoId,
-            UsuarioId = usuarioId,
-            FechaUnion = DateTime.UtcNow
-        }, cancellationToken);
+        await grupoRepositorio.AgregarIntegrante(
+            CrearIntegrante(grupoId, usuarioId), cancellationToken);
     }
-
     public async Task Salir(int grupoId, int usuarioId, CancellationToken cancellationToken = default)
     {
-        ValidarId(grupoId, "grupo");
-        ValidarId(usuarioId, "usuario");
+        ValidarGrupoYUsuario(grupoId, usuarioId);
         var grupo = await ObtenerGrupo(grupoId, cancellationToken);
-        if (grupo.CreadorId == usuarioId)
-            throw new ArgumentException("El creador no puede abandonar su grupo; debe eliminarlo.");
-
-        var integrante = await grupoRepositorio.ObtenerIntegrante(grupoId, usuarioId, cancellationToken)
-            ?? throw new KeyNotFoundException("El usuario no integra el grupo.");
+        ValidarSalida(usuarioId, grupo);
+        var integrante = await ObtenerIntegrante(grupoId, usuarioId, cancellationToken);
         await grupoRepositorio.QuitarIntegrante(integrante, cancellationToken);
     }
-
     public async Task Expulsar(
         int grupoId, int usuarioIdCreador, int usuarioIdAEliminar,
         CancellationToken cancellationToken = default)
     {
-        ValidarId(grupoId, "grupo");
-        ValidarId(usuarioIdCreador, "usuario");
+        ValidarGrupoYUsuario(grupoId, usuarioIdCreador);
         ValidarId(usuarioIdAEliminar, "integrante");
-        var grupo = await ObtenerGrupo(grupoId, cancellationToken);
-        ValidarCreador(grupo, usuarioIdCreador);
-        if (grupo.CreadorId == usuarioIdAEliminar)
-            throw new ArgumentException("El creador no puede eliminarse del grupo.");
-
-        var integrante = await grupoRepositorio.ObtenerIntegrante(
-            grupoId, usuarioIdAEliminar, cancellationToken)
-            ?? throw new KeyNotFoundException("El usuario no integra el grupo.");
-        await grupoRepositorio.QuitarIntegrante(integrante, cancellationToken);
+        var grupo = await ObtenerGrupoDelCreador(grupoId, usuarioIdCreador,cancellationToken);
+        ValidarExpulsion(grupo, usuarioIdAEliminar);
+        var integrante = await ObtenerIntegrante(
+            grupoId, usuarioIdAEliminar, cancellationToken);
+        await grupoRepositorio.QuitarIntegrante(
+            integrante, cancellationToken);
     }
-
     public async Task<IReadOnlyList<GrupoIntegranteDto>> ObtenerIntegrantes(
         int grupoId, CancellationToken cancellationToken = default)
     {
@@ -148,7 +109,6 @@ public class GrupoServicio(
         var integrantes = await grupoRepositorio.ObtenerIntegrantes(grupoId, cancellationToken);
         return integrantes.Select(integrante => integrante.ToDto(grupo.CreadorId)).ToList();
     }
-
     public async Task<IReadOnlyList<PublicacionDetalleDto>> ObtenerRecuerdos(
         int grupoId, CancellationToken cancellationToken = default)
     {
@@ -161,17 +121,18 @@ public class GrupoServicio(
         int grupoId, int usuarioId, Publicacion publicacion, Stream? archivo = null,
         string? nombreArchivo = null, CancellationToken cancellationToken = default)
     {
-        ValidarId(grupoId, "grupo");
-        ValidarId(usuarioId, "usuario");
+        ValidarGrupoYUsuario(grupoId, usuarioId);
         ArgumentNullException.ThrowIfNull(publicacion);
-        await ObtenerGrupo(grupoId, cancellationToken);
-        if (!await grupoRepositorio.EsIntegrante(grupoId, usuarioId, cancellationToken))
-            throw new UnauthorizedAccessException("Solo los integrantes pueden publicar recuerdos en el grupo.");
-
-        publicacion.GrupoId = grupoId;
-        publicacion.UsuarioId = usuarioId;
-        return await publicacionServicio.Crear(publicacion, archivo, nombreArchivo);
+        await VerificarPermisoParaPublicar(
+            grupoId, usuarioId, cancellationToken);
+        AsociarRecuerdoAlGrupo(publicacion, grupoId, usuarioId);
+        return await publicacionServicio.Crear(
+            publicacion, archivo, nombreArchivo);
     }
+
+    #endregion
+
+    #region Métodos privados
 
     private async Task<Grupo> ObtenerGrupo(int grupoId, CancellationToken cancellationToken)
     {
@@ -200,4 +161,94 @@ public class GrupoServicio(
     {
         if (id <= 0) throw new ArgumentException($"El ID de {recurso} debe ser mayor que cero.");
     }
+    private static void ValidarGrupoYUsuario(int grupoId, int usuarioId)
+    {
+        ValidarId(grupoId, "grupo");
+        ValidarId(usuarioId, "usuario");
+    }
+    private static string ValidarBusqueda(string texto, int limite)
+    {
+        var textoNormalizado = texto?.Trim() ?? string.Empty;
+        if (textoNormalizado.Length is < 2 or > 100)
+            throw new ArgumentException("El texto de busqueda debe tener entre 2 y 100 caracteres.");
+        if (limite is < 1 or > 50)
+            throw new ArgumentException("El limite debe estar entre 1 y 50.");
+        return textoNormalizado;
+    }
+    private async Task<Usuario> ObtenerCreador(Grupo grupo)
+    {
+        return await usuarioRepositorio.ObtenerPorIdAsync(grupo.CreadorId)
+                    ?? throw new KeyNotFoundException("El usuario creador no existe.");
+    }
+    private static void PrepararGrupoParaCreacion(
+        Grupo grupo, Usuario creador)
+    {
+        NormalizarDatos(grupo);
+        grupo.FechaCreacion = DateTime.UtcNow;
+        grupo.Creador = creador;
+        grupo.Integrantes.Add(new GrupoIntegrante
+        {
+            UsuarioId = creador.Id,
+            Usuario = creador,
+            FechaUnion = grupo.FechaCreacion
+        });
+    }
+    private static void NormalizarDatos(Grupo grupo)
+    {
+        grupo.Nombre = grupo.Nombre.Trim();
+        grupo.Descripcion = grupo.Descripcion.Trim();
+    }
+    private async Task<Grupo> ObtenerGrupoDelCreador(int grupoId, int usuarioId, CancellationToken cancellationToken)
+    {
+        var grupo = await ObtenerGrupo(grupoId, cancellationToken);
+        ValidarCreador(grupo, usuarioId);
+        return grupo;
+    }
+    private static void AplicarCambios(Grupo grupo, Grupo cambios)
+    {
+        grupo.Nombre = cambios.Nombre.Trim();
+        grupo.Descripcion = cambios.Descripcion.Trim();
+        grupo.Decada = cambios.Decada;
+    }
+    private static GrupoIntegrante CrearIntegrante(
+        int grupoId, int usuarioId) =>
+        new()
+        {
+            GrupoId = grupoId,
+            UsuarioId = usuarioId,
+            FechaUnion = DateTime.UtcNow
+        };
+    private async Task VerificarUsuarioExistente(int usuarioId, CancellationToken cancellationToken)
+    {
+        if (!await usuarioRepositorio.ExisteUsuario(usuarioId, cancellationToken))
+            throw new KeyNotFoundException("El usuario no existe.");
+    }
+    private async Task<GrupoIntegrante> ObtenerIntegrante(int grupoId, int usuarioId, CancellationToken cancellationToken)
+    {
+        return await grupoRepositorio.ObtenerIntegrante(grupoId, usuarioId, cancellationToken)
+            ?? throw new KeyNotFoundException("El usuario no integra el grupo.");
+    }
+
+    private static void ValidarSalida(int usuarioId, Grupo grupo)
+    {
+        if (grupo.CreadorId == usuarioId)
+            throw new ArgumentException("El creador no puede abandonar su grupo; debe eliminarlo.");
+    }
+    private async Task VerificarPermisoParaPublicar(
+        int grupoId, int usuarioId, CancellationToken cancellationToken)
+    {
+        await ObtenerGrupo(grupoId, cancellationToken);
+        if (!await grupoRepositorio.EsIntegrante(
+            grupoId, usuarioId, cancellationToken))
+            throw new UnauthorizedAccessException(
+                "Solo los integrantes pueden publicar recuerdos en el grupo.");
+    }
+    private static void AsociarRecuerdoAlGrupo(
+        Publicacion publicacion, int grupoId, int usuarioId)
+    {
+        publicacion.GrupoId = grupoId;
+        publicacion.UsuarioId = usuarioId;
+    }
+
+    #endregion
 }

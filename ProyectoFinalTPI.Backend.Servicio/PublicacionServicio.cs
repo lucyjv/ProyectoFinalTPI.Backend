@@ -31,6 +31,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
         private readonly ILogroServicio _logroServicio;
         private readonly OpcionesPublicacion _opcionesPublicacion;
         private readonly IResumenPublicacionConsulta? _resumenConsulta;
+        private readonly ICategoriaServicio? _categoriaServicio;
 
         public PublicacionServicio(
             IPublicacionRepositorio publicacionRepositorio,
@@ -41,7 +42,10 @@ namespace ProyectoFinalTPI.Backend.Servicio
             IOptions<FeedRecomendacionesOptions> opcionesFeed,
             INotificacionServicio notificacionServicio,
             ILogroServicio logroServicio,
-            IOptions<OpcionesPublicacion>? opcionesPublicacion = null, IResumenPublicacionConsulta? resumenConsulta = null, IProveedorRankingFeed? proveedorRanking = null)
+            IOptions<OpcionesPublicacion>? opcionesPublicacion = null, 
+            IResumenPublicacionConsulta? resumenConsulta = null, 
+            IProveedorRankingFeed? proveedorRanking = null, 
+            ICategoriaServicio? categoriaServicio = null)
         {
             _publicacionRepositorio = publicacionRepositorio;
             _resumenConsulta = resumenConsulta;
@@ -54,6 +58,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
             _notificacionServicio = notificacionServicio;
             _logroServicio = logroServicio;
             _opcionesPublicacion = opcionesPublicacion?.Value ?? new OpcionesPublicacion();
+            _categoriaServicio = categoriaServicio;
         }
 
         #region Interacciones (Likes y Puntuaciones)
@@ -162,6 +167,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
             var estadoNuevo = await _publicacionRepositorio.ObtenerEstadoPuntuacion(publicacionId, usuarioId, cancellationToken);
             await VerificacionLogrosPuntuacion(usuarioId, publicacion, estadoNuevo, cancellationToken);
+            await ActualizarCategoriaPorRecuerdo(publicacion, estadoNuevo.PuntosTotales, cancellationToken);
 
             return estadoNuevo;
         }
@@ -508,6 +514,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
             int idPublicacion = await _publicacionRepositorio.Crear(publicacion);
 
             await VerificacionLogrosCrearPublicacion(publicacion, gpsUsuario);
+            await ActualizarCategoriaPorRecuerdo(publicacion, 0);
 
             return idPublicacion;
         }
@@ -923,6 +930,14 @@ namespace ProyectoFinalTPI.Backend.Servicio
                     publicacion.UsuarioId, publicacionId, usuarioId, cancellationToken);
             }
         }
+        private Task ActualizarCategoriaPorRecuerdo(
+        Publicacion? publicacion,
+        int puntosRecibidos,
+        CancellationToken ct = default) =>
+        _categoriaServicio?.ActualizarPorRecuerdo(
+            publicacion, puntosRecibidos, ct)
+        ?? Task.CompletedTask;
+
         #region Verificación de Logros
         private async Task VerificacionLogrosCrearPublicacion(Publicacion publicacion, Point? gpsUsuario)
         {
@@ -930,6 +945,52 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
             await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.PrimerPaso);
 
+            await VerificarLogroCronistaLocal(publicacion, gpsUsuario, usuarioId);
+            
+            await VerificarLogroLinceDeLasPraderas(usuarioId);
+            
+            await VerificarLogroFotografoDelRecuerdo(publicacion, usuarioId);
+
+            await VerificarLogrosDeDecadas(usuarioId);
+        }
+
+        private async Task VerificarLogroFotografoDelRecuerdo(Publicacion publicacion, int usuarioId)
+        {
+            if (!string.IsNullOrEmpty(publicacion.UrlMultimedia) && publicacion.TipoMultimedia == MultimediaEnum.Foto)
+            {
+                int posteosConFoto = await _publicacionRepositorio.ContarPosteosConImagenDelUsuario(usuarioId);
+
+                if (posteosConFoto >= 10)
+                {
+                    await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.FotografoDelRecuerdo);
+                }
+            }
+        }
+
+        private async Task VerificarLogroLinceDeLasPraderas(int usuarioId)
+        {
+            int cantidadPublicaciones = await _usuarioRepositorio.ContarPublicacionesVisiblesAsync(usuarioId);
+            if (cantidadPublicaciones >= 15)
+            {
+                await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.LinceDeLasPraderas);
+            }
+        }
+
+        private async Task VerificarLogrosDeDecadas(int usuarioId)
+        {
+            int decadasDelUsuario = await _publicacionRepositorio.ContarPosteosDeDiferentesEpocasDelUsuario(usuarioId);
+            if (decadasDelUsuario >= 3)
+            {
+                await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.VozDeUnaEpoca);
+            }
+            if (decadasDelUsuario == 6)
+            {
+                await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.DecadaCompleta);
+            }
+        }
+
+        private async Task VerificarLogroCronistaLocal(Publicacion publicacion, Point? gpsUsuario, int usuarioId)
+        {
             if (gpsUsuario != null && publicacion.Lugar?.Coordenadas != null)
             {
                 double distancia = publicacion.Lugar.Coordenadas.Distance(gpsUsuario);
@@ -944,33 +1005,8 @@ namespace ProyectoFinalTPI.Backend.Servicio
                     }
                 }
             }
-
-            int cantidadPublicaciones = await _usuarioRepositorio.ContarPublicacionesVisiblesAsync(usuarioId);
-            if (cantidadPublicaciones >= 15)
-            {
-                await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.LinceDeLasPraderas);
-            }
-
-            if (!string.IsNullOrEmpty(publicacion.UrlMultimedia) && publicacion.TipoMultimedia == MultimediaEnum.Foto)
-            {
-                int posteosConFoto = await _publicacionRepositorio.ContarPosteosConImagenDelUsuario(usuarioId);
-
-                if (posteosConFoto >= 10)
-                {
-                    await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.FotografoDelRecuerdo);
-                }
-            }
-
-            int decadasDelUsuario = await _publicacionRepositorio.ContarPosteosDeDiferentesEpocasDelUsuario(usuarioId);
-            if (decadasDelUsuario >= 3)
-            {
-                await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.VozDeUnaEpoca);
-            }
-            if (decadasDelUsuario == 6)
-            {
-                await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.DecadaCompleta);
-            }
         }
+
         private async Task VerificacionLogrosPuntuacion(int usuarioId, Publicacion? publicacion, PuntuacionPublicacionDto estadoNuevo, CancellationToken cancellationToken)
         {
             int totalPuntosOtorgados = await _publicacionRepositorio.SumarPuntosOtorgadosPorUsuario(usuarioId, cancellationToken);
