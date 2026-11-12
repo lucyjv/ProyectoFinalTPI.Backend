@@ -10,6 +10,7 @@ using ProyectoFinalTPI.Backend.Extensions;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Dtos;
 using ProyectoFinalTPI.Backend.Dtos.Usuario;
+using ProyectoFinalTPI.Backend.Filters;
 
 namespace ProyectoFinalTPI.Backend.Controllers
 {
@@ -392,6 +393,7 @@ namespace ProyectoFinalTPI.Backend.Controllers
         [SwaggerResponse(StatusCodes.Status400BadRequest, "El identificador de la publicación o la lista de usuarios no son válidos.", typeof(ProblemDetails))]
         [SwaggerResponse(StatusCodes.Status404NotFound, "La publicación o alguno de los usuarios no existen.", typeof(ProblemDetails))]
         [SwaggerResponse(StatusCodes.Status415UnsupportedMediaType, "El formato del cuerpo no es compatible; utilice application/json.", typeof(ProblemDetails))]
+        [PermisoCategoria(PermisoCuenta.EtiquetarUsuario)]
         public async Task<IActionResult> EtiquetarUsuarios(
             int publicacionId, [FromBody] EtiquetarUsuariosRequest request, CancellationToken cancellationToken)
         {

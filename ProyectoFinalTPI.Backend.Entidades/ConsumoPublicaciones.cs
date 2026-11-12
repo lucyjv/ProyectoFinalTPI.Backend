@@ -1,12 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿namespace ProyectoFinalTPI.Backend.Entidades;
 
-namespace ProyectoFinalTPI.Backend.Entidades
+public sealed class ConsumoPublicaciones
 {
-    internal class ConsumoPublicaciones
-    {
-    }
+    public int UsuarioId { get; set; }
+    public DateOnly SemanaInicio { get; set; }
+    public int Cantidad { get; set; }
 }

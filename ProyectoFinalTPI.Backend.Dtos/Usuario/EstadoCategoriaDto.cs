@@ -1,12 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿namespace ProyectoFinalTPI.Backend.Dtos.Usuario;
 
-namespace ProyectoFinalTPI.Backend.Dtos.Usuario
-{
-    internal class EstadoCategoriaDto
-    {
-    }
-}
+public sealed record EstadoCategoriaDto(
+    CategoriaCuentaDto Categoria, int PublicacionesConsumidas, int? PublicacionesRestantes,
+    DateOnly SemanaInicio, DateOnly ReinicioSemana, int MaximoAdjuntos);

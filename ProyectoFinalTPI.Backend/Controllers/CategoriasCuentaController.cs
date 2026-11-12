@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Authorization;
+using ProyectoFinalTPI.Backend.Extensions;
 using Microsoft.AspNetCore.Mvc;
 using ProyectoFinalTPI.Backend.Dtos.Usuario;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
@@ -24,4 +25,13 @@ public class CategoriasCuentaController(
         typeof(IReadOnlyList<CategoriaCuentaDto>))]
     public IReadOnlyList<CategoriaCuentaDto> Obtener() =>
         servicio.ObtenerCatalogo();
+    [Authorize]
+    [HttpGet("me")]
+    [SwaggerOperation(Summary = "Consulta tu categoría, permisos y cupo semanal.")]
+    public async Task<ActionResult<EstadoCategoriaDto>> ObtenerEstado(CancellationToken ct)
+    {
+        var id = User.ObtenerUsuarioId();
+        if (!id.HasValue) return Unauthorized();
+        return Ok(await servicio.ObtenerEstado(id.Value, ct));
+    }
 }

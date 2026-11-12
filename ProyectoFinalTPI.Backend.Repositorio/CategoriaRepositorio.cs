@@ -33,6 +33,45 @@ public sealed class CategoriaRepositorio(
 
         return cambiado;
     }
+    public Task<Usuario?> ObtenerUsuario(int usuarioId, CancellationToken ct = default) =>
+        contexto.Usuarios.AsNoTracking().SingleOrDefaultAsync(u => u.Id == usuarioId, ct);
+
+    public async Task<bool> TieneRecuerdos(int usuarioId, CancellationToken ct = default) =>
+        await contexto.Publicaciones.AnyAsync(p => p.UsuarioId == usuarioId && p.PublicacionOriginalId == null, ct)
+        || await contexto.Set<ConsumoPublicaciones>().AnyAsync(c => c.UsuarioId == usuarioId && c.Cantidad > 0, ct);
+
+    public async Task<int> ObtenerConsumo(int usuarioId, DateOnly semana, CancellationToken ct = default) =>
+        await contexto.Set<ConsumoPublicaciones>().Where(c => c.UsuarioId == usuarioId && c.SemanaInicio == semana)
+            .Select(c => c.Cantidad).SingleOrDefaultAsync(ct);
+
+    public async Task<int?> CrearConCupo(Publicacion publicacion, DateOnly semana, int? limite, CancellationToken ct = default)
+    {
+        if (!contexto.Database.IsRelational()) return await GuardarConCupo(publicacion, semana, limite, ct);
+        // Todas las creaciones del mismo autor se serializan en PostgreSQL.
+        // El consumo y la publicación se guardan en la misma transacción.
+        await using var transaccion = await contexto.Database.BeginTransactionAsync(ct);
+        await contexto.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT 1 FROM \"Usuario\" WHERE \"Id\" = {publicacion.UsuarioId} FOR UPDATE", ct);
+        var id = await GuardarConCupo(publicacion, semana, limite, ct);
+        if (id.HasValue) await transaccion.CommitAsync(ct);
+        return id;
+    }
+
+    private async Task<int?> GuardarConCupo(Publicacion publicacion, DateOnly semana, int? limite, CancellationToken ct)
+    {
+        var consumo = await contexto.Set<ConsumoPublicaciones>().SingleOrDefaultAsync(
+            c => c.UsuarioId == publicacion.UsuarioId && c.SemanaInicio == semana, ct);
+        if (limite.HasValue && (consumo?.Cantidad ?? 0) >= limite.Value) return null;
+        if (consumo is null)
+        {
+            consumo = new() { UsuarioId = publicacion.UsuarioId, SemanaInicio = semana };
+            contexto.Add(consumo);
+        }
+        consumo.Cantidad++;
+        contexto.Publicaciones.Add(publicacion);
+        await contexto.SaveChangesAsync(ct);
+        return publicacion.Id;
+    }
 
     private async Task<bool> PromoverEnMemoria(
         IQueryable<Usuario_Personal> candidatos,

@@ -1,12 +1,3 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿namespace ProyectoFinalTPI.Backend.Entidades;
 
-namespace ProyectoFinalTPI.Backend.Entidades
-{
-    internal class CupoPublicacionesAgotadoException
-    {
-    }
-}
+public sealed class CupoPublicacionesAgotadoException(string mensaje) : Exception(mensaje);

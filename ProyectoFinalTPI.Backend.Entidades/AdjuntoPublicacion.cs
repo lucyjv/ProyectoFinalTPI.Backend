@@ -1,12 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿namespace ProyectoFinalTPI.Backend.Entidades;
 
-namespace ProyectoFinalTPI.Backend.Entidades
+public sealed class AdjuntoPublicacion
 {
-    internal class AdjuntoPublicacion
-    {
-    }
+    public int Id { get; set; }
+    public int PublicacionId { get; set; }
+    public string Url { get; set; } = string.Empty;
+    public MultimediaEnum Tipo { get; set; }
+    public int Orden { get; set; }
 }

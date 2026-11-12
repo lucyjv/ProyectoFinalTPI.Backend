@@ -27,13 +27,6 @@ public class AdminUsuarioServicio(
         await repositorio.Guardar(cancellationToken);
         if (dto.Suspender) await sesiones.RevocarTodasAsync(id, DateTime.UtcNow, cancellationToken);
     }
-
-    private static void ValidarDuracionSuspension(CambiarSuspensionUsuarioDto dto)
-    {
-        if (dto.Suspender && dto.Dias is < 1 or > 365)
-            throw new ArgumentException("La suspensión debe durar entre 1 y 365 días.");
-    }
-
     public async Task DarDeBaja(int id, int adminId, CancellationToken cancellationToken = default)
     {
         ValidarObjetivo(id, adminId);
@@ -68,4 +61,10 @@ public class AdminUsuarioServicio(
         if (pagina < 1) throw new ArgumentException("La página debe ser mayor que cero.");
         if (tamanio is < 1 or > 100) throw new ArgumentException("El tamaño debe estar entre 1 y 100.");
     }
+    private static void ValidarDuracionSuspension(CambiarSuspensionUsuarioDto dto)
+    {
+        if (dto.Suspender && dto.Dias is < 1 or > 365)
+            throw new ArgumentException("La suspensión debe durar entre 1 y 365 días.");
+    }
+
 }

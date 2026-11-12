@@ -9,6 +9,9 @@ public class AdminPublicacionServicio(
     IAdminPublicacionRepositorio repositorio,
     INotificacionServicio notificaciones) : IAdminPublicacionServicio
 {
+
+    #region Operaciones públicas
+
     public Task<PaginaAdminDto<PublicacionAdminDto>> Listar(
         FiltroPublicacionesAdminDto filtro, CancellationToken cancellationToken = default)
     {
@@ -47,6 +50,9 @@ public class AdminPublicacionServicio(
         await notificaciones.NotificarAdministrativaAsync(autorId, id, cancellationToken);
     }
 
+    #endregion
+
+    #region Métodos privados y validaciones
     private async Task<Publicacion> Obtener(int id, CancellationToken cancellationToken)
     {
         if (id <= 0) throw new ArgumentException("El ID de publicación debe ser mayor que cero.");
@@ -79,9 +85,17 @@ public class AdminPublicacionServicio(
 
     private static PublicacionAdminDto Mapear(Publicacion p) => new()
     {
-        Id = p.Id, Titulo = p.Titulo, Descripcion = p.Descripcion,
-        Fecha = p.Fecha, FechaCreacion = p.FechaCreación, Categoria = p.Categoria,
-        EstaOculto = p.EstaOculto, MotivoOculto = p.MotivoOculto,
-        AutorId = p.UsuarioId, AutorUsername = p.Usuario.Username
+        Id = p.Id,
+        Titulo = p.Titulo,
+        Descripcion = p.Descripcion,
+        Fecha = p.Fecha,
+        FechaCreacion = p.FechaCreación,
+        Categoria = p.Categoria,
+        EstaOculto = p.EstaOculto,
+        MotivoOculto = p.MotivoOculto,
+        AutorId = p.UsuarioId,
+        AutorUsername = p.Usuario.Username
     };
+
+    #endregion
 }
