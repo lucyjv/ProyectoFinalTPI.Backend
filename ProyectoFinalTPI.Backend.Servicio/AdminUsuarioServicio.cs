@@ -21,12 +21,17 @@ public class AdminUsuarioServicio(
         CancellationToken cancellationToken = default)
     {
         ValidarObjetivo(id, adminId);
-        if (dto.Suspender && dto.Dias is < 1 or > 365)
-            throw new ArgumentException("La suspensión debe durar entre 1 y 365 días.");
+        ValidarDuracionSuspension(dto);
         var usuario = await ObtenerInteractivo(id, cancellationToken);
         usuario.SuspendidoHasta = dto.Suspender ? DateTime.UtcNow.AddDays(dto.Dias) : null;
         await repositorio.Guardar(cancellationToken);
         if (dto.Suspender) await sesiones.RevocarTodasAsync(id, DateTime.UtcNow, cancellationToken);
+    }
+
+    private static void ValidarDuracionSuspension(CambiarSuspensionUsuarioDto dto)
+    {
+        if (dto.Suspender && dto.Dias is < 1 or > 365)
+            throw new ArgumentException("La suspensión debe durar entre 1 y 365 días.");
     }
 
     public async Task DarDeBaja(int id, int adminId, CancellationToken cancellationToken = default)

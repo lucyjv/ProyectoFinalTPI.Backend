@@ -6,9 +6,9 @@ using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 
 namespace ProyectoFinalTPI.Backend.Servicio;
 
-public sealed class CategoriaServicio(
-    ICategoriaRepositorio progreso) : ICategoriaServicio
+public sealed class CategoriaServicio(ICategoriaRepositorio progreso, TimeProvider? reloj = null) : ICategoriaServicio
 {
+    private readonly TimeProvider reloj = reloj ?? TimeProvider.System;
     private const int PuntosParaAedo = 30;
 
     private static readonly IReadOnlyList<CategoriaDefinicion> Categorias =
@@ -48,9 +48,77 @@ public sealed class CategoriaServicio(
             publicacion.UsuarioId, destino, ct);
     }
 
+    public async Task<EstadoCategoriaDto> ObtenerEstado(int usuarioId, CancellationToken ct = default)
+    {
+        var usuario = await progreso.ObtenerUsuario(usuarioId, ct)
+            ?? throw new KeyNotFoundException("El usuario no existe.");
+        var codigo = ResolverCategoria(usuario);
+        // Compatibilidad con cuentas que publicaron antes de persistir los ascensos.
+        if (codigo == CategoriaCuenta.Errante && usuario is Usuario_Personal
+            && await progreso.TieneRecuerdos(usuarioId, ct)) codigo = CategoriaCuenta.Nostalgico;
+        var categoria = Obtener(codigo);
+        var semana = ObtenerSemana();
+        var consumo = await progreso.ObtenerConsumo(usuarioId, semana, ct);
+        var limite = codigo == CategoriaCuenta.Errante ? 5 : categoria.PublicacionesSemanales;
+        return new(categoria, consumo, limite.HasValue ? Math.Max(0, limite.Value - consumo) : null,
+            semana, semana.AddDays(7), TienePermiso(codigo, PermisoCuenta.AdjuntarVariasFotos) ? 4 : 1);
+    }
+
+    public async Task ExigirPermiso(int usuarioId, PermisoCuenta permiso, CancellationToken ct = default)
+    {
+        var estado = await ObtenerEstado(usuarioId, ct);
+        if (!estado.Categoria.Permisos.Contains(permiso.ToString()))
+            throw new UnauthorizedAccessException($"La categoría {estado.Categoria.Nombre} no permite esta acción.");
+    }
+
+    public async Task ValidarCreacion(int usuarioId, int cantidadAdjuntos, bool tieneMusica, CancellationToken ct = default)
+    {
+        var estado = await ObtenerEstado(usuarioId, ct);
+        if (!estado.Categoria.PermitePrimerRecuerdo && !estado.Categoria.Permisos.Contains(nameof(PermisoCuenta.CrearRecuerdo)))
+            throw new UnauthorizedAccessException("Tu categoría no permite crear recuerdos.");
+        if (cantidadAdjuntos < 0 || cantidadAdjuntos > 4)
+            throw new ArgumentException("Una publicación admite hasta 4 adjuntos.");
+        if (cantidadAdjuntos > estado.MaximoAdjuntos)
+            throw new UnauthorizedAccessException("Tu categoría permite un solo adjunto por publicación.");
+        if (tieneMusica && !estado.Categoria.Permisos.Contains(nameof(PermisoCuenta.AgregarMusicaAPublicacion)))
+            throw new UnauthorizedAccessException("La música en publicaciones está disponible desde Aedo.");
+        ValidarCupo(estado);
+    }
+
+    public async Task<int> CrearRecuerdo(Publicacion publicacion, CancellationToken ct = default)
+    {
+        if (publicacion.PublicacionOriginalId.HasValue) throw new ArgumentException("Esta operación crea recuerdos propios.");
+        var estado = await ObtenerEstado(publicacion.UsuarioId, ct);
+        ValidarCupo(estado);
+        publicacion.FechaCreación = reloj.GetUtcNow().UtcDateTime;
+        var limite = estado.Categoria.PermitePrimerRecuerdo ? 5 : estado.Categoria.PublicacionesSemanales;
+        var id = await progreso.CrearConCupo(publicacion, estado.SemanaInicio, limite, ct);
+        if (!id.HasValue) throw CrearErrorCupo(estado);
+        await ActualizarPorRecuerdo(publicacion, 0, ct);
+        return id.Value;
+    }
+
+    public double ObtenerBonificacion(ReputacionEnum? reputacion, bool marca, double alta, double muyAlta) =>
+        marca || reputacion == ReputacionEnum.Mnnemónide ? muyAlta
+        : reputacion == ReputacionEnum.Aedo ? alta : 0;
+
     #endregion
 
     #region Métodos privados y validaciones
+
+    private DateOnly ObtenerSemana()
+    {
+        var fecha = TimeZoneInfo.ConvertTime(reloj.GetUtcNow(), TimeZoneInfo.FindSystemTimeZoneById("America/Argentina/Buenos_Aires"));
+        return DateOnly.FromDateTime(fecha.DateTime).AddDays(-(int)fecha.DayOfWeek);
+    }
+
+    private static void ValidarCupo(EstadoCategoriaDto estado)
+    {
+        if (estado.PublicacionesRestantes == 0) throw CrearErrorCupo(estado);
+    }
+
+    private static CupoPublicacionesAgotadoException CrearErrorCupo(EstadoCategoriaDto estado) =>
+        new($"Alcanzaste el límite semanal de publicaciones. Tu cupo se renueva el {estado.ReinicioSemana:dd/MM/yyyy} a las 00:00 (Argentina).");
 
     private static ReputacionEnum ResolverAscenso(int puntosRecibidos)
     {
