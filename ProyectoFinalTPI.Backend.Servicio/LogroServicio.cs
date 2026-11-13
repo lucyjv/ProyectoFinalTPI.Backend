@@ -53,7 +53,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
         }
         private static LogroEstadoDto MapearLogroEstado(Logro logro, Dictionary<int, DateTime> obtenidos)
         {
-            var desbloqueado = obtenidos.TryGetValue(logro.Id, out var fecha)
+            var desbloqueado = obtenidos.TryGetValue(logro.Id, out var fecha);
             return new LogroEstadoDto
             {
                 Id = logro.Id,
