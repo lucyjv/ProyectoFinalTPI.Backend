@@ -59,7 +59,7 @@ public sealed class CategoriaServicio(ICategoriaRepositorio progreso, TimeProvid
         var categoria = Obtener(codigo);
         var semana = ObtenerSemana();
         var consumo = await progreso.ObtenerConsumo(usuarioId, semana, ct);
-        var limite = codigo == CategoriaCuenta.Errante ? 5 : categoria.PublicacionesSemanales;
+        var limite = categoria.PublicacionesSemanales;
         return new(categoria, consumo, limite.HasValue ? Math.Max(0, limite.Value - consumo) : null,
             semana, semana.AddDays(7), TienePermiso(codigo, PermisoCuenta.AdjuntarVariasFotos) ? 4 : 1);
     }
@@ -91,7 +91,7 @@ public sealed class CategoriaServicio(ICategoriaRepositorio progreso, TimeProvid
         var estado = await ObtenerEstado(publicacion.UsuarioId, ct);
         ValidarCupo(estado);
         publicacion.FechaCreación = reloj.GetUtcNow().UtcDateTime;
-        var limite = estado.Categoria.PermitePrimerRecuerdo ? 5 : estado.Categoria.PublicacionesSemanales;
+        var limite = estado.Categoria.PublicacionesSemanales;
         var id = await progreso.CrearConCupo(publicacion, estado.SemanaInicio, limite, ct);
         if (!id.HasValue) throw CrearErrorCupo(estado);
         await ActualizarPorRecuerdo(publicacion, 0, ct);
@@ -162,7 +162,7 @@ public sealed class CategoriaServicio(ICategoriaRepositorio progreso, TimeProvid
         var errante = CrearDefinicion(
             CategoriaCuenta.Errante,
             "Errante",
-            0,
+            5,
             PrioridadVisibilidad.Normal,
             PermisoCuenta.DarLike,
             PermisoCuenta.GuardarPublicacion,

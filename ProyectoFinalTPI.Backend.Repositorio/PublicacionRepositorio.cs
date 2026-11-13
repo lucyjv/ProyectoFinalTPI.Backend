@@ -818,6 +818,8 @@ namespace ProyectoFinalTPI.Backend.Repositorio
             => consulta.Select(p => new CaracteristicasFeedDto
             {
                 Id = p.Id, Categoria = p.Categoria, FechaCreacion = p.FechaCreación,
+                ReputacionAutor = p.Usuario is Usuario_Personal ? ((Usuario_Personal)p.Usuario).Reputacion : null,
+                EsCuentaMarca = p.Usuario is Usuario_Marca,
                 Latitud = p.Lugar.Coordenadas.Y, Longitud = p.Lugar.Coordenadas.X
             });
 
@@ -1634,8 +1636,9 @@ namespace ProyectoFinalTPI.Backend.Repositorio
         public async Task<int> ContarPosteosConImagenDelUsuario(int usuarioId, CancellationToken cancellationToken = default)
         {
             return await _context.Publicaciones
-                .Where(p => p.UsuarioId == usuarioId && !p.EstaOculto && p.TipoMultimedia == MultimediaEnum.Foto
-                    && !string.IsNullOrWhiteSpace(p.UrlMultimedia))
+                .Where(p => p.UsuarioId == usuarioId && !p.EstaOculto &&
+                    (p.Adjuntos.Any(a => a.Tipo == MultimediaEnum.Foto)
+                     || (p.TipoMultimedia == MultimediaEnum.Foto && !string.IsNullOrWhiteSpace(p.UrlMultimedia))))
                 .CountAsync(cancellationToken);
         }
 

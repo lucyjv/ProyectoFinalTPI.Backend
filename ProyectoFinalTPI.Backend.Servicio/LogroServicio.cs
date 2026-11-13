@@ -24,8 +24,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
             }
             var nuevoLogroDesbloqueado = CrearLogroDeUsuario(idUsuario, idLogro, DateTime.UtcNow);
 
-            await _logrosUsuariosRepositorio.Guardar(nuevoLogroDesbloqueado);
-            return true;
+            return await _logrosUsuariosRepositorio.Guardar(nuevoLogroDesbloqueado);
         }
         public async Task<List<Logros_Usuarios>> MostrarLogrosDeUsuario(int idUsuario)
         {

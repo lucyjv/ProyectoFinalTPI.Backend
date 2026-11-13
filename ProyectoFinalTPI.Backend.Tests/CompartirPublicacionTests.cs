@@ -25,7 +25,7 @@ public class CompartirPublicacionTests
     {
         //Arrange
         await using var factory = new ApiFactory();
-        using var client = factory.CreateClient();
+        using var client = AutenticacionPruebas.CrearCliente(factory, 2);
         await factory.Seed();
 
         //Act
@@ -44,7 +44,7 @@ public class CompartirPublicacionTests
     {
         //Arrange
         await using var factory = new ApiFactory();
-        using var client = factory.CreateClient();
+        using var client = AutenticacionPruebas.CrearCliente(factory, 2);
         await factory.Seed();
 
         //Act
@@ -67,7 +67,7 @@ public class CompartirPublicacionTests
     {
         //Arrange
         await using var factory = new ApiFactory();
-        using var client = factory.CreateClient();
+        using var client = AutenticacionPruebas.CrearCliente(factory, 2);
         await factory.Seed();
 
         var requestPayload = new
@@ -150,6 +150,7 @@ public class CompartirPublicacionTests
             builder.UseEnvironment("Testing");
             builder.ConfigureServices(services =>
             {
+                AutenticacionPruebas.Registrar(services);
                 services.RemoveAll<DbContextOptions<ApplicationDbContext>>();
                 services.RemoveAll<IDbContextOptionsConfiguration<ApplicationDbContext>>();
                 var nombre = Guid.NewGuid().ToString();
@@ -167,7 +168,7 @@ public class CompartirPublicacionTests
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
             db.Usuarios.Add(new Usuario_Personal { Id = 1, Username = "test1", Email = "test1@example.com" });
-            db.Usuarios.Add(new Usuario_Personal { Id = 2, Username = "test2", Email = "test2@example.com" });
+            db.Usuarios.Add(new Usuario_Personal { Id = 2, Username = "test2", Email = "test2@example.com", Reputacion = ReputacionEnum.Nostalgico });
 
             db.Lugares.Add(new Lugar { Id = 1, Nombre = "Lugar 1", Coordenadas = new NetTopologySuite.Geometries.Point(0, 0) });
 

@@ -41,6 +41,9 @@ public static class GrupoMappings
                 Nombre = request.NombreLugar,
                 Coordenadas = new Point(request.Longitud, request.Latitud) { SRID = 4326 }
             },
+            MusicaSpotifyId = request.Musica?.SpotifyId,
+            MusicaTitulo = request.Musica?.Titulo,
+            MusicaArtista = request.Musica?.Artista,
             TipoMultimedia = request.TipoMultimedia,
             UrlMultimedia = request.UrlArchivo ?? string.Empty,
             UsuarioId = autorId,

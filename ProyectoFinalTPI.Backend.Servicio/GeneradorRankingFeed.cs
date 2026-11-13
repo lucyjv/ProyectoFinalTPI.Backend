@@ -9,7 +9,7 @@ namespace ProyectoFinalTPI.Backend.Servicio;
 
 // reune las candidatas y en que orden mostrarlas
 public sealed class GeneradorRankingFeed(
-    IPublicacionRepositorio repositorio, IOptions<FeedRecomendacionesOptions> opciones) : IGeneradorRankingFeed
+    IPublicacionRepositorio repositorio, IOptions<FeedRecomendacionesOptions> opciones, ICategoriaServicio? categorias = null) : IGeneradorRankingFeed
 {
     private readonly FeedRecomendacionesOptions configuracion = opciones.Value;
 
@@ -212,6 +212,8 @@ public sealed class GeneradorRankingFeed(
             Grupo: c.UltimaVista is null ? 0 : c.UltimaVista < vistasDesde ? 1 : 2,
             Puntaje: puntajes.GetValueOrDefault(c.Datos.Id)
                 + afinidades.GetValueOrDefault(c.Datos.Categoria) * configuracion.PesoAfinidadCategoria
+                + (categorias?.ObtenerBonificacion(c.Datos.ReputacionAutor, c.Datos.EsCuentaMarca,
+                    configuracion.BonificacionAedo, configuracion.BonificacionMnemosine) ?? 0)
                 + CalcularCercania(c.Datos, lugares)));
     }
 

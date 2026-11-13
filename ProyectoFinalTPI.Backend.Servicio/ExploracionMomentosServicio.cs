@@ -16,6 +16,7 @@ public class ExploracionMomentosServicio(IExploracionMomentosRepositorio reposit
 
     public async Task<ResultadoPaginadoDto<MomentoResumenDto>> Buscar(string? busqueda, string? cursor, int limite, CancellationToken ct)
     {
+        ValidarLimite(limite);
         var (texto, normalizado) = PrepararBusqueda(busqueda);
         var posicion = LeerCursor(cursor, "buscar", 0, texto, false);
         var items = await repositorio.Buscar(

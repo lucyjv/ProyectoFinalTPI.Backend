@@ -127,6 +127,8 @@ builder.Services.AddOptions<FeedRecomendacionesOptions>()
         && opciones.PesoLike >= 0
         && opciones.PesoPuntuacion >= 0
         && opciones.PesoEtiqueta >= 0
+        && double.IsFinite(opciones.BonificacionAedo) && opciones.BonificacionAedo >= 0
+        && double.IsFinite(opciones.BonificacionMnemosine) && opciones.BonificacionMnemosine >= 0
         && opciones.PesoAfinidadCategoria >= 0
         && opciones.PesoCercania >= 0
         && opciones.DistanciaDeReferenciaKm > 0,

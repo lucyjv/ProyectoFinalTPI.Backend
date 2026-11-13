@@ -53,6 +53,8 @@ public partial class MomentoRepositorio
             {
                 Id = p.Id, Titulo = p.Titulo, DescripcionBreve = p.Descripcion.Length > 180 ? p.Descripcion.Substring(0, 180) : p.Descripcion,
                 Fecha = p.Fecha, Categoria = p.Categoria, UrlMultimedia = p.UrlMultimedia, TipoMultimedia = p.TipoMultimedia,
+                Adjuntos = p.Adjuntos.OrderBy(a => a.Orden).Select(a => new AdjuntoPublicacionDto(a.Url, a.Tipo, a.Orden)).ToList(),
+                Musica = p.MusicaSpotifyId == null ? null : new MusicaPublicacionDto(p.MusicaSpotifyId, p.MusicaTitulo!, p.MusicaArtista!),
                 Autor = new AutorResumenDto { Id = p.UsuarioId, Username = p.Usuario.Username }
             }).ToListAsync(ct);
     }
