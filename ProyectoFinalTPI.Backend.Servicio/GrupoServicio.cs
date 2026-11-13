@@ -117,17 +117,21 @@ public class GrupoServicio(
         return await grupoRepositorio.ObtenerRecuerdos(grupoId, cancellationToken);
     }
 
+    public Task<int> CrearRecuerdo(int grupoId, int usuarioId, Publicacion publicacion, Stream? archivo = null,
+        string? nombreArchivo = null, CancellationToken cancellationToken = default) =>
+        CrearRecuerdo(grupoId, usuarioId, publicacion, archivo, nombreArchivo, cancellationToken, null);
+
     public async Task<int> CrearRecuerdo(
-        int grupoId, int usuarioId, Publicacion publicacion, Stream? archivo = null,
-        string? nombreArchivo = null, CancellationToken cancellationToken = default)
+        int grupoId, int usuarioId, Publicacion publicacion, Stream? archivo,
+        string? nombreArchivo, CancellationToken cancellationToken, IReadOnlyList<global::ProyectoFinalTPI.Backend.Dtos.Publicacion.AdjuntoEntradaDto>? adjuntos)
     {
         ValidarGrupoYUsuario(grupoId, usuarioId);
         ArgumentNullException.ThrowIfNull(publicacion);
         await VerificarPermisoParaPublicar(
             grupoId, usuarioId, cancellationToken);
         AsociarRecuerdoAlGrupo(publicacion, grupoId, usuarioId);
-        return await publicacionServicio.Crear(
-            publicacion, archivo, nombreArchivo);
+        return adjuntos is null ? await publicacionServicio.Crear(publicacion, archivo, nombreArchivo)
+            : await publicacionServicio.Crear(publicacion, archivo, nombreArchivo, null, adjuntos);
     }
 
     #endregion
@@ -227,6 +231,12 @@ public class GrupoServicio(
     {
         return await grupoRepositorio.ObtenerIntegrante(grupoId, usuarioId, cancellationToken)
             ?? throw new KeyNotFoundException("El usuario no integra el grupo.");
+    }
+
+    private static void ValidarExpulsion(Grupo grupo, int usuarioId)
+    {
+        if (grupo.CreadorId == usuarioId)
+            throw new ArgumentException("No se puede expulsar al creador del grupo.");
     }
 
     private static void ValidarSalida(int usuarioId, Grupo grupo)

@@ -210,6 +210,8 @@ public class GruposController(IGrupoServicio grupoServicio) : ControllerBase
     [SwaggerResponse(StatusCodes.Status403Forbidden, "El usuario autenticado no pertenece al grupo.", typeof(ProblemDetails))]
     [SwaggerResponse(StatusCodes.Status404NotFound, "El grupo o el usuario no existen.", typeof(ProblemDetails))]
     [SwaggerResponse(StatusCodes.Status415UnsupportedMediaType, "Formato no compatible; utilice multipart/form-data.", typeof(ProblemDetails))]
+    [RequestSizeLimit(210 * 1024 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = 210 * 1024 * 1024)]
     public async Task<IActionResult> CrearRecuerdo(
         int grupoId, [FromForm] CrearRecuerdoGrupoRequest request,
         CancellationToken cancellationToken = default)
@@ -217,13 +219,11 @@ public class GruposController(IGrupoServicio grupoServicio) : ControllerBase
         var usuarioId = User.ObtenerUsuarioId();
         if (!usuarioId.HasValue) return Unauthorized();
         using var stream = request.Archivo?.OpenReadStream();
-        var id = await grupoServicio.CrearRecuerdo(
-            grupoId,
-            usuarioId.Value,
-            request.ToPublicacion(grupoId, usuarioId.Value),
-            stream,
-            request.Archivo?.FileName,
-            cancellationToken);
+        using var adjuntos = new ProyectoFinalTPI.Backend.Requests.Publicaciones.AdjuntosFormulario(request.Adjuntos);
+        var publicacion = request.ToPublicacion(grupoId, usuarioId.Value);
+        var id = adjuntos.Elementos is null
+            ? await grupoServicio.CrearRecuerdo(grupoId, usuarioId.Value, publicacion, stream, request.Archivo?.FileName, cancellationToken)
+            : await grupoServicio.CrearRecuerdo(grupoId, usuarioId.Value, publicacion, stream, request.Archivo?.FileName, cancellationToken, adjuntos.Elementos);
         return Created($"/api/publicaciones/{id}", new { id });
     }
 }

@@ -11,7 +11,7 @@ public class ComentarioServicio(
     IComentarioRepositorio _comentarioRepositorio,
     IUsuarioRepositorio _usuarioRepositorio,
     INotificacionServicio _notificacionServicio,
-    ILogroServicio _logroServicio) : IComentarioServicio
+    ILogroServicio _logroServicio, ICategoriaServicio? categoriaServicio = null) : IComentarioServicio
 {
     private const int LimiteRespuestasIniciales = 3;
 
@@ -60,6 +60,8 @@ public class ComentarioServicio(
         Comentario comentario, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(comentario);
+        if (categoriaServicio is not null) await categoriaServicio.ExigirPermiso(comentario.UsuarioId,
+            global::ProyectoFinalTPI.Backend.Entidades.PermisoCuenta.Comentar, cancellationToken);
         await ValidarPublicacion(comentario.PublicacionId, cancellationToken);
         ValidarId(comentario.UsuarioId, "usuario");
 

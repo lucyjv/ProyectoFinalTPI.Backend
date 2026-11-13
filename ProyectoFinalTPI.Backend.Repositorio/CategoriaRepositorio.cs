@@ -53,7 +53,11 @@ public sealed class CategoriaRepositorio(
         await contexto.Database.ExecuteSqlInterpolatedAsync(
             $"SELECT 1 FROM \"Usuario\" WHERE \"Id\" = {publicacion.UsuarioId} FOR UPDATE", ct);
         var id = await GuardarConCupo(publicacion, semana, limite, ct);
-        if (id.HasValue) await transaccion.CommitAsync(ct);
+        if (id.HasValue)
+        {
+            await transaccion.CommitAsync(ct);
+            if (cache is not null) await cache.InvalidarAsync(CancellationToken.None);
+        }
         return id;
     }
 

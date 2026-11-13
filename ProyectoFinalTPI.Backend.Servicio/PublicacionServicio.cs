@@ -157,6 +157,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
         public async Task<PuntuacionPublicacionDto> Puntuar(
             int publicacionId, int usuarioId, int puntaje, CancellationToken cancellationToken = default)
         {
+            if (_categoriaServicio is not null) await _categoriaServicio.ExigirPermiso(usuarioId, global::ProyectoFinalTPI.Backend.Entidades.PermisoCuenta.PuntuarPublicacion, cancellationToken);
             ValidarPuntaje(puntaje);
             await ValidarInteraccionConPublicacion(publicacionId, usuarioId, cancellationToken);
 
@@ -213,6 +214,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
         public async Task<RepostPublicacionDto> Repostear(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
         {
+            if (_categoriaServicio is not null) await _categoriaServicio.ExigirPermiso(usuarioId, global::ProyectoFinalTPI.Backend.Entidades.PermisoCuenta.Compartir, cancellationToken);
             ValidarIdPublicacion(publicacionId);
             ValidarIdUsuario(usuarioId);
             await VerificarAutorExistente(usuarioId);
@@ -233,6 +235,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
         }
         public async Task<int> Citar(int publicacionId, int usuarioId, string descripcion, CancellationToken cancellationToken = default)
         {
+            if (_categoriaServicio is not null) await _categoriaServicio.ExigirPermiso(usuarioId, global::ProyectoFinalTPI.Backend.Entidades.PermisoCuenta.Compartir, cancellationToken);
             ValidarIdPublicacion(publicacionId);
             ValidarIdUsuario(usuarioId);
             ValidarDescripcion(descripcion);
@@ -504,18 +507,32 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
         #region Creacion y Eliminacion
 
-        public async Task<int> Crear(Publicacion publicacion, Stream? archivo = null, string? nombreArchivo = null, Point? gpsUsuario = null)
-        {
-            await VerificarAutorExistente(publicacion.UsuarioId);
+        public Task<int> Crear(Publicacion publicacion, Stream? archivo = null, string? nombreArchivo = null, Point? gpsUsuario = null) =>
+            Crear(publicacion, archivo, nombreArchivo, gpsUsuario, null);
 
-            publicacion.UrlMultimedia = await ProcesarMultimedia(publicacion, archivo, nombreArchivo);
+        public async Task<int> Crear(Publicacion publicacion, Stream? archivo, string? nombreArchivo, Point? gpsUsuario,
+            IReadOnlyList<AdjuntoEntradaDto>? adjuntos)
+        {
+            ArgumentNullException.ThrowIfNull(publicacion);
+            await VerificarAutorExistente(publicacion.UsuarioId);
+            var entradas = NormalizarAdjuntos(publicacion, archivo, nombreArchivo, adjuntos);
+            ValidarMusica(publicacion);
+            if (_categoriaServicio is not null)
+                await _categoriaServicio.ValidarCreacion(publicacion.UsuarioId, entradas.Count, publicacion.MusicaSpotifyId != null);
+            publicacion.Adjuntos.Clear();
+            foreach (var entrada in entradas)
+            {
+                var url = await _multimediaServicio.SubirAsync(entrada.Archivo, entrada.NombreArchivo, entrada.Url, entrada.Tipo);
+                publicacion.Adjuntos.Add(new AdjuntoPublicacion { Url = url, Tipo = entrada.Tipo, Orden = publicacion.Adjuntos.Count });
+            }
+            publicacion.UrlMultimedia = publicacion.Adjuntos.FirstOrDefault()?.Url ?? string.Empty;
+            publicacion.TipoMultimedia = publicacion.Adjuntos.FirstOrDefault()?.Tipo ?? MultimediaEnum.Foto;
             IniciarEstadoPublicacion(publicacion);
 
-            int idPublicacion = await _publicacionRepositorio.Crear(publicacion);
-
+            int idPublicacion = _categoriaServicio is null
+                ? await _publicacionRepositorio.Crear(publicacion)
+                : await _categoriaServicio.CrearRecuerdo(publicacion);
             await VerificacionLogrosCrearPublicacion(publicacion, gpsUsuario);
-            await ActualizarCategoriaPorRecuerdo(publicacion, 0);
-
             return idPublicacion;
         }
         public async Task Eliminar(int id, int? autorId = null, CancellationToken cancellationToken = default)
@@ -643,29 +660,39 @@ namespace ProyectoFinalTPI.Backend.Servicio
             if (!await _publicacionRepositorio.ExistePublicacionVisible(publicacionId, cancellationToken))
                 throw new KeyNotFoundException("La publicacion no existe o no esta disponible");
         }
-        private async Task<string> ProcesarMultimedia(
-        Publicacion publicacion,
-        Stream? archivo,
-        string? nombreArchivo)
+        private IReadOnlyList<AdjuntoEntradaDto> NormalizarAdjuntos(Publicacion publicacion, Stream? archivo,
+            string? nombreArchivo, IReadOnlyList<AdjuntoEntradaDto>? adjuntos)
+        {
+            var tieneAnterior = archivo is not null || !string.IsNullOrWhiteSpace(publicacion.UrlMultimedia);
+            if (adjuntos is { Count: > 0 } && tieneAnterior) throw new ArgumentException("No combines Adjuntos con Archivo o UrlArchivo.");
+            IReadOnlyList<AdjuntoEntradaDto> entradas = adjuntos is { Count: > 0 } ? adjuntos
+                : tieneAnterior ? new[] { new AdjuntoEntradaDto(archivo, nombreArchivo, archivo is null ? publicacion.UrlMultimedia : null, publicacion.TipoMultimedia) }
+                : Array.Empty<AdjuntoEntradaDto>();
+            if (entradas.Count > 4) throw new ArgumentException("Una publicación admite hasta 4 adjuntos.");
+            if (_opcionesPublicacion.RequerirMultimedia && entradas.Count == 0)
+                throw new ArgumentException("Debe subir un archivo o indicar una URL.");
+            foreach (var entrada in entradas)
             {
-                if (archivo == null && string.IsNullOrWhiteSpace(publicacion.UrlMultimedia))
-                {
-                    if (_opcionesPublicacion.RequerirMultimedia)
-                        throw new ArgumentException("Debe subir un archivo o indicar una URL.");
-                    // No invocar al proveedor ni inventar una imagen para recuerdos de texto.
-                    return string.Empty;
-                }
-
-                string? urlExistente = string.IsNullOrEmpty(publicacion.UrlMultimedia)
-                    ? null
-                    : publicacion.UrlMultimedia;
-
-                return await _multimediaServicio.SubirAsync(
-                    archivo,
-                    nombreArchivo,
-                    urlExistente,
-                    publicacion.TipoMultimedia);
+                if (!Enum.IsDefined(entrada.Tipo)) throw new ArgumentException("El tipo de adjunto no es válido.");
+                if ((entrada.Archivo is null) == string.IsNullOrWhiteSpace(entrada.Url))
+                    throw new ArgumentException("Cada adjunto requiere un archivo o una URL, exclusivamente.");
+                if (entrada.Archivo is { CanSeek: true } && (entrada.Archivo.Length == 0 || entrada.Archivo.Length > 50 * 1024 * 1024))
+                    throw new ArgumentException("Cada archivo debe tener contenido y ocupar hasta 50 MB.");
+                if (entrada.Archivo is null && (!Uri.TryCreate(entrada.Url, UriKind.Absolute, out var uri) || uri.Scheme != "https"))
+                    throw new ArgumentException("La URL del adjunto debe ser HTTPS.");
             }
+            return entradas;
+        }
+
+        private static void ValidarMusica(Publicacion publicacion)
+        {
+            if (publicacion.MusicaSpotifyId is null && publicacion.MusicaTitulo is null && publicacion.MusicaArtista is null) return;
+            if (!Regex.IsMatch(publicacion.MusicaSpotifyId ?? "", "^[A-Za-z0-9]{22}$")
+                || string.IsNullOrWhiteSpace(publicacion.MusicaTitulo) || publicacion.MusicaTitulo.Length > 120
+                || string.IsNullOrWhiteSpace(publicacion.MusicaArtista) || publicacion.MusicaArtista.Length > 120)
+                throw new ArgumentException("La música requiere una canción de Spotify, título y artista válidos.");
+        }
+
         private static void IniciarEstadoPublicacion(Publicacion publicacion)
         {
             publicacion.FechaCreación = DateTime.UtcNow;
@@ -762,6 +789,8 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 Fecha = original.Fecha,
                 FechaCreacion = fecha,
                 Categoria = original.Categoria,
+                Adjuntos = original.Adjuntos,
+                Musica = original.Musica,
                 UrlMultimedia = original.UrlMultimedia,
                 TipoMultimedia = original.TipoMultimedia,
                 Autor = original.Autor,
@@ -956,7 +985,8 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
         private async Task VerificarLogroFotografoDelRecuerdo(Publicacion publicacion, int usuarioId)
         {
-            if (!string.IsNullOrEmpty(publicacion.UrlMultimedia) && publicacion.TipoMultimedia == MultimediaEnum.Foto)
+            if (publicacion.Adjuntos.Any(a => a.Tipo == MultimediaEnum.Foto)
+                || (!string.IsNullOrEmpty(publicacion.UrlMultimedia) && publicacion.TipoMultimedia == MultimediaEnum.Foto))
             {
                 int posteosConFoto = await _publicacionRepositorio.ContarPosteosConImagenDelUsuario(usuarioId);
 

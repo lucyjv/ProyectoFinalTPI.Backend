@@ -90,6 +90,22 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
             base.OnModelCreating(modelBuilder);
 
             modelBuilder.HasPostgresExtension("postgis");
+            modelBuilder.Entity<ConsumoPublicaciones>(e =>
+            {
+                e.ToTable("consumos_publicaciones");
+                e.HasKey(c => new { c.UsuarioId, c.SemanaInicio });
+                e.HasOne<Usuario>().WithMany().HasForeignKey(c => c.UsuarioId).OnDelete(DeleteBehavior.Cascade);
+            });
+            modelBuilder.Entity<AdjuntoPublicacion>(e =>
+            {
+                e.ToTable("adjuntos_publicacion");
+                e.Property(a => a.Url).IsRequired();
+                e.HasIndex(a => new { a.PublicacionId, a.Orden }).IsUnique();
+                e.HasOne<Publicacion>().WithMany(p => p.Adjuntos).HasForeignKey(a => a.PublicacionId).OnDelete(DeleteBehavior.Cascade);
+            });
+            modelBuilder.Entity<Publicacion>().Property(p => p.MusicaSpotifyId).HasMaxLength(22);
+            modelBuilder.Entity<Publicacion>().Property(p => p.MusicaTitulo).HasMaxLength(120);
+            modelBuilder.Entity<Publicacion>().Property(p => p.MusicaArtista).HasMaxLength(120);
 
             modelBuilder.Entity<Publicacion>().HasIndex(p => p.Fecha);
             modelBuilder.Entity<Publicacion>().HasIndex(p => new { p.Categoria, p.EstaOculto, p.FechaCreación });

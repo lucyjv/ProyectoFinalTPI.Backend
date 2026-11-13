@@ -106,6 +106,8 @@ public class GrupoRepositorio(ApplicationDbContext context) : IGrupoRepositorio
                 Categoria = publicacion.Categoria,
                 UrlMultimedia = publicacion.UrlMultimedia,
                 TipoMultimedia = publicacion.TipoMultimedia,
+                Adjuntos = publicacion.Adjuntos.OrderBy(a => a.Orden).Select(a => new AdjuntoPublicacionDto(a.Url, a.Tipo, a.Orden)).ToList(),
+                Musica = publicacion.MusicaSpotifyId == null ? null : new MusicaPublicacionDto(publicacion.MusicaSpotifyId, publicacion.MusicaTitulo!, publicacion.MusicaArtista!),
                 Autor = new AutorResumenDto
                 {
                     Id = publicacion.UsuarioId,

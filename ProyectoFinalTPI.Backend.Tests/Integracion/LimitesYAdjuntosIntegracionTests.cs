@@ -40,16 +40,16 @@ public class LimitesYAdjuntosIntegracionTests(PostgisFixture postgres, Neo4jLogr
         Assert.True(respuestaGrupo.StatusCode == HttpStatusCode.Created, await respuestaGrupo.Content.ReadAsStringAsync());
         for (var i = 0; i < 3; i++) await Publicar(client, usuario.UsuarioId);
         await Publicar(client, usuario.UsuarioId, esperado: HttpStatusCode.TooManyRequests);
-        Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync($"/api/publicaciones/{primero}")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.DeleteAsync($"/api/publicaciones/{primero}")).StatusCode);
         Assert.Equal(5, (await Estado(client)).PublicacionesConsumidas);
         await Publicar(client, usuario.UsuarioId, esperado: HttpStatusCode.TooManyRequests);
         reloj.Ahora = reloj.Ahora.AddSeconds(1);
         Assert.Equal(5, (await Estado(client)).PublicacionesRestantes);
         await Publicar(client, usuario.UsuarioId);
         Assert.Equal(4, (await Estado(client)).PublicacionesRestantes);
-            }
+    }
 
-        [Fact]
+    [Fact]
     public async Task DoceCreacionesConcurrentesNoSuperanElCupoDeCinco()
     {
         await using var factory = new PublicacionesApiFactory(postgres, neo4j.Driver);
@@ -123,6 +123,72 @@ public class LimitesYAdjuntosIntegracionTests(PostgisFixture postgres, Neo4jLogr
         await Publicar(client, autor.UsuarioId, esperado: HttpStatusCode.TooManyRequests);
     }
 
+    [Fact]
+    public async Task ParaVosPriorizaLaCategoriaDelAutorEnLaVersionActualDelFeed()
+    {
+        await using (var session = neo4j.Driver.AsyncSession())
+            await (await session.RunAsync("MATCH (n) DETACH DELETE n")).ConsumeAsync();
+        await using var factory = new PublicacionesApiFactory(postgres, neo4j.Driver);
+        using var client = factory.CreateClient();
+        var aedo = await Registrar(client);
+        var recuerdoAedo = await Publicar(client, aedo.UsuarioId);
+        using (var scope = factory.Services.CreateScope())
+            await scope.ServiceProvider.GetRequiredService<ApplicationDbContext>().Set<Usuario_Personal>()
+                .Where(u => u.Id == aedo.UsuarioId).ExecuteUpdateAsync(s => s.SetProperty(u => u.Reputacion, ReputacionEnum.Aedo));
+        var nostalgico = await Registrar(client);
+        var recuerdoNostalgico = await Publicar(client, nostalgico.UsuarioId);
+        await Registrar(client);
+        var pagina = (await client.GetFromJsonAsync<ProyectoFinalTPI.Backend.Dtos.ResultadoPaginadoDto<PublicacionDetalleDto>>("/api/feed/para-vos?limite=20"))!;
+        Assert.Equal(new[] { recuerdoAedo, recuerdoNostalgico }, pagina.Items.Select(p => p.Id));
+    }
+
+    [Fact]
+    public async Task ErranteConservaLikesYGuardados_PeroComentarPuntuarYCompartirRequierenElPrimerRecuerdo()
+    {
+        await using var factory = new PublicacionesApiFactory(postgres, neo4j.Driver);
+        using var client = factory.CreateClient();
+        var autor = await Registrar(client);
+        var recuerdo = await Publicar(client, autor.UsuarioId);
+        var cuenta = await Registrar(client);
+        Assert.Equal("Errante", (await Estado(client)).Categoria.Codigo);
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsync($"/api/publicaciones/{recuerdo}/like", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsync($"/api/publicaciones/{recuerdo}/guardar", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync($"/api/publicaciones/{recuerdo}/comentarios", new { contenido = "Mi comentario" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PutAsJsonAsync($"/api/publicaciones/{recuerdo}/puntuacion", new { puntaje = 1 })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsync($"/api/publicaciones/{recuerdo}/repost", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync($"/api/publicaciones/{recuerdo}/citar", new { descripcion = "Mi mirada del recuerdo" })).StatusCode);
+        Assert.Equal(0, (await Estado(client)).PublicacionesConsumidas);
+
+        await Publicar(client, cuenta.UsuarioId);
+        Assert.Equal("Nostalgico", (await Estado(client)).Categoria.Codigo);
+        Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync($"/api/publicaciones/{recuerdo}/comentarios", new { contenido = "Mi comentario" })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.PutAsJsonAsync($"/api/publicaciones/{recuerdo}/puntuacion", new { puntaje = 1 })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsync($"/api/publicaciones/{recuerdo}/repost", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync($"/api/publicaciones/{recuerdo}/citar", new { descripcion = "Mi mirada del recuerdo" })).StatusCode);
+        Assert.Equal(1, (await Estado(client)).PublicacionesConsumidas);
+        Assert.Equal(4, (await Estado(client)).PublicacionesRestantes);
+    }
+
+    [Fact]
+    public async Task CrearRequiereSesionYUsaElAutorAutenticadoAunqueElFormularioIndiqueOtro()
+    {
+        await using var factory = new PublicacionesApiFactory(postgres, neo4j.Driver);
+        using var client = factory.CreateClient();
+        using (var anonimo = Formulario(123))
+            Assert.Equal(HttpStatusCode.Unauthorized, (await client.PostAsync("/api/publicaciones", anonimo)).StatusCode);
+        var autor = await Registrar(client);
+        var otro = await Registrar(client);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", autor.Token);
+        var recuerdo = await Publicar(client, otro.UsuarioId);
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Assert.Equal(autor.UsuarioId, await db.Publicaciones.Where(p => p.Id == recuerdo).Select(p => p.UsuarioId).SingleAsync());
+        Assert.Equal(1, (await Estado(client)).PublicacionesConsumidas);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", otro.Token);
+        Assert.Equal("Errante", (await Estado(client)).Categoria.Codigo);
+        Assert.Equal(0, (await Estado(client)).PublicacionesConsumidas);
+    }
+
     private static async Task<AuthRespuestaDto> Registrar(HttpClient client)
     {
         var nombre = "cuenta_" + Guid.NewGuid().ToString("N")[..10];
@@ -173,4 +239,4 @@ public class LimitesYAdjuntosIntegracionTests(PostgisFixture postgres, Neo4jLogr
         if (esperado != HttpStatusCode.Created) return 0;
         return (await respuesta.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetInt32();
     }
-    }
+}

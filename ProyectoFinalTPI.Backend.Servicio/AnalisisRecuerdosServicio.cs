@@ -25,6 +25,7 @@ public class AnalisisRecuerdosServicio(ITrabajoAnalisisRepositorio repositorio, 
 
     public async Task<bool> ProcesarUno(CancellationToken ct)
     {
+        if (!analizador.Disponible) return false;
         var config = opciones.Value;
         var reserva = await ReservarTrabajo(config, ct);
         if (reserva == null) return false;

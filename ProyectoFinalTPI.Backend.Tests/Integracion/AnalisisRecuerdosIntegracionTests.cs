@@ -54,6 +54,7 @@ public class AnalisisRecuerdosIntegracionTests(PostgisFixture postgres) : IClass
     {
         ConfigurarServiciosAdicionales = servicios =>
         {
+            AutenticacionPruebas.Registrar(servicios);
             servicios.RemoveAll<IAnalizadorRecuerdo>();
             servicios.AddSingleton<IAnalizadorRecuerdo>(fake);
         }
@@ -71,7 +72,7 @@ public class AnalisisRecuerdosIntegracionTests(PostgisFixture postgres) : IClass
         //Arrange
         var analizador = new AnalizadorFake { Operacion = (_, _) => throw new InvalidOperationException("No debe analizar al publicar") };
         await using var factory = CrearFactory(analizador);
-        using var client = factory.CreateClient();
+        using var client = AutenticacionPruebas.CrearCliente(factory, 7);
         await Preparar(factory, crearRecuerdo: false);
         using var form = Formulario();
 
@@ -94,8 +95,8 @@ public class AnalisisRecuerdosIntegracionTests(PostgisFixture postgres) : IClass
     public async Task QueUnFalloAlInsertarElTrabajoNoDejeLaPublicacionGuardadaSinCola()
     {
         //Arrange
-        await using var factory = new PublicacionesApiFactory(postgres);
-        using var client = factory.CreateClient();
+        await using var factory = new PublicacionesApiFactory(postgres) { ConfigurarServiciosAdicionales = AutenticacionPruebas.Registrar };
+        using var client = AutenticacionPruebas.CrearCliente(factory, 7);
         await Preparar(factory, crearRecuerdo: false);
         using (var scope = factory.Services.CreateScope())
         {
