@@ -259,12 +259,6 @@ public class GrupoServicio(
         publicacion.GrupoId = grupoId;
         publicacion.UsuarioId = usuarioId;
     }
-    private static void ValidarExpulsion(Grupo grupo, int usuarioId)
-    {
-        if (grupo.CreadorId == usuarioId)
-            throw new ArgumentException(
-                "No se puede expulsar al creador del grupo.");
-    }
 
     #endregion
 }
