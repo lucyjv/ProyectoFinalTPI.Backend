@@ -21,6 +21,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
         public DbSet<Usuario_Marca> Usuario_Marcas { get; set; }
         public DbSet<Usuario_Personal> Usuario_Personales { get; set; }
         public DbSet<SesionUsuario> SesionesUsuario { get; set; }
+        public DbSet<RecuperacionContrasena> RecuperacionesContrasena { get; set; }
         public DbSet<Comentario> Comentarios { get; set; }
         public DbSet<ReaccionComentario> ReaccionesComentario { get; set; }
         public DbSet<Grupo> Grupos { get; set; }
@@ -131,6 +132,18 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
                 entity.HasOne(sesion => sesion.Usuario)
                     .WithMany()
                     .HasForeignKey(sesion => sesion.UsuarioId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<RecuperacionContrasena>(entity =>
+            {
+                entity.ToTable("recuperaciones_contrasena");
+                entity.HasKey(r => r.Id);
+                entity.Property(r => r.TokenHash).IsRequired().HasMaxLength(64);
+                entity.Property(r => r.EmailDestino).IsRequired().HasMaxLength(200);
+                entity.HasIndex(r => new { r.UsuarioId, r.FechaCreacion });
+                entity.HasIndex(r => r.FechaExpiracion);
+                entity.HasOne(r => r.Usuario).WithMany().HasForeignKey(r => r.UsuarioId)
                     .OnDelete(DeleteBehavior.Cascade);
             });
 

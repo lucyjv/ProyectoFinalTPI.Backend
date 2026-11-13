@@ -20,5 +20,9 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Servicio
         Task CerrarSesionAsync(string? refreshToken, CancellationToken cancellationToken = default);
 
         Task CerrarTodasLasSesionesAsync(int usuarioId, CancellationToken cancellationToken = default);
+
+        Task SolicitarRecuperacionAsync(RecuperarContrasenaDto dto, CancellationToken cancellationToken = default);
+
+        Task RestablecerContrasenaAsync(RestablecerContrasenaDto dto, CancellationToken cancellationToken = default);
     }
 }

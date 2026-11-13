@@ -1,6 +1,7 @@
 using ProyectoFinalTPI.Backend.Infraestructura;
 using ProyectoFinalTPI.Backend.Repositorio.Cache;
 using System.Text;
+using System.Net.Mail;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -41,6 +42,13 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
                 AutoReplenishment = true
+            }));
+    options.AddPolicy("recuperacion-contrasena", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "desconocida",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5, Window = TimeSpan.FromMinutes(15), QueueLimit = 0, AutoReplenishment = true
             }));
 });
 
@@ -192,6 +200,35 @@ else
 
 // Auth
 builder.Services.AddScoped<IAuthServicio, AuthServicio>();
+builder.Services.AddScoped<IProcesadorRecuperacionContrasena>(p =>
+    (AuthServicio)p.GetRequiredService<IAuthServicio>());
+builder.Services.AddScoped<IRecuperacionContrasenaRepositorio, RecuperacionContrasenaRepositorio>();
+builder.Services.AddOptions<RecuperacionContrasenaOptions>()
+    .Bind(builder.Configuration.GetSection(RecuperacionContrasenaOptions.Seccion))
+    .Validate(o => o.ValidezMinutos is >= 5 and <= 60 && o.IntervaloSolicitudesSegundos is >= 60 and <= 3600,
+        "Los límites de recuperación de contraseña no son válidos.")
+    .Validate(o => !o.Habilitado || Uri.TryCreate(o.UrlRestablecimiento, UriKind.Absolute, out var url)
+        && string.IsNullOrEmpty(url.Query) && string.IsNullOrEmpty(url.Fragment) && string.IsNullOrEmpty(url.UserInfo)
+        && (url.Scheme == Uri.UriSchemeHttps || url.Scheme == Uri.UriSchemeHttp && url.IsLoopback
+            && (builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing"))),
+        "La URL de restablecimiento debe ser HTTPS, absoluta y sin query, fragmento ni credenciales.")
+    .ValidateOnStart();
+builder.Services.AddOptions<CorreoResendOptions>()
+    .Bind(builder.Configuration.GetSection(CorreoResendOptions.Seccion))
+    .Validate(o => !builder.Configuration.GetValue<bool>("RecuperacionContrasena:Habilitado")
+        || !string.IsNullOrWhiteSpace(o.ApiKey) && !o.ApiKey.Any(char.IsControl)
+            && MailAddress.TryCreate(o.Remitente, out var direccion) && direccion.Address == o.Remitente
+            && !string.IsNullOrWhiteSpace(o.NombreRemitente) && !o.NombreRemitente.Any(char.IsControl),
+        "Configurá la API key y el remitente de Resend antes de habilitar la recuperación.")
+    .ValidateOnStart();
+builder.Services.AddHttpClient<IEnvioCorreo, EnvioCorreoResend>(cliente =>
+{
+    cliente.BaseAddress = new Uri("https://api.resend.com/");
+    cliente.Timeout = TimeSpan.FromSeconds(10);
+}).RemoveAllLoggers();
+builder.Services.AddSingleton<CorreosRecuperacionWorker>();
+builder.Services.AddSingleton<IColaRecuperacionContrasena>(p => p.GetRequiredService<CorreosRecuperacionWorker>());
+builder.Services.AddHostedService(p => p.GetRequiredService<CorreosRecuperacionWorker>());
 
 // ── Chat ───────────────────────────────────────────────────────────────
 builder.Services.AddSignalR();
