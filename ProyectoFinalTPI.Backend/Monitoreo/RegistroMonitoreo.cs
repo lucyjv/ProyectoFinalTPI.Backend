@@ -33,7 +33,7 @@ public static class RegistroMonitoreo
         .WithTracing(traces => traces
             .AddSource("Nostalgiar.Feed", "Nostalgiar.AnalisisRecuerdos", "Nostalgiar.Redis", "Npgsql")
             .AddProcessor(new DatosOperativosProcessor()))
-        .WithMetrics(metrics => metrics.AddMeter("Nostalgiar.Feed", "Nostalgiar.AnalisisRecuerdos", "Nostalgiar.Redis"));
+        .WithMetrics(metrics => metrics.AddMeter("Nostalgiar.Feed", "Nostalgiar.AnalisisRecuerdos", "Nostalgiar.Redis", "Nostalgiar.Auth"));
         // addSourse “Ademas de las peticiones y llamadas HTTP, escucha las mediciones de nuestro feed, analisis, Redis y PostgreSQL”
 
         // Evita enviar logs de consultas SQL y eventos masivos del framework

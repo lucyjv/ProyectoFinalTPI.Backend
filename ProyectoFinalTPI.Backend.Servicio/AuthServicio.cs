@@ -2,34 +2,47 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using System.ComponentModel.DataAnnotations;
 using System.Threading;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using ProyectoFinalTPI.Backend.Dtos.Auth;
 using ProyectoFinalTPI.Backend.Dtos.Usuario;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
+using ProyectoFinalTPI.Backend.Interfaces.Configuracion;
 using BC = BCrypt.Net.BCrypt;
 
 namespace ProyectoFinalTPI.Backend.Servicio;
 
-public class AuthServicio : IAuthServicio
+public class AuthServicio : IAuthServicio, IProcesadorRecuperacionContrasena
 {
     private readonly IUsuarioRepositorio _usuarioRepositorio;
     private readonly ISesionUsuarioRepositorio _sesionRepositorio;
     private readonly IConfiguration _configuration;
     private readonly IUsuarioServicio _usuarioServicio;
+    private readonly IRecuperacionContrasenaRepositorio _recuperaciones;
+    private readonly IColaRecuperacionContrasena _correosPendientes;
+    private readonly RecuperacionContrasenaOptions _recuperacionOptions;
+    private readonly TimeProvider _reloj;
 
     public AuthServicio(
         IUsuarioRepositorio usuarioRepositorio,
         ISesionUsuarioRepositorio sesionRepositorio,
-        IConfiguration configuration, IUsuarioServicio usuarioServicio)
+        IConfiguration configuration, IUsuarioServicio usuarioServicio,
+        IRecuperacionContrasenaRepositorio recuperaciones, IColaRecuperacionContrasena correosPendientes,
+        IOptions<RecuperacionContrasenaOptions> recuperacionOptions, TimeProvider reloj)
     {
         _usuarioRepositorio = usuarioRepositorio;
         _sesionRepositorio = sesionRepositorio;
         _configuration = configuration;
         _usuarioServicio = usuarioServicio;
+        _recuperaciones = recuperaciones;
+        _correosPendientes = correosPendientes;
+        _recuperacionOptions = recuperacionOptions.Value;
+        _reloj = reloj;
     }
 
     #region Operaciones públicas
@@ -78,6 +91,85 @@ public class AuthServicio : IAuthServicio
 
     public Task CerrarTodasLasSesionesAsync(int usuarioId, CancellationToken cancellationToken = default) =>
         _sesionRepositorio.RevocarTodasAsync(usuarioId, DateTime.UtcNow, cancellationToken);
+
+    public Task SolicitarRecuperacionAsync(RecuperarContrasenaDto dto, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        VerificarRecuperacionHabilitada();
+        Validator.ValidateObject(dto, new ValidationContext(dto), validateAllProperties: true);
+
+        // dejamos en cola el envio del correo de recuperación, que se procesa ean segundo plano
+        if (!_correosPendientes.EncolarSolicitud(NormalizarEmail(dto.Email)))
+            throw new RecuperacionContrasenaNoDisponibleException();
+        return Task.CompletedTask;
+    }
+
+    public async Task<CorreoElectronicoDto?> PrepararRecuperacionAsync(string email, CancellationToken cancellationToken = default)
+    {
+        if (!_recuperacionOptions.Habilitado) return null;
+        var usuario = await _usuarioRepositorio.ObtenerPorEmailAsync(NormalizarEmail(email), cancellationToken);
+        var ahora = _reloj.GetUtcNow().UtcDateTime;
+        if (!CuentaHabilitada(usuario, ahora)) return null;
+
+        var recuperacion = new RecuperacionContrasena
+        {
+            UsuarioId = usuario!.Id, EmailDestino = NormalizarEmail(usuario.Email),
+            FechaCreacion = ahora, FechaExpiracion = ahora.AddMinutes(_recuperacionOptions.ValidezMinutos)
+        };
+        var token = $"{recuperacion.Id:N}.{Base64UrlEncoder.Encode(RandomNumberGenerator.GetBytes(32))}";
+        recuperacion.TokenHash = HashearToken(token);
+
+        var creada = await _recuperaciones.CrearSiCorrespondeAsync(recuperacion,
+            TimeSpan.FromSeconds(_recuperacionOptions.IntervaloSolicitudesSegundos), cancellationToken);
+        if (!creada) return null;
+
+        var enlace = $"{_recuperacionOptions.UrlRestablecimiento}#token={Uri.EscapeDataString(token)}";
+        return CorreosRecuperacion.CrearEnlace(recuperacion.EmailDestino, enlace,
+            _recuperacionOptions.ValidezMinutos, recuperacion.Id);
+    }
+
+    public async Task RestablecerContrasenaAsync(RestablecerContrasenaDto dto, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        VerificarRecuperacionHabilitada();
+        Validator.ValidateObject(dto, new ValidationContext(dto), validateAllProperties: true);
+
+        if (!TryLeerTokenRecuperacion(dto.Token, out var id)) throw EnlaceNoValido();
+        var recuperacion = await _recuperaciones.ObtenerPorIdAsync(id, cancellationToken);
+        var ahora = _reloj.GetUtcNow().UtcDateTime;
+
+        if (recuperacion is null || recuperacion.FechaUso is not null || recuperacion.FechaRevocacion is not null
+            || recuperacion.FechaExpiracion <= ahora || !CuentaHabilitada(recuperacion.Usuario, ahora)
+            || !HashCoincide(dto.Token, recuperacion.TokenHash))
+            throw EnlaceNoValido();
+
+        var actualizada = await _recuperaciones.RestablecerAsync(id,
+                                                HashearToken(dto.Token),
+                                                BC.HashPassword(dto.NuevaContrasena),
+                                                cancellationToken);
+
+        if (!actualizada) throw EnlaceNoValido();
+
+        _correosPendientes.EncolarAviso(recuperacion.EmailDestino, id);
+    }
+
+    private void VerificarRecuperacionHabilitada()
+    {
+        if (!_recuperacionOptions.Habilitado) throw new RecuperacionContrasenaNoDisponibleException();
+    }
+
+    private static ArgumentException EnlaceNoValido() => new("El enlace no es válido, venció o ya fue utilizado.");
+
+    private static bool CuentaHabilitada(Usuario? usuario, DateTime ahora) => usuario is not null
+        && !usuario.EstaEliminado
+        && !(usuario is Usuario_Interactivo { SuspendidoHasta: { } hasta } && hasta > ahora);
+
+    private static bool TryLeerTokenRecuperacion(string token, out Guid id)
+    {
+        id = Guid.Empty;
+        return token.Length == 76 && token[32] == '.' && Guid.TryParseExact(token[..32], "N", out id)
+            && token.Skip(33).All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_');
+    }
     
     #endregion
 

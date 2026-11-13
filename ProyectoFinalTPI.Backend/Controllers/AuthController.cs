@@ -3,6 +3,7 @@ using Swashbuckle.AspNetCore.Annotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using System.ComponentModel.DataAnnotations;
 using ProyectoFinalTPI.Backend.Dtos.Auth;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
@@ -79,6 +80,48 @@ public class AuthController : ControllerBase
         {
             return Unauthorized(new { mensaje = ex.Message });
         }
+    }
+
+    [AllowAnonymous]
+    [HttpPost("recuperar-contrasena")]
+    [EnableRateLimiting("recuperacion-contrasena")]
+    [SwaggerOperation(Summary = "Solicita un enlace para restablecer la contraseña.",
+        Description = "Siempre responde el mismo mensaje para cuentas existentes o inexistentes. El correo se procesa en segundo plano.")]
+    [SwaggerResponse(StatusCodes.Status202Accepted, "Solicitud recibida; no confirma la existencia de la cuenta.")]
+    [SwaggerResponse(StatusCodes.Status400BadRequest, "Email inválido o solicitud inválida.")]
+    [SwaggerResponse(StatusCodes.Status429TooManyRequests, "Se superó el límite de solicitudes.")]
+    [SwaggerResponse(StatusCodes.Status503ServiceUnavailable, "La recuperación no está disponible.", typeof(ProblemDetails))]
+    public async Task<IActionResult> RecuperarContrasena([FromBody] RecuperarContrasenaDto dto, CancellationToken cancellationToken)
+    {
+        if (!EsSolicitudDelFrontend()) return BadRequest(new { mensaje = "Solicitud de autenticación inválida." });
+        try
+        {
+            await _authServicio.SolicitarRecuperacionAsync(dto, cancellationToken);
+            return Accepted(new { mensaje = "Si existe una cuenta con ese correo, te enviaremos un enlace para restablecer la contraseña." });
+        }
+        catch (ValidationException ex) { return BadRequest(new { mensaje = ex.Message }); }
+    }
+
+    [AllowAnonymous]
+    [HttpPost("restablecer-contrasena")]
+    [EnableRateLimiting("auth-intentos")]
+    [SwaggerOperation(Summary = "Restablece la contraseña usando un enlace de un solo uso.",
+        Description = "Actualiza la contraseña, invalida los enlaces pendientes y revoca las sesiones anteriores. No inicia una sesión nueva.")]
+    [SwaggerResponse(StatusCodes.Status204NoContent, "Contraseña actualizada.")]
+    [SwaggerResponse(StatusCodes.Status400BadRequest, "Datos inválidos o enlace inválido, vencido o utilizado.")]
+    [SwaggerResponse(StatusCodes.Status429TooManyRequests, "Se superó el límite de intentos.")]
+    [SwaggerResponse(StatusCodes.Status503ServiceUnavailable, "La recuperación no está disponible.", typeof(ProblemDetails))]
+    public async Task<IActionResult> RestablecerContrasena([FromBody] RestablecerContrasenaDto dto, CancellationToken cancellationToken)
+    {
+        if (!EsSolicitudDelFrontend()) return BadRequest(new { mensaje = "Solicitud de autenticación inválida." });
+        try
+        {
+            await _authServicio.RestablecerContrasenaAsync(dto, cancellationToken);
+            BorrarRefreshCookie();
+            return NoContent();
+        }
+        catch (ValidationException ex) { return BadRequest(new { mensaje = ex.Message }); }
+        catch (ArgumentException ex) { return BadRequest(new { mensaje = ex.Message }); }
     }
 
     [HttpPost("refresh")]
