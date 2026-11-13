@@ -15,17 +15,17 @@ public class SesionFypRedisRepositorioTests
     private SesionFypRedisRepositorio Crear() => new(_cache.Object);
 
     [Fact]
-    public void QueSeGuardeLaSesionSinDuplicadosConElOrdenOriginalYTreintaMinutosDeDuracion()
+    public async Task QueSeGuardeLaSesionSinDuplicadosConElOrdenOriginalYTreintaMinutosDeDuracion()
     {
         //Arrange
         byte[]? contenido = null;
         DistributedCacheEntryOptions? opciones = null;
-        _cache.Setup(c => c.Set(It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<DistributedCacheEntryOptions>()))
-            .Callback<string, byte[], DistributedCacheEntryOptions>((_, bytes, config) => { contenido = bytes; opciones = config; });
+        _cache.Setup(c => c.SetAsync(It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<DistributedCacheEntryOptions>(), It.IsAny<CancellationToken>()))
+            .Callback<string, byte[], DistributedCacheEntryOptions, CancellationToken>((_, bytes, config, _) => { contenido = bytes; opciones = config; }).Returns(Task.CompletedTask);
         var repositorio = Crear();
         var antes = DateTime.UtcNow;
         //Act
-        var result = repositorio.Crear(7, new[] { 3, 1, 3, 2 });
+        var result = await repositorio.CrearAsync(7, new[] { 3, 1, 3, 2 });
         //Assert
         Assert.Equal(new[] { 3, 1, 2 }, result.PublicacionesIds);
         Assert.Equal(7, result.UsuarioId);
@@ -34,24 +34,24 @@ public class SesionFypRedisRepositorioTests
         using var json = JsonDocument.Parse(contenido!);
         Assert.Equal(7, json.RootElement.GetProperty("UsuarioId").GetInt32());
         Assert.Equal(new[] { 3, 1, 2 }, json.RootElement.GetProperty("Publicaciones").EnumerateArray().Select(x => x.GetInt32()));
-        _cache.Verify(c => c.Set($"fyp:sesion:v1:{result.Id:N}", It.IsAny<byte[]>(), It.IsAny<DistributedCacheEntryOptions>()), Times.Once);
+        _cache.Verify(c => c.SetAsync($"fyp:sesion:v1:{result.Id:N}", It.IsAny<byte[]>(), It.IsAny<DistributedCacheEntryOptions>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public void QueSeRecupereLaSesionDelPropietarioSinAlterarSuOrden()
+    public async Task QueSeRecupereLaSesionDelPropietarioSinAlterarSuOrden()
     {
         //Arrange
         var id = Guid.NewGuid();
         var expira = DateTime.UtcNow.AddMinutes(5);
-        _cache.Setup(c => c.Get($"fyp:sesion:v1:{id:N}")).Returns(JsonSerializer.SerializeToUtf8Bytes(new { Id = id, UsuarioId = 7, Expira = expira, Publicaciones = new[] { 9, 3 } }));
+        _cache.Setup(c => c.GetAsync($"fyp:sesion:v1:{id:N}", It.IsAny<CancellationToken>())).ReturnsAsync(JsonSerializer.SerializeToUtf8Bytes(new { Id = id, UsuarioId = 7, Expira = expira, Publicaciones = new[] { 9, 3 } }));
         var repositorio = Crear();
         //Act
-        var result = repositorio.Obtener(id, 7);
+        var result = await repositorio.ObtenerAsync(id, 7);
         //Assert
         Assert.NotNull(result);
         Assert.Equal(new[] { 9, 3 }, result.PublicacionesIds);
         Assert.Equal(expira, result.FechaExpiracion);
-        _cache.Verify(c => c.Get($"fyp:sesion:v1:{id:N}"), Times.Once);
+        _cache.Verify(c => c.GetAsync($"fyp:sesion:v1:{id:N}", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory]
@@ -62,7 +62,7 @@ public class SesionFypRedisRepositorioTests
     [InlineData("otroId")]
     [InlineData("vencida")]
     [InlineData("sinPublicaciones")]
-    public void QueNoSeDevuelvaUnaSesionInexistenteInvalidaOAjena(string caso)
+    public async Task QueNoSeDevuelvaUnaSesionInexistenteInvalidaOAjena(string caso)
     {
         //Arrange
         var id = Guid.NewGuid();
@@ -73,27 +73,27 @@ public class SesionFypRedisRepositorioTests
             "nula" => Encoding.UTF8.GetBytes("null"),
             _ => JsonSerializer.SerializeToUtf8Bytes(new { Id = caso == "otroId" ? Guid.NewGuid() : id, UsuarioId = caso == "otroUsuario" ? 8 : 7, Expira = DateTime.UtcNow.AddMinutes(caso == "vencida" ? -1 : 5), Publicaciones = caso == "sinPublicaciones" ? null : new[] { 1 } })
         };
-        _cache.Setup(c => c.Get($"fyp:sesion:v1:{id:N}")).Returns(bytes);
+        _cache.Setup(c => c.GetAsync($"fyp:sesion:v1:{id:N}", It.IsAny<CancellationToken>())).ReturnsAsync(bytes);
         var repositorio = Crear();
         //Act
-        var result = repositorio.Obtener(id, 7);
+        var result = await repositorio.ObtenerAsync(id, 7);
         //Assert
         Assert.Null(result);
-        _cache.Verify(c => c.Set(It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<DistributedCacheEntryOptions>()), Times.Never);
+        _cache.Verify(c => c.SetAsync(It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<DistributedCacheEntryOptions>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void QueSeInformeLaIndisponibilidadAlFallarLaLecturaOEscritura(bool escritura)
+    public async Task QueSeInformeLaIndisponibilidadAlFallarLaLecturaOEscritura(bool escritura)
     {
         //Arrange
         var error = new RedisConnectionException(ConnectionFailureType.UnableToConnect, "offline");
-        if (escritura) _cache.Setup(c => c.Set(It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<DistributedCacheEntryOptions>())).Throws(error);
-        else _cache.Setup(c => c.Get(It.IsAny<string>())).Throws(error);
+        if (escritura) _cache.Setup(c => c.SetAsync(It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<DistributedCacheEntryOptions>(), It.IsAny<CancellationToken>())).ThrowsAsync(error);
+        else _cache.Setup(c => c.GetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ThrowsAsync(error);
         var repositorio = Crear();
         //Act
-        var result = Record.Exception(() => { if (escritura) repositorio.Crear(1, new[] { 2 }); else repositorio.Obtener(Guid.NewGuid(), 1); });
+        var result = await Record.ExceptionAsync(async () => { if (escritura) await repositorio.CrearAsync(1, new[] { 2 }); else await repositorio.ObtenerAsync(Guid.NewGuid(), 1); });
         //Assert
         Assert.Same(error, Assert.IsType<AlmacenSesionNoDisponibleException>(result).InnerException);
     }
@@ -103,24 +103,24 @@ public class SesionFypRedisRepositorioTests
     [InlineData(-1, 1)]
     [InlineData(1, 0)]
     [InlineData(1, -1)]
-    public void QueSeRechacenIdentificadoresInvalidosSinAccederAlAlmacen(int usuarioId, int publicacionId)
+    public async Task QueSeRechacenIdentificadoresInvalidosSinAccederAlAlmacen(int usuarioId, int publicacionId)
     {
         //Arrange
         var repositorio = Crear();
         //Act
-        var result = Record.Exception(() => repositorio.Crear(usuarioId, new[] { publicacionId }));
+        var result = await Record.ExceptionAsync(() => repositorio.CrearAsync(usuarioId, new[] { publicacionId }));
         //Assert
         Assert.IsType<ArgumentException>(result);
         _cache.VerifyNoOtherCalls();
     }
 
     [Fact]
-    public void QueSeRechaceUnaColeccionNulaSinAccederAlAlmacen()
+    public async Task QueSeRechaceUnaColeccionNulaSinAccederAlAlmacen()
     {
         //Arrange
         var repositorio = Crear();
         //Act
-        var result = Record.Exception(() => repositorio.Crear(1, null!));
+        var result = await Record.ExceptionAsync(() => repositorio.CrearAsync(1, null!));
         //Assert
         Assert.IsType<ArgumentNullException>(result);
         _cache.VerifyNoOtherCalls();

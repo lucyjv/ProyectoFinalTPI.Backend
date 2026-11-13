@@ -73,6 +73,17 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Servicio
             CancellationToken cancellationToken = default);
 
         /// <summary>
+        /// Notifica al usuario que fue etiquetado en una publicación.
+        /// Solo se genera una notificación por publicación mientras no haya sido leída.
+        /// </summary>
+        /// <param name="usuarioDestinatarioId">Usuario etiquetado.</param>
+        /// <param name="publicacionId">Publicación donde fue etiquetado.</param>
+        /// <param name="emisorId">Usuario que realizó el etiquetado / autor.</param>
+        Task NotificarEtiquetadoEnPublicacionAsync(
+            int usuarioDestinatarioId, int publicacionId, int emisorId,
+            CancellationToken cancellationToken = default);
+
+        /// <summary>
         /// Devuelve todas las notificaciones no expiradas del usuario autenticado,
         /// ordenadas de más reciente a más antigua.
         /// </summary>

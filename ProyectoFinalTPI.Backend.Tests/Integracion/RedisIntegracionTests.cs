@@ -121,19 +121,19 @@ public class RedisIntegracionTests : IAsyncLifetime, IClassFixture<PostgisFixtur
         using var otroCliente = Crear(prefijo);
         var repositorio = new SesionFypRedisRepositorio(cliente);
         //Act
-        var creada = repositorio.Crear(7, new[] { 8, 3, 8 });
-        var result = new SesionFypRedisRepositorio(otroCliente).Obtener(creada.Id, 7);
+        var creada = await repositorio.CrearAsync(7, new[] { 8, 3, 8 });
+        var result = await new SesionFypRedisRepositorio(otroCliente).ObtenerAsync(creada.Id, 7);
         using var conexion = await ConnectionMultiplexer.ConnectAsync(Conexion);
         var clave = prefijo+$"fyp:sesion:v1:{creada.Id:N}";
         var ttl = await conexion.GetDatabase().KeyTimeToLiveAsync(clave);
         //Assert
         Assert.NotNull(result);
         Assert.Equal(new[] { 8, 3 }, result.PublicacionesIds);
-        Assert.Null(repositorio.Obtener(creada.Id, 9));
+        Assert.Null(await repositorio.ObtenerAsync(creada.Id, 9));
         Assert.InRange(ttl!.Value, TimeSpan.FromMinutes(29), TimeSpan.FromMinutes(30));
         // La expiración se provoca en Redis, sin esperar treinta minutos.
         await conexion.GetDatabase().KeyExpireAsync(clave, TimeSpan.Zero);
-        Assert.Null(repositorio.Obtener(creada.Id, 7));
+        Assert.Null(await repositorio.ObtenerAsync(creada.Id, 7));
     }
 
     [Fact]
@@ -175,12 +175,12 @@ public class RedisIntegracionTests : IAsyncLifetime, IClassFixture<PostgisFixtur
         //Arrange
         var prefijo = Guid.NewGuid()+":";
         using var cliente = Crear(prefijo);
-        var creada = new SesionFypRedisRepositorio(cliente).Crear(7, new[] { 8, 3 });
+        var creada = await new SesionFypRedisRepositorio(cliente).CrearAsync(7, new[] { 8, 3 });
         //Act
         await _redis.StopAsync();
         await IniciarRedisYEsperarConexion();
         using var nuevoCliente = Crear(prefijo);
-        var result = new SesionFypRedisRepositorio(nuevoCliente).Obtener(creada.Id, 7);
+        var result = await new SesionFypRedisRepositorio(nuevoCliente).ObtenerAsync(creada.Id, 7);
         //Assert
         Assert.NotNull(result);
         Assert.Equal(creada.Id, result.Id);
@@ -195,7 +195,7 @@ public class RedisIntegracionTests : IAsyncLifetime, IClassFixture<PostgisFixtur
         var prefijo = Guid.NewGuid()+":";
         using var cliente = Crear(prefijo, timeoutCorto: true);
         var sesiones = new SesionFypRedisRepositorio(cliente);
-        var creada = sesiones.Crear(7, new[] { 4, 2 });
+        var creada = await sesiones.CrearAsync(7, new[] { 4, 2 });
         var cache = new CacheLecturasPublicas(cliente, NullLogger<CacheLecturasPublicas>.Instance);
         var conexion = new NpgsqlConnectionStringBuilder(_postgres.ConnectionString) { Database = "redis_caida_"+Guid.NewGuid().ToString("N"), Pooling = false }.ConnectionString;
         var opciones = new DbContextOptionsBuilder<ApplicationDbContext>().UseNpgsql(conexion, o => o.UseNetTopologySuite()).Options;
@@ -207,11 +207,11 @@ public class RedisIntegracionTests : IAsyncLifetime, IClassFixture<PostgisFixtur
         //Act
         await _redis.StopAsync();
         var result = await perfil.Obtener(usuario.Id);
-        var errorLectura = Record.Exception(() => sesiones.Obtener(creada.Id, 7));
-        var errorEscritura = Record.Exception(() => sesiones.Crear(7, new[] { 9 }));
+        var errorLectura = await Record.ExceptionAsync(() => sesiones.ObtenerAsync(creada.Id, 7));
+        var errorEscritura = await Record.ExceptionAsync(() => sesiones.CrearAsync(7, new[] { 9 }));
         await IniciarRedisYEsperarConexion();
         using var recuperado = Crear(prefijo);
-        var sesionRecuperada = new SesionFypRedisRepositorio(recuperado).Obtener(creada.Id, 7);
+        var sesionRecuperada = await new SesionFypRedisRepositorio(recuperado).ObtenerAsync(creada.Id, 7);
         var perfilRecuperado = await new PerfilPublicoConsulta(new OrigenLecturasPublicas(db), new CacheLecturasPublicas(recuperado, NullLogger<CacheLecturasPublicas>.Instance)).Obtener(usuario.Id);
         //Assert
         Assert.Equal("Disponible", result!.Username);

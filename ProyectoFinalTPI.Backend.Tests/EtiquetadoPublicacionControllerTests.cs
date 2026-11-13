@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
+using ProyectoFinalTPI.Backend.Dtos.Usuario;
 using ProyectoFinalTPI.Backend.Controllers;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Requests.Publicaciones;
@@ -153,6 +154,33 @@ public class EtiquetadoPublicacionControllerTests
         Assert.Equal((int)HttpStatusCode.InternalServerError, respuesta.StatusCode);
         Assert.Contains("No se pudo completar la operación", contenido);
         Assert.DoesNotContain("detalle interno", contenido);
+    }
+
+    #endregion
+
+    #region Obtener Usuarios Etiquetados
+
+    [Fact]
+    public async Task QueObtenerEtiquetasDevuelvaOkConListaDeUsuarios()
+    {
+        //Arrange
+        var usuariosEsperados = new List<AutorResumenDto>
+        {
+            new() { Id = 10, Username = "nostalgico10" },
+            new() { Id = 20, Username = "nostalgico20" }
+        };
+        _etiquetadoServicioMock
+            .Setup(s => s.ObtenerUsuariosEtiquetados(25, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(usuariosEsperados);
+        var controller = CrearController();
+
+        //Act
+        var resultado = await controller.ObtenerUsuariosEtiquetados(25, CancellationToken.None);
+
+        //Assert
+        var respuesta = Assert.IsType<OkObjectResult>(resultado);
+        var usuarios = Assert.IsAssignableFrom<IReadOnlyCollection<AutorResumenDto>>(respuesta.Value);
+        Assert.Equal(2, usuarios.Count);
     }
 
     #endregion

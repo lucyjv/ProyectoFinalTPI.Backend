@@ -10,5 +10,7 @@ namespace ProyectoFinalTPI.Backend.Dtos
     {
         public DateTime FechaCreacion { get; set; }
         public int Id { get; set; }
+        // Desempate para eventos de Seguidos. Cero representa la publicación original.
+        public int ReposteadorId { get; set; }
     }
 }

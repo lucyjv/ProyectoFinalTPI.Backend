@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Moq;
@@ -12,6 +13,7 @@ using ProyectoFinalTPI.Backend.Dtos.Auth;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
+using ProyectoFinalTPI.Backend.Interfaces.Configuracion;
 using ProyectoFinalTPI.Backend.Repositorio.Data;
 using ProyectoFinalTPI.Backend.Servicio;
 using Xunit;
@@ -360,7 +362,9 @@ public class AuthServicioTests
     #region Métodos Auxiliares Privados
 
     private AuthServicio CrearServicio() =>
-        new(_repositorioMock.Object, _sesionesMock.Object, _configuracion, _usuarioServicioMock.Object);
+        new(_repositorioMock.Object, _sesionesMock.Object, _configuracion, _usuarioServicioMock.Object,
+            Mock.Of<IRecuperacionContrasenaRepositorio>(), Mock.Of<IColaRecuperacionContrasena>(),
+            Options.Create(new RecuperacionContrasenaOptions()), TimeProvider.System);
 
     private static RegistroDto CrearRegistroDto(string username, string email, string password) =>
         new() { Username = username, Email = email, Contraseña = password };

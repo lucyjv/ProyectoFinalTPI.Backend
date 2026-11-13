@@ -697,6 +697,46 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.ToTable("reacciones_comentario", (string)null);
                 });
 
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.RecuperacionContrasena", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("EmailDestino")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("FechaExpiracion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("FechaRevocacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("FechaUso")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("UsuarioId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FechaExpiracion");
+
+                    b.HasIndex("UsuarioId", "FechaCreacion");
+
+                    b.ToTable("recuperaciones_contrasena", (string)null);
+                });
+
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Reporte", b =>
                 {
                     b.Property<int>("Id")
@@ -1213,6 +1253,17 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                         .IsRequired();
 
                     b.Navigation("Comentario");
+
+                    b.Navigation("Usuario");
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.RecuperacionContrasena", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario", "Usuario")
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("Usuario");
                 });

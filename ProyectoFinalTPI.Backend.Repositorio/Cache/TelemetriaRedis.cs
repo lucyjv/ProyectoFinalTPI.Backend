@@ -12,6 +12,28 @@ internal static class TelemetriaRedis
     private static readonly Histogram<double> Duracion = Medidor.CreateHistogram<double>("redis.sesion.duracion", "ms");
     public static void RegistrarFallback() => Fallbacks.Add(1);
 
+    public static async Task<T> MedirAsync<T>(string operacion, Func<Task<T>> ejecutar)
+    {
+        using var actividad = Fuente.StartActivity($"redis.sesion.{operacion}", ActivityKind.Client);
+        actividad?.SetTag("db.system", "redis");
+        var inicio = Stopwatch.GetTimestamp();
+        var resultado = "ok";
+        try { return await ejecutar(); }
+        catch (OperationCanceledException) { resultado = "cancelado"; throw; }
+        catch (RedisException)
+        {
+            resultado = "error";
+            actividad?.SetStatus(ActivityStatusCode.Error);
+            throw;
+        }
+        finally
+        {
+            Duracion.Record(Stopwatch.GetElapsedTime(inicio).TotalMilliseconds,
+                new KeyValuePair<string, object?>("operacion", operacion),
+                new KeyValuePair<string, object?>("resultado", resultado));
+        }
+    }
+
     public static T Medir<T>(string operacion, Func<T> ejecutar)
     {
         using var actividad = Fuente.StartActivity($"redis.sesion.{operacion}", ActivityKind.Client);

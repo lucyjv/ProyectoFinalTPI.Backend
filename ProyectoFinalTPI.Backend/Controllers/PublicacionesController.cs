@@ -9,6 +9,7 @@ using ProyectoFinalTPI.Backend.Mappings;
 using ProyectoFinalTPI.Backend.Extensions;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Dtos;
+using ProyectoFinalTPI.Backend.Dtos.Usuario;
 
 namespace ProyectoFinalTPI.Backend.Controllers
 {
@@ -19,13 +20,16 @@ namespace ProyectoFinalTPI.Backend.Controllers
     {
         private readonly IPublicacionServicio _publicacionServicio;
         private readonly IEtiquetadoPublicacionServicio _etiquetadoPublicacionServicio;
+        private readonly INotificacionServicio? _notificacionServicio;
 
         public PublicacionesController(
             IPublicacionServicio publicacionServicio,
-            IEtiquetadoPublicacionServicio etiquetadoPublicacionServicio)
+            IEtiquetadoPublicacionServicio etiquetadoPublicacionServicio,
+            INotificacionServicio? notificacionServicio = null)
         {
             _publicacionServicio = publicacionServicio;
             _etiquetadoPublicacionServicio = etiquetadoPublicacionServicio;
+            _notificacionServicio = notificacionServicio;
         }
 
         [HttpGet("mapa")]
@@ -81,6 +85,8 @@ namespace ProyectoFinalTPI.Backend.Controllers
                 [detalle], usuarioIdActual ?? 0, cancellationToken);
             await _publicacionServicio.CompletarResumenesGuardados(
                 [detalle], usuarioIdActual ?? 0, cancellationToken);
+            var etiquetados = await _etiquetadoPublicacionServicio.ObtenerUsuariosEtiquetados(id, cancellationToken);
+            detalle.UsuariosEtiquetados = etiquetados.ToList();
 
             return Ok(detalle);
         }
@@ -98,6 +104,28 @@ namespace ProyectoFinalTPI.Backend.Controllers
         {
             var publicaciones = await _publicacionServicio.ObtenerPorUsuarioId(
                 usuarioId, User.ObtenerUsuarioId(), cancellationToken);
+            await _etiquetadoPublicacionServicio.CompletarEtiquetas(publicaciones, cancellationToken);
+            return Ok(publicaciones);
+        }
+
+        [HttpGet("usuario/{usuarioId:int}/etiquetadas")]
+        [SwaggerOperation(
+            Summary = "Obtiene las publicaciones donde un usuario está etiquetado.",
+            Description = "Devuelve el listado de publicaciones visibles donde el usuario indicado fue etiquetado."
+        )]
+        [SwaggerResponse(StatusCodes.Status200OK, "Listado de publicaciones donde el usuario está etiquetado.", typeof(List<PublicacionDetalleDto>))]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "El identificador del usuario no es válido.", typeof(ProblemDetails))]
+        public async Task<ActionResult<List<PublicacionDetalleDto>>> ObtenerPublicacionesEtiquetadas(
+            int usuarioId,
+            CancellationToken cancellationToken)
+        {
+            var publicaciones = await _etiquetadoPublicacionServicio.ObtenerPublicacionesDondeEstaEtiquetado(
+                usuarioId, cancellationToken);
+            var usuarioAutenticadoId = User.ObtenerUsuarioId();
+            await _publicacionServicio.CompletarResumenesLikes(publicaciones, usuarioAutenticadoId ?? 0, cancellationToken);
+            await _publicacionServicio.CompletarResumenesPuntuaciones(publicaciones, usuarioAutenticadoId, cancellationToken);
+            await _publicacionServicio.CompletarResumenesReposts(publicaciones, usuarioAutenticadoId ?? 0, cancellationToken);
+            await _etiquetadoPublicacionServicio.CompletarEtiquetas(publicaciones, cancellationToken);
             return Ok(publicaciones);
         }
 
@@ -128,8 +156,13 @@ namespace ProyectoFinalTPI.Backend.Controllers
         {
             try
             {
-                return Ok(await _publicacionServicio.ObtenerPublicacionesPorHashtag(
-                    hashtag, cursor, limite, User.ObtenerUsuarioId(), cancellationToken));
+                var resultado = await _publicacionServicio.ObtenerPublicacionesPorHashtag(
+                    hashtag, cursor, limite, User.ObtenerUsuarioId(), cancellationToken);
+                if (resultado.Items != null && resultado.Items.Count > 0)
+                {
+                    await _etiquetadoPublicacionServicio.CompletarEtiquetas(resultado.Items, cancellationToken);
+                }
+                return Ok(resultado);
             }
             catch (ArgumentException ex)
             {
@@ -362,8 +395,51 @@ namespace ProyectoFinalTPI.Backend.Controllers
         public async Task<IActionResult> EtiquetarUsuarios(
             int publicacionId, [FromBody] EtiquetarUsuariosRequest request, CancellationToken cancellationToken)
         {
+            PublicacionDetalleDto? detalle = null;
+            if (_publicacionServicio != null)
+            {
+                try
+                {
+                    detalle = await _publicacionServicio.ObtenerDetallePorId(publicacionId, cancellationToken);
+                    if (detalle?.Autor != null && request?.UsuariosIds != null && request.UsuariosIds.Contains(detalle.Autor.Id))
+                    {
+                        return BadRequest(new ProblemDetails
+                        {
+                            Detail = "El autor de la publicación no puede etiquetarse a sí mismo."
+                        });
+                    }
+                }
+                catch (Exception)
+                {
+                    // Si falla la búsqueda del detalle o no existe, _etiquetadoPublicacionServicio responderá según corresponda
+                }
+            }
+
             var cantidadEtiquetasNuevas = await _etiquetadoPublicacionServicio.EtiquetarUsuarios(
                 publicacionId, request.UsuariosIds, cancellationToken);
+
+            if (_notificacionServicio != null && cantidadEtiquetasNuevas > 0 && request?.UsuariosIds != null)
+            {
+                var emisorId = User.ObtenerUsuarioId() ?? detalle?.Autor?.Id ?? 0;
+                if (emisorId > 0)
+                {
+                    foreach (var destinatarioId in request.UsuariosIds.Distinct())
+                    {
+                        if (destinatarioId != emisorId)
+                        {
+                            try
+                            {
+                                await _notificacionServicio.NotificarEtiquetadoEnPublicacionAsync(
+                                    destinatarioId, publicacionId, emisorId, cancellationToken);
+                            }
+                            catch (Exception)
+                            {
+                                // El fallo en la notificación no debe bloquear la respuesta de etiquetado
+                            }
+                        }
+                    }
+                }
+            }
 
             var respuesta = new
             {
@@ -377,6 +453,68 @@ namespace ProyectoFinalTPI.Backend.Controllers
             return cantidadEtiquetasNuevas > 0
                 ? StatusCode(StatusCodes.Status201Created, respuesta)
                 : Ok(respuesta);
+        }
+
+        [HttpGet("{publicacionId:int}/etiquetas")]
+        [SwaggerOperation(
+            Summary = "Obtiene los usuarios etiquetados en una publicación.",
+            Description = "Devuelve la lista de usuarios etiquetados con su id y username."
+        )]
+        [SwaggerResponse(StatusCodes.Status200OK, "Usuarios etiquetados en la publicación.", typeof(IReadOnlyCollection<AutorResumenDto>))]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "El identificador de la publicación no es válido.", typeof(ProblemDetails))]
+        [SwaggerResponse(StatusCodes.Status404NotFound, "La publicación no existe.", typeof(ProblemDetails))]
+        public async Task<IActionResult> ObtenerUsuariosEtiquetados(
+            int publicacionId, CancellationToken cancellationToken)
+        {
+            var usuarios = await _etiquetadoPublicacionServicio.ObtenerUsuariosEtiquetados(
+                publicacionId, cancellationToken);
+
+            return Ok(usuarios);
+        }
+
+        [Authorize]
+        [HttpDelete("{publicacionId:int}/etiquetas/{usuarioId:int}")]
+        [SwaggerOperation(
+            Summary = "Elimina una etiqueta de usuario en una publicación.",
+            Description = "Requiere autenticación. El usuario autenticado debe ser el autor de la publicación o el propio usuario etiquetado."
+        )]
+        [SwaggerResponse(StatusCodes.Status200OK, "Se quitó la etiqueta con éxito.")]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "Los identificadores no son válidos.", typeof(ProblemDetails))]
+        [SwaggerResponse(StatusCodes.Status401Unauthorized, "No autenticado.")]
+        [SwaggerResponse(StatusCodes.Status403Forbidden, "No tiene permisos para quitar esta etiqueta.")]
+        [SwaggerResponse(StatusCodes.Status404NotFound, "La publicación no existe o la etiqueta no fue encontrada.", typeof(ProblemDetails))]
+        public async Task<IActionResult> DesetiquetarUsuario(
+            int publicacionId, int usuarioId, CancellationToken cancellationToken)
+        {
+            var usuarioActualId = User.ObtenerUsuarioId();
+            if (!usuarioActualId.HasValue || usuarioActualId.Value <= 0)
+            {
+                return Unauthorized();
+            }
+
+            var detalle = await _publicacionServicio.ObtenerDetallePorId(publicacionId, cancellationToken);
+            if (detalle == null)
+            {
+                return NotFound(new ProblemDetails { Detail = "La publicación no existe." });
+            }
+
+            if (usuarioActualId.Value != usuarioId && usuarioActualId.Value != detalle.Autor.Id)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+                {
+                    Detail = "Solo el autor de la publicación o el usuario etiquetado pueden remover la etiqueta."
+                });
+            }
+
+            var eliminado = await _etiquetadoPublicacionServicio.DesetiquetarUsuario(
+                publicacionId, usuarioId, cancellationToken);
+
+            if (!eliminado)
+            {
+                return NotFound(new ProblemDetails { Detail = "La etiqueta no existía en la publicación." });
+            }
+
+            return Ok(new { mensaje = "Etiqueta eliminada con éxito.", publicacionId, usuarioId });
         }
 
         [Authorize]

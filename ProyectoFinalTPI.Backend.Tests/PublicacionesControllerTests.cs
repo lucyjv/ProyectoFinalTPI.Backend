@@ -6,6 +6,7 @@ using ProyectoFinalTPI.Backend.Controllers;
 using ProyectoFinalTPI.Backend.Dtos;
 using ProyectoFinalTPI.Backend.Dtos.Mapa;
 using ProyectoFinalTPI.Backend.Dtos.Publicacion;
+using ProyectoFinalTPI.Backend.Dtos.Usuario;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Requests.Publicaciones;
@@ -384,6 +385,9 @@ namespace ProyectoFinalTPI.Backend.Tests
             _publicacionServicioMock
                 .Setup(s => s.ObtenerDetallePorId(5, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(detalleEsperado);
+            _etiquetadoServicioMock
+                .Setup(s => s.ObtenerUsuariosEtiquetados(5, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(Array.Empty<AutorResumenDto>());
 
             //Act
             var result = await _controller.ObtenerDetalle(5, default);

@@ -7,6 +7,14 @@ public sealed class FeedRecomendacionesOptions
 
     public int DiasDeExclusionDeImpresiones { get; set; } = 14;
     public int CantidadMaximaCandidatas { get; set; } = 500;
+    public int CantidadMaximaSemillas { get; set; } = 100;
+    public int DiasDeHistorialParaSemillas { get; set; } = 180;
+    public int VecinosPorSemilla { get; set; } = 20;
+    public int PublicacionesPorVecino { get; set; } = 25;
+    public int PorcentajeCandidatasColaborativas { get; set; } = 60;
+    public int CantidadMaximaLotesGenerales { get; set; } = 4;
+    public int CantidadMaximaLotesSeguidos { get; set; } = 4;
+    public int TiempoMaximoGeneracionSegundos { get; set; } = 30;
     public int PesoLike { get; set; } = 2;
     public int PesoPuntuacion { get; set; } = 3;
     public int PesoEtiqueta { get; set; } = 1;

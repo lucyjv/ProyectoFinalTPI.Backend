@@ -1,11 +1,14 @@
 using ProyectoFinalTPI.Backend.Infraestructura;
 using ProyectoFinalTPI.Backend.Repositorio.Cache;
 using System.Text;
+using System.Net.Mail;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Neo4j.Driver;
+using ProyectoFinalTPI.Backend.Interfaces.Configuracion;
 using NetTopologySuite;
 using Npgsql;
 using ProyectoFinalTPI.Backend.Entidades;
@@ -40,6 +43,13 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
                 AutoReplenishment = true
+            }));
+    options.AddPolicy("recuperacion-contrasena", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "desconocida",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5, Window = TimeSpan.FromMinutes(15), QueueLimit = 0, AutoReplenishment = true
             }));
 });
 
@@ -86,7 +96,13 @@ builder.Services.AddSingleton<IDriver>(provider =>
 var cacheMapaHabilitada = builder.Configuration.GetValue<bool>("Redis:CacheMapaHabilitada");
 builder.Services.AddScoped<IPublicacionRepositorio>(provider => new PublicacionRepositorio(
     provider.GetRequiredService<ApplicationDbContext>(), provider.GetService<IDriver>(),
-    cacheMapaHabilitada ? provider.GetService<ICacheLecturasPublicas>() : null));
+    cacheMapa: cacheMapaHabilitada ? provider.GetService<ICacheLecturasPublicas>() : null,
+    opcionesNeo4j: provider.GetRequiredService<IOptions<OpcionesNeo4j>>()));
+builder.Services.AddOptions<OpcionesNeo4j>()
+    .Bind(builder.Configuration.GetSection(OpcionesNeo4j.Seccion))
+    .Validate(opciones => opciones.TiempoMaximoConsultaFeedSegundos is > 0 and <= 120,
+        "Neo4j:TiempoMaximoConsultaFeedSegundos debe estar entre 1 y 120.")
+    .ValidateOnStart();
 builder.Services.AddScoped<IRelacionRecuerdosRepositorio, RelacionRecuerdosRepositorio>();
 builder.Services.AddScoped<IRelacionRecuerdosServicio, RelacionRecuerdosServicio>();
 builder.Services.AddScoped<IMomentoRepositorio, MomentoRepositorio>();
@@ -106,10 +122,21 @@ builder.Services.AddHostedService<AnalisisRecuerdosWorker>();
 builder.Services.Configure<OpcionesPublicacion>(
     builder.Configuration.GetSection(OpcionesPublicacion.Seccion));
 builder.Services.AddScoped<IPublicacionServicio, PublicacionServicio>();
+builder.Services.AddScoped<IGeneradorRankingFeed, GeneradorRankingFeed>();
+builder.Services.AddSingleton<IProveedorRankingFeed, CoordinadorRankingFeed>();
 builder.Services.AddOptions<FeedRecomendacionesOptions>()
     .Bind(builder.Configuration.GetSection(FeedRecomendacionesOptions.Seccion))
     .Validate(opciones => opciones.DiasDeExclusionDeImpresiones > 0
         && opciones.CantidadMaximaCandidatas > 0
+        && opciones.CantidadMaximaCandidatas <= 2000
+        && opciones.CantidadMaximaSemillas is > 0 and <= 500
+        && opciones.DiasDeHistorialParaSemillas is > 0 and <= 3650
+        && opciones.VecinosPorSemilla is > 0 and <= 100
+        && opciones.PublicacionesPorVecino is > 0 and <= 100
+        && opciones.PorcentajeCandidatasColaborativas is >= 0 and <= 100
+        && opciones.CantidadMaximaLotesGenerales is > 0 and <= 10
+        && opciones.CantidadMaximaLotesSeguidos is > 0 and <= 10
+        && opciones.TiempoMaximoGeneracionSegundos is > 0 and <= 120
         && opciones.PesoLike >= 0
         && opciones.PesoPuntuacion >= 0
         && opciones.PesoEtiqueta >= 0
@@ -181,6 +208,35 @@ else
 
 // Auth
 builder.Services.AddScoped<IAuthServicio, AuthServicio>();
+builder.Services.AddScoped<IProcesadorRecuperacionContrasena>(p =>
+    (AuthServicio)p.GetRequiredService<IAuthServicio>());
+builder.Services.AddScoped<IRecuperacionContrasenaRepositorio, RecuperacionContrasenaRepositorio>();
+builder.Services.AddOptions<RecuperacionContrasenaOptions>()
+    .Bind(builder.Configuration.GetSection(RecuperacionContrasenaOptions.Seccion))
+    .Validate(o => o.ValidezMinutos is >= 5 and <= 60 && o.IntervaloSolicitudesSegundos is >= 60 and <= 3600,
+        "Los límites de recuperación de contraseña no son válidos.")
+    .Validate(o => !o.Habilitado || Uri.TryCreate(o.UrlRestablecimiento, UriKind.Absolute, out var url)
+        && string.IsNullOrEmpty(url.Query) && string.IsNullOrEmpty(url.Fragment) && string.IsNullOrEmpty(url.UserInfo)
+        && (url.Scheme == Uri.UriSchemeHttps || url.Scheme == Uri.UriSchemeHttp && url.IsLoopback
+            && (builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing"))),
+        "La URL de restablecimiento debe ser HTTPS, absoluta y sin query, fragmento ni credenciales.")
+    .ValidateOnStart();
+builder.Services.AddOptions<CorreoResendOptions>()
+    .Bind(builder.Configuration.GetSection(CorreoResendOptions.Seccion))
+    .Validate(o => !builder.Configuration.GetValue<bool>("RecuperacionContrasena:Habilitado")
+        || !string.IsNullOrWhiteSpace(o.ApiKey) && !o.ApiKey.Any(char.IsControl)
+            && MailAddress.TryCreate(o.Remitente, out var direccion) && direccion.Address == o.Remitente
+            && !string.IsNullOrWhiteSpace(o.NombreRemitente) && !o.NombreRemitente.Any(char.IsControl),
+        "Configurá la API key y el remitente de Resend antes de habilitar la recuperación.")
+    .ValidateOnStart();
+builder.Services.AddHttpClient<IEnvioCorreo, EnvioCorreoResend>(cliente =>
+{
+    cliente.BaseAddress = new Uri("https://api.resend.com/");
+    cliente.Timeout = TimeSpan.FromSeconds(10);
+}).RemoveAllLoggers();
+builder.Services.AddSingleton<CorreosRecuperacionWorker>();
+builder.Services.AddSingleton<IColaRecuperacionContrasena>(p => p.GetRequiredService<CorreosRecuperacionWorker>());
+builder.Services.AddHostedService(p => p.GetRequiredService<CorreosRecuperacionWorker>());
 
 // ── Chat ───────────────────────────────────────────────────────────────
 builder.Services.AddSignalR();
