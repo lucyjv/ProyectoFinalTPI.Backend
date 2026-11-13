@@ -46,6 +46,8 @@ namespace ProyectoFinalTPI.Backend.Servicio
             _neo4jDriver = neo4jDriver;
         }
 
+        #region Operaciones públicas
+
         // Valida los IDs y ejecuta la consulta Cypher para crear etiquetas
         public async Task<int> EtiquetarUsuarios(
             int publicacionId,
@@ -64,68 +66,19 @@ namespace ProyectoFinalTPI.Backend.Servicio
             int publicacionId,
             CancellationToken cancellationToken = default)
         {
-            if (publicacionId <= 0)
-            {
-                throw new ArgumentException(
-                    "El ID de la publicación debe ser mayor que cero",
-                    nameof(publicacionId));
-            }
-
+            ValidarPublicacionId(publicacionId);
             await ValidarPublicacionExistente(publicacionId, null, cancellationToken);
-
-            await using var session = _neo4jDriver.AsyncSession();
-            var idsUsuarios = await session.ExecuteReadAsync(async transaction =>
-            {
-                var cursor = await transaction.RunAsync(
-                    ObtenerEtiquetasQuery,
-                    new { publicacionId });
-
-                var ids = new List<int>();
-                await foreach (var record in cursor)
-                {
-                    ids.Add(record["idUsuario"].As<int>());
-                }
-                return ids;
-            });
-
-            if (idsUsuarios.Count == 0)
-            {
-                return Array.Empty<AutorResumenDto>();
-            }
-
-            var usuarios = await _usuarioRepositorio.ObtenerUsuariosPorIdsAsync(idsUsuarios, cancellationToken);
-            return usuarios;
+            var ids = await LeerIdsNeo4j(ObtenerEtiquetasQuery, new { publicacionId }, "idUsuario");
+            return ids.Count == 0 ? Array.Empty<AutorResumenDto>()
+                : await _usuarioRepositorio.ObtenerUsuariosPorIdsAsync(ids, cancellationToken);
         }
 
-        public async Task<bool> DesetiquetarUsuario(
-            int publicacionId,
-            int usuarioId,
-            CancellationToken cancellationToken = default)
+        public Task<bool> DesetiquetarUsuario(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
         {
-            if (publicacionId <= 0)
-            {
-                throw new ArgumentException(
-                    "El ID de la publicación debe ser mayor que cero",
-                    nameof(publicacionId));
-            }
-
+            ValidarPublicacionId(publicacionId);
             if (usuarioId <= 0)
-            {
-                throw new ArgumentException(
-                    "El ID del usuario debe ser mayor que cero",
-                    nameof(usuarioId));
-            }
-
-            await using var session = _neo4jDriver.AsyncSession();
-            return await session.ExecuteWriteAsync(async transaction =>
-            {
-                var cursor = await transaction.RunAsync(
-                    DesetiquetarQuery,
-                    new { publicacionId, usuarioId });
-
-                var summary = await cursor.ConsumeAsync();
-                return summary.Counters.RelationshipsDeleted > 0;
-            });
+                throw new ArgumentException("El ID del usuario debe ser mayor que cero", nameof(usuarioId));
+            return EliminarEtiquetaEnNeo4j(publicacionId, usuarioId);
         }
 
         public async Task CompletarEtiquetas(
@@ -133,137 +86,72 @@ namespace ProyectoFinalTPI.Backend.Servicio
             CancellationToken cancellationToken = default)
         {
             if (publicaciones == null || publicaciones.Count == 0) return;
-
-            var publicacionesIds = publicaciones.Select(p => p.Id).Distinct().ToArray();
-            await using var session = _neo4jDriver.AsyncSession();
-
-            var mapaEtiquetas = await session.ExecuteReadAsync(async transaction =>
-            {
-                var cursor = await transaction.RunAsync(
-                    ObtenerEtiquetasMultiplesQuery,
-                    new { publicacionesIds });
-
-                var dic = new Dictionary<int, List<int>>();
-                await foreach (var record in cursor)
-                {
-                    var pubId = record["publicacionId"].As<int>();
-                    var userIds = record["usuariosIds"].As<List<object>>()
-                        .Select(Convert.ToInt32)
-                        .ToList();
-                    dic[pubId] = userIds;
-                }
-                return dic;
-            });
-
-            var todosLosIds = mapaEtiquetas.Values.SelectMany(x => x).Distinct().ToArray();
-            if (todosLosIds.Length == 0) return;
-
-            var usuarios = await _usuarioRepositorio.ObtenerUsuariosPorIdsAsync(todosLosIds, cancellationToken);
-            var usuariosPorId = usuarios.ToDictionary(u => u.Id);
-
-            foreach (var pub in publicaciones)
-            {
-                if (mapaEtiquetas.TryGetValue(pub.Id, out var userIds))
-                {
-                    pub.UsuariosEtiquetados = userIds
-                        .Where(id => usuariosPorId.ContainsKey(id))
-                        .Select(id => usuariosPorId[id])
-                        .ToList();
-                }
-            }
+            var mapa = await ObtenerMapaEtiquetas(publicaciones.Select(p => p.Id).Distinct().ToArray());
+            var ids = mapa.Values.SelectMany(usuarios => usuarios).Distinct().ToArray();
+            if (ids.Length == 0) return;
+            var usuarios = await _usuarioRepositorio.ObtenerUsuariosPorIdsAsync(ids, cancellationToken);
+            AplicarEtiquetas(publicaciones, mapa, usuarios.ToDictionary(usuario => usuario.Id));
         }
 
         public async Task<List<PublicacionDetalleDto>> ObtenerPublicacionesDondeEstaEtiquetado(
             int usuarioId,
             CancellationToken cancellationToken = default)
         {
-            if (usuarioId <= 0)
-            {
-                throw new ArgumentException("El ID de usuario debe ser mayor que cero", nameof(usuarioId));
-            }
-
-            await using var session = _neo4jDriver.AsyncSession();
-            var publicacionesIds = await session.ExecuteReadAsync(async transaction =>
-            {
-                var cursor = await transaction.RunAsync(
-                    ObtenerPublicacionesPorEtiquetadoQuery,
-                    new { usuarioId });
-
-                var ids = new List<int>();
-                await foreach (var record in cursor)
-                {
-                    ids.Add(record["publicacionId"].As<int>());
-                }
-                return ids;
-            });
-
-            if (publicacionesIds.Count == 0)
-            {
-                return new List<PublicacionDetalleDto>();
-            }
-
-            return await _publicacionRepositorio.ObtenerPublicacionesPorIds(publicacionesIds, cancellationToken);
+            ValidarUsuarioId(usuarioId);
+            var ids = await LeerIdsNeo4j(
+                ObtenerPublicacionesPorEtiquetadoQuery, new { usuarioId }, "publicacionId");
+            return ids.Count == 0 ? new List<PublicacionDetalleDto>()
+                : await _publicacionRepositorio.ObtenerPublicacionesPorIds(ids, cancellationToken);
         }
 
-        private static int[] ValidarIds(
-            int publicacionId,
-            IReadOnlyCollection<int> usuariosIds)
+        #endregion
+
+        #region Métodos privados y validaciones
+
+        private static int[] ValidarIds(int publicacionId, IReadOnlyCollection<int> usuariosIds)
         {
             ArgumentNullException.ThrowIfNull(usuariosIds);
-
-            if (publicacionId <= 0)
-            {
-                throw new ArgumentException(
-                    "El ID de la publicación debe ser mayor que cero",
-                    nameof(publicacionId));
-            }
-
-            var idsUnicos = usuariosIds.Distinct().ToArray();
-
-            if (idsUnicos.Length == 0)
-            {
-                throw new ArgumentException(
-                    "Debe indicar al menos un usuario para etiquetar",
-                    nameof(usuariosIds));
-            }
-
-            if (idsUnicos.Any(id => id <= 0))
-            {
-                throw new ArgumentException(
-                    "Los IDs de usuarios deben ser mayores que cero.",
-                    nameof(usuariosIds));
-            }
-
-            return idsUnicos;
+            ValidarPublicacionId(publicacionId);
+            var ids = usuariosIds.Distinct().ToArray();
+            ValidarUsuariosIds(ids);
+            return ids;
         }
 
-        private async Task ValidarPublicacionExistente(
-            int publicacionId,
-            IReadOnlyCollection<int>? usuariosIds,
-            CancellationToken cancellationToken)
+        private static void ValidarPublicacionId(int publicacionId)
         {
-            var existe = await _publicacionRepositorio.ExistePublicacionVisible(publicacionId, cancellationToken);
+            if (publicacionId <= 0)
+                throw new ArgumentException(
+                    "El ID de la publicación debe ser mayor que cero", nameof(publicacionId));
+        }
 
-            if (!existe)
+        private static void ValidarUsuariosIds(IReadOnlyCollection<int> usuariosIds)
+        {
+            if (usuariosIds.Count == 0)
+                throw new ArgumentException(
+                    "Debe indicar al menos un usuario para etiquetar", nameof(usuariosIds));
+            if (usuariosIds.Any(id => id <= 0))
+                throw new ArgumentException(
+                    "Los IDs de usuarios deben ser mayores que cero.", nameof(usuariosIds));
+        }
+
+        private async Task ValidarPublicacionExistente(int publicacionId, IReadOnlyCollection<int>? usuariosIds, CancellationToken cancellationToken)
+        {
+            if (!await _publicacionRepositorio.ExistePublicacionVisible(publicacionId, cancellationToken))
+                throw new KeyNotFoundException("La publicación no existe o no esta disponible");
+            if (usuariosIds is { Count: > 0 })
+                await ValidarAutorNoEtiquetado(publicacionId, usuariosIds, cancellationToken);
+        }
+        private async Task ValidarAutorNoEtiquetado(int publicacionId, IReadOnlyCollection<int> usuariosIds, CancellationToken cancellationToken)
+        {
+            try
             {
-                throw new KeyNotFoundException(
-                    "La publicación no existe o no esta disponible");
+                var publicacion = await _publicacionRepositorio.ObtenerPorId(publicacionId, cancellationToken);
+                if (publicacion != null && usuariosIds.Contains(publicacion.UsuarioId))
+                    throw new InvalidOperationException("El autor de la publicación no puede etiquetarse a sí mismo.");
             }
-
-            if (usuariosIds != null && usuariosIds.Count > 0)
+            catch (NotSupportedException)
             {
-                try
-                {
-                    var pub = await _publicacionRepositorio.ObtenerPorId(publicacionId, cancellationToken);
-                    if (pub != null && usuariosIds.Contains(pub.UsuarioId))
-                    {
-                        throw new InvalidOperationException("El autor de la publicación no puede etiquetarse a sí mismo.");
-                    }
-                }
-                catch (NotSupportedException)
-                {
-                    // Soporte para fakes en pruebas unitarias que no mockean ObtenerPorId
-                }
+                // Se conserva la compatibilidad existente con los repositorios simulados.
             }
         }
 
@@ -299,5 +187,63 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 return (int)summary.Counters.RelationshipsCreated;
             });
         }
+
+        private static void ValidarUsuarioId(int usuarioId)
+        {
+            if (usuarioId <= 0)
+                throw new ArgumentException("El ID del usuario debe ser mayor que cero", nameof(usuarioId));
+        }
+
+        private async Task<List<int>> LeerIdsNeo4j(string consulta, object parametros, string campo)
+        {
+            await using var session = _neo4jDriver.AsyncSession();
+            return await session.ExecuteReadAsync(async transaction =>
+            {
+                var cursor = await transaction.RunAsync(consulta, parametros);
+                var ids = new List<int>();
+                await foreach (var record in cursor) ids.Add(record[campo].As<int>());
+                return ids;
+            });
+        }
+
+        private async Task<bool> EliminarEtiquetaEnNeo4j(int publicacionId, int usuarioId)
+        {
+            await using var session = _neo4jDriver.AsyncSession();
+            return await session.ExecuteWriteAsync(async transaction =>
+            {
+                var cursor = await transaction.RunAsync(DesetiquetarQuery, new { publicacionId, usuarioId });
+                var summary = await cursor.ConsumeAsync();
+                return summary.Counters.RelationshipsDeleted > 0;
+            });
+        }
+
+        private async Task<Dictionary<int, List<int>>> ObtenerMapaEtiquetas(int[] publicacionesIds)
+        {
+            await using var session = _neo4jDriver.AsyncSession();
+            return await session.ExecuteReadAsync(async transaction =>
+            {
+                var cursor = await transaction.RunAsync(ObtenerEtiquetasMultiplesQuery, new { publicacionesIds });
+                var mapa = new Dictionary<int, List<int>>();
+                await foreach (var record in cursor)
+                    mapa[record["publicacionId"].As<int>()] = record["usuariosIds"]
+                        .As<List<object>>().Select(Convert.ToInt32).ToList();
+                return mapa;
+            });
+        }
+
+        private static void AplicarEtiquetas(
+            IReadOnlyCollection<PublicacionDetalleDto> publicaciones,
+            IReadOnlyDictionary<int, List<int>> mapa,
+            IReadOnlyDictionary<int, AutorResumenDto> usuarios)
+        {
+            foreach (var publicacion in publicaciones)
+                if (mapa.TryGetValue(publicacion.Id, out var ids))
+                    publicacion.UsuariosEtiquetados = ids.Where(usuarios.ContainsKey)
+                        .Select(id => usuarios[id]).ToList();
+        }
+
+
+        #endregion
+
     }
 }

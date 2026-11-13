@@ -32,88 +32,6 @@ namespace ProyectoFinalTPI.Backend.Servicio
             _fotoPerfilAlmacenamiento = fotoPerfilAlmacenamiento ?? new FotoPerfilNoConfigurada();
         }
 
-        public async Task<UsuarioPerfilDto> CambiarUsernamePropioAsync(
-            int usuarioId, string username, CancellationToken cancellationToken = default)
-        {
-            var nuevoUsername = username?.Trim() ?? string.Empty;
-            if (nuevoUsername.Length is < 3 or > 50)
-                throw new ArgumentException("El username debe tener entre 3 y 50 caracteres.", nameof(username));
-
-            var usuario = await _repositorio.ObtenerPorIdAsync(usuarioId)
-                ?? throw new KeyNotFoundException("El usuario no existe.");
-
-            if (!string.Equals(usuario.Username, nuevoUsername, StringComparison.Ordinal))
-            {
-                var existente = await _repositorio.ObtenerPorUsernameAsync(nuevoUsername, cancellationToken);
-                if (existente is not null && existente.Id != usuarioId)
-                    throw new NombreUsuarioEnUsoException();
-
-                usuario.Username = nuevoUsername;
-                await _repositorio.ActualizarAsync(usuario, cancellationToken);
-            }
-
-            return await ConstruirPerfilDto(usuario, usuarioId, cancellationToken);
-        }
-
-        public async Task<UsuarioPerfilDto> CambiarFotoPerfilPropiaAsync(
-            int usuarioId, Stream archivo, string contentType, CancellationToken cancellationToken = default)
-        {
-            ArgumentNullException.ThrowIfNull(archivo);
-            var usuario = await _repositorio.ObtenerPorIdAsync(usuarioId)
-                ?? throw new KeyNotFoundException("El usuario no existe.");
-
-            const int maxBytes = 2 * 1024 * 1024;
-            using var memoria = new MemoryStream();
-            var buffer = new byte[81920];
-            int leidos;
-            while ((leidos = await archivo.ReadAsync(buffer, cancellationToken)) > 0)
-            {
-                if (memoria.Length + leidos > maxBytes)
-                    throw new ArgumentException("La foto no puede superar 2 MiB.", nameof(archivo));
-                await memoria.WriteAsync(buffer.AsMemory(0, leidos), cancellationToken);
-            }
-
-            var bytes = memoria.ToArray();
-            var extension = DetectarExtension(bytes);
-            if (extension is null)
-                throw new ArgumentException("La foto debe ser JPEG, PNG o WebP válido.", nameof(archivo));
-
-            var tipoEsperado = extension switch
-            {
-                ".jpg" => "image/jpeg",
-                ".png" => "image/png",
-                _ => "image/webp"
-            };
-            if (!string.Equals(contentType, tipoEsperado, StringComparison.OrdinalIgnoreCase))
-                throw new ArgumentException("El tipo de contenido no coincide con la foto.", nameof(contentType));
-
-            using var contenido = new MemoryStream(bytes);
-            var url = await _fotoPerfilAlmacenamiento.SubirAsync(
-                contenido, $"usuario-{usuarioId}-{Guid.NewGuid():N}{extension}", cancellationToken);
-            usuario.FotoPerfilUrl = url;
-            await _repositorio.ActualizarAsync(usuario, cancellationToken);
-            return await ConstruirPerfilDto(usuario, usuarioId, cancellationToken);
-        }
-
-        private static string? DetectarExtension(byte[] bytes)
-        {
-            if (bytes.Length >= 3 && bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF)
-                return ".jpg";
-            if (bytes.Length >= 8 && bytes.AsSpan(0, 8).SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }))
-                return ".png";
-            if (bytes.Length >= 12
-                && bytes.AsSpan(0, 4).SequenceEqual("RIFF"u8)
-                && bytes.AsSpan(8, 4).SequenceEqual("WEBP"u8))
-                return ".webp";
-            return null;
-        }
-
-        private sealed class FotoPerfilNoConfigurada : IFotoPerfilAlmacenamiento
-        {
-            public Task<string> SubirAsync(Stream archivo, string nombreArchivo, CancellationToken cancellationToken)
-                => throw new InvalidOperationException("No se configuró el almacenamiento de fotos de perfil.");
-        }
-
         #region Operaciones públicas
 
         /// <inheritdoc/>
@@ -172,6 +90,26 @@ namespace ProyectoFinalTPI.Backend.Servicio
             return await ValidarLogrosDeRacha(usuarioId, usuario);
         }
 
+        public async Task<UsuarioPerfilDto> CambiarUsernamePropioAsync(
+            int usuarioId, string username, CancellationToken cancellationToken = default)
+        {
+            var nuevoUsername = ValidarNuevoUsername(username);
+            var usuario = await ObtenerUsuarioPropio(usuarioId);
+            await ActualizarUsernameSiCambio(usuario, usuarioId, nuevoUsername, cancellationToken);
+            return await ConstruirPerfilDto(usuario, usuarioId, cancellationToken);
+        }
+
+        public async Task<UsuarioPerfilDto> CambiarFotoPerfilPropiaAsync(
+            int usuarioId, Stream archivo, string contentType, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(archivo);
+            var usuario = await ObtenerUsuarioPropio(usuarioId);
+            var bytes = await LeerFotoConLimite(archivo, cancellationToken);
+            var extension = ValidarFormatoFoto(bytes, contentType);
+            await GuardarFotoPerfil(usuario, usuarioId, bytes, extension, cancellationToken);
+            return await ConstruirPerfilDto(usuario, usuarioId, cancellationToken);
+        }
+
         #endregion
 
         #region Métodos privados y validaciones
@@ -195,70 +133,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 : 1;
             usuario.UltimoIngresoUtc = ahora;
         }
-        private async Task<UsuarioPerfilDto> ConstruirPerfilDto(
-            Usuario usuario, int? usuarioAutenticadoId, CancellationToken cancellationToken)
-        {
-            var cantidadPublicaciones = await _repositorio.ContarPublicacionesVisiblesAsync(usuario.Id, cancellationToken);
-
-            int cantidadSeguidores = 0;
-            int cantidadSeguidos = 0;
-            bool loSigo = false;
-
-            if (_seguimientoServicio != null)
-            {
-                var seguidores = await _seguimientoServicio.ListarSeguidores(usuario.Id, cancellationToken);
-                var seguidos = await _seguimientoServicio.ListarSeguidos(usuario.Id, cancellationToken);
-
-                cantidadSeguidores = seguidores?.Count ?? 0;
-                cantidadSeguidos = seguidos?.Count ?? 0;
-
-                if (usuarioAutenticadoId.HasValue && usuarioAutenticadoId.Value > 0 && usuarioAutenticadoId.Value != usuario.Id)
-                {
-                    var seguidosAutenticado = await _seguimientoServicio.ObtenerSeguidosIdsAsync(usuarioAutenticadoId.Value, cancellationToken);
-                    loSigo = seguidosAutenticado.Contains(usuario.Id);
-                }
-            }
-
-            var dto = new UsuarioPerfilDto
-            {
-                Id = usuario.Id,
-                Username = usuario.Username,
-                FotoPerfilUrl = usuario.FotoPerfilUrl,
-                CantidadPublicaciones = cantidadPublicaciones,
-                CantidadSeguidores = cantidadSeguidores,
-                CantidadSeguidos = cantidadSeguidos,
-                LoSigo = loSigo,
-                Logros = await _logroServicio.ObtenerCatalogoParaUsuario(usuario.Id)
-            };
-
-            if (usuario is Usuario_Personal personal)
-            {
-                dto.TipoUsuario = "Usuario_Personal";
-                dto.Nombre = personal.Nombre;
-                dto.Apellido = personal.Apellido;
-                var reputacion = personal.Reputacion;
-                if (reputacion == ReputacionEnum.Errante && cantidadPublicaciones > 0)
-                {
-                    reputacion = ReputacionEnum.Nostalgico;
-                }
-                dto.Reputacion = FormatearReputacion(reputacion);
-                dto.PuntosNostalgia = personal.PuntosNostalgia;
-            }
-            else if (usuario is Usuario_Marca marca)
-            {
-                dto.TipoUsuario = "Usuario_Marca";
-                dto.Nombre = marca.NombreEmpresa;
-                dto.Reputacion = "Marca";
-                dto.PuntosNostalgia = marca.PuntosNostalgia;
-            }
-            else
-            {
-                dto.TipoUsuario = "Usuario";
-                dto.Reputacion = "Errante";
-            }
-
-            return dto;
-        }
+  
         private async Task<Usuario> ObtenerUsuarioPorUsername(string username, CancellationToken cancellationToken)
         {
             return await _repositorio.ObtenerPorUsernameAsync(username, cancellationToken)
@@ -282,6 +157,152 @@ namespace ProyectoFinalTPI.Backend.Servicio
             ReputacionEnum.Mnnemónide => "Mnemosine",
             _ => "Errante"
         };
+
+        private async Task<UsuarioPerfilDto> ConstruirPerfilDto(Usuario usuario, int? usuarioAutenticadoId, CancellationToken cancellationToken)
+        {
+            var cantidad = await _repositorio.ContarPublicacionesVisiblesAsync(usuario.Id, cancellationToken);
+            var seguimiento = await ObtenerResumenSeguimiento(usuario.Id, usuarioAutenticadoId, cancellationToken);
+            var logros = await _logroServicio.ObtenerCatalogoParaUsuario(usuario.Id);
+            var dto = CrearPerfilBase(usuario, cantidad, seguimiento, logros);
+            CompletarDatosPorTipo(dto, usuario, cantidad);
+            return dto;
+        }
+        private async Task<Usuario> ObtenerUsuarioPropio(int usuarioId) => await _repositorio.ObtenerPorIdAsync(usuarioId)
+        ?? throw new KeyNotFoundException("El usuario no existe.");
+
+        private static string ValidarNuevoUsername(string username)
+        {
+            var nuevo = username?.Trim() ?? string.Empty;
+            if (nuevo.Length is < 3 or > 50)
+                throw new ArgumentException("El username debe tener entre 3 y 50 caracteres.", nameof(username));
+            return nuevo;
+        }
+
+        private async Task ActualizarUsernameSiCambio(
+            Usuario usuario, int usuarioId, string nuevo, CancellationToken cancellationToken)
+        {
+            if (string.Equals(usuario.Username, nuevo, StringComparison.Ordinal)) return;
+            var existente = await _repositorio.ObtenerPorUsernameAsync(nuevo, cancellationToken);
+            if (existente is not null && existente.Id != usuarioId) throw new NombreUsuarioEnUsoException();
+            usuario.Username = nuevo;
+            await _repositorio.ActualizarAsync(usuario, cancellationToken);
+        }
+
+        private static async Task<byte[]> LeerFotoConLimite(Stream archivo, CancellationToken cancellationToken)
+        {
+            using var memoria = new MemoryStream();
+            var buffer = new byte[81920];
+            int leidos;
+            while ((leidos = await archivo.ReadAsync(buffer, cancellationToken)) > 0)
+            {
+                if (memoria.Length + leidos > 2 * 1024 * 1024)
+                    throw new ArgumentException("La foto no puede superar 2 MiB.", nameof(archivo));
+                await memoria.WriteAsync(buffer.AsMemory(0, leidos), cancellationToken);
+            }
+            return memoria.ToArray();
+        }
+
+        private static string ValidarFormatoFoto(byte[] bytes, string contentType)
+        {
+            var extension = DetectarExtension(bytes)
+                ?? throw new ArgumentException("La foto debe ser JPEG, PNG o WebP válido.", "archivo");
+            var tipo = extension switch { ".jpg" => "image/jpeg", ".png" => "image/png", _ => "image/webp" };
+            if (!string.Equals(contentType, tipo, StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException("El tipo de contenido no coincide con la foto.", nameof(contentType));
+            return extension;
+        }
+
+        private async Task GuardarFotoPerfil(
+            Usuario usuario, int usuarioId, byte[] bytes, string extension, CancellationToken cancellationToken)
+        {
+            using var contenido = new MemoryStream(bytes);
+            usuario.FotoPerfilUrl = await _fotoPerfilAlmacenamiento.SubirAsync(
+                contenido, $"usuario-{usuarioId}-{Guid.NewGuid():N}{extension}", cancellationToken);
+            await _repositorio.ActualizarAsync(usuario, cancellationToken);
+        }
+
+        private async Task<(int Seguidores, int Seguidos, bool LoSigo)> ObtenerResumenSeguimiento(
+            int usuarioId, int? usuarioAutenticadoId, CancellationToken cancellationToken)
+        {
+            if (_seguimientoServicio is null) return (0, 0, false);
+            var seguidores = await _seguimientoServicio.ListarSeguidores(usuarioId, cancellationToken);
+            var seguidos = await _seguimientoServicio.ListarSeguidos(usuarioId, cancellationToken);
+            var loSigo = await ConsultarSiLoSigo(usuarioId, usuarioAutenticadoId, cancellationToken);
+            return (seguidores?.Count ?? 0, seguidos?.Count ?? 0, loSigo);
+        }
+
+        private static string? DetectarExtension(byte[] bytes)
+        {
+            if (bytes.Length >= 3 && bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF)
+                return ".jpg";
+            if (bytes.Length >= 8 && bytes.AsSpan(0, 8).SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }))
+                return ".png";
+            if (bytes.Length >= 12
+                && bytes.AsSpan(0, 4).SequenceEqual("RIFF"u8)
+                && bytes.AsSpan(8, 4).SequenceEqual("WEBP"u8))
+                return ".webp";
+            return null;
+        }
+
+        private sealed class FotoPerfilNoConfigurada : IFotoPerfilAlmacenamiento
+        {
+            public Task<string> SubirAsync(Stream archivo, string nombreArchivo, CancellationToken cancellationToken)
+                => throw new InvalidOperationException("No se configuró el almacenamiento de fotos de perfil.");
+        }
+        private async Task<bool> ConsultarSiLoSigo(
+    int usuarioId, int? usuarioAutenticadoId, CancellationToken cancellationToken)
+        {
+            if (!usuarioAutenticadoId.HasValue || usuarioAutenticadoId.Value <= 0
+                || usuarioAutenticadoId.Value == usuarioId) return false;
+            var seguidos = await _seguimientoServicio!.ObtenerSeguidosIdsAsync(
+                usuarioAutenticadoId.Value, cancellationToken);
+            return seguidos.Contains(usuarioId);
+        }
+
+        private static UsuarioPerfilDto CrearPerfilBase(
+            Usuario usuario, int cantidad, (int Seguidores, int Seguidos, bool LoSigo) seguimiento,
+            List<LogroEstadoDto> logros) => new()
+            {
+                Id = usuario.Id,
+                Username = usuario.Username,
+                FotoPerfilUrl = usuario.FotoPerfilUrl,
+                CantidadPublicaciones = cantidad,
+                CantidadSeguidores = seguimiento.Seguidores,
+                CantidadSeguidos = seguimiento.Seguidos,
+                LoSigo = seguimiento.LoSigo,
+                Logros = logros
+            };
+
+        private static void CompletarDatosPorTipo(UsuarioPerfilDto dto, Usuario usuario, int cantidad)
+        {
+            switch (usuario)
+            {
+                case Usuario_Personal personal:
+                    CompletarPerfilPersonal(dto, personal, cantidad);
+                    break;
+                case Usuario_Marca marca:
+                    dto.TipoUsuario = "Usuario_Marca";
+                    dto.Nombre = marca.NombreEmpresa;
+                    dto.Reputacion = "Marca";
+                    dto.PuntosNostalgia = marca.PuntosNostalgia;
+                    break;
+                default:
+                    dto.TipoUsuario = "Usuario";
+                    dto.Reputacion = "Errante";
+                    break;
+            }
+        }
+
+        private static void CompletarPerfilPersonal(UsuarioPerfilDto dto, Usuario_Personal usuario, int cantidad)
+        {
+            dto.TipoUsuario = "Usuario_Personal";
+            dto.Nombre = usuario.Nombre;
+            dto.Apellido = usuario.Apellido;
+            var reputacion = usuario.Reputacion == ReputacionEnum.Errante && cantidad > 0
+                ? ReputacionEnum.Nostalgico : usuario.Reputacion;
+            dto.Reputacion = FormatearReputacion(reputacion);
+            dto.PuntosNostalgia = usuario.PuntosNostalgia;
+        }
 
         #endregion
     }

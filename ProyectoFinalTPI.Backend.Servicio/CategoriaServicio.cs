@@ -50,18 +50,10 @@ public sealed class CategoriaServicio(ICategoriaRepositorio progreso, TimeProvid
 
     public async Task<EstadoCategoriaDto> ObtenerEstado(int usuarioId, CancellationToken ct = default)
     {
-        var usuario = await progreso.ObtenerUsuario(usuarioId, ct)
-            ?? throw new KeyNotFoundException("El usuario no existe.");
-        var codigo = ResolverCategoria(usuario);
-        // Compatibilidad con cuentas que publicaron antes de persistir los ascensos.
-        if (codigo == CategoriaCuenta.Errante && usuario is Usuario_Personal
-            && await progreso.TieneRecuerdos(usuarioId, ct)) codigo = CategoriaCuenta.Nostalgico;
-        var categoria = Obtener(codigo);
+        var codigo = await ObtenerCategoriaEfectiva(usuarioId, ct);
         var semana = ObtenerSemana();
         var consumo = await progreso.ObtenerConsumo(usuarioId, semana, ct);
-        var limite = categoria.PublicacionesSemanales;
-        return new(categoria, consumo, limite.HasValue ? Math.Max(0, limite.Value - consumo) : null,
-            semana, semana.AddDays(7), TienePermiso(codigo, PermisoCuenta.AdjuntarVariasFotos) ? 4 : 1);
+        return ConstruirEstado(codigo, semana, consumo);
     }
 
     public async Task ExigirPermiso(int usuarioId, PermisoCuenta permiso, CancellationToken ct = default)
@@ -74,28 +66,20 @@ public sealed class CategoriaServicio(ICategoriaRepositorio progreso, TimeProvid
     public async Task ValidarCreacion(int usuarioId, int cantidadAdjuntos, bool tieneMusica, CancellationToken ct = default)
     {
         var estado = await ObtenerEstado(usuarioId, ct);
-        if (!estado.Categoria.PermitePrimerRecuerdo && !estado.Categoria.Permisos.Contains(nameof(PermisoCuenta.CrearRecuerdo)))
-            throw new UnauthorizedAccessException("Tu categoría no permite crear recuerdos.");
-        if (cantidadAdjuntos < 0 || cantidadAdjuntos > 4)
-            throw new ArgumentException("Una publicación admite hasta 4 adjuntos.");
-        if (cantidadAdjuntos > estado.MaximoAdjuntos)
-            throw new UnauthorizedAccessException("Tu categoría permite un solo adjunto por publicación.");
-        if (tieneMusica && !estado.Categoria.Permisos.Contains(nameof(PermisoCuenta.AgregarMusicaAPublicacion)))
-            throw new UnauthorizedAccessException("La música en publicaciones está disponible desde Aedo.");
+        ValidarPermisoDeCreacion(estado);
+        ValidarCantidadDeAdjuntos(cantidadAdjuntos, estado.MaximoAdjuntos);
+        ValidarPermisoDeMusica(estado, tieneMusica);
         ValidarCupo(estado);
     }
 
     public async Task<int> CrearRecuerdo(Publicacion publicacion, CancellationToken ct = default)
     {
-        if (publicacion.PublicacionOriginalId.HasValue) throw new ArgumentException("Esta operación crea recuerdos propios.");
+        ValidarRecuerdoPropio(publicacion);
         var estado = await ObtenerEstado(publicacion.UsuarioId, ct);
         ValidarCupo(estado);
-        publicacion.FechaCreación = reloj.GetUtcNow().UtcDateTime;
-        var limite = estado.Categoria.PublicacionesSemanales;
-        var id = await progreso.CrearConCupo(publicacion, estado.SemanaInicio, limite, ct);
-        if (!id.HasValue) throw CrearErrorCupo(estado);
+        var id = await GuardarRecuerdoConCupo(publicacion, estado, ct);
         await ActualizarPorRecuerdo(publicacion, 0, ct);
-        return id.Value;
+        return id;
     }
 
     public double ObtenerBonificacion(ReputacionEnum? reputacion, bool marca, double alta, double muyAlta) =>
@@ -267,6 +251,63 @@ public sealed class CategoriaServicio(ICategoriaRepositorio progreso, TimeProvid
             categoria.Permisos
                 .Select(permiso => permiso.ToString())
                 .ToArray());
+
+    private async Task<CategoriaCuenta> ObtenerCategoriaEfectiva(int usuarioId, CancellationToken ct)
+    {
+        var usuario = await progreso.ObtenerUsuario(usuarioId, ct)
+            ?? throw new KeyNotFoundException("El usuario no existe.");
+        var codigo = ResolverCategoria(usuario);
+        return codigo == CategoriaCuenta.Errante && usuario is Usuario_Personal
+            && await progreso.TieneRecuerdos(usuarioId, ct)
+            ? CategoriaCuenta.Nostalgico : codigo;
+    }
+
+    private EstadoCategoriaDto ConstruirEstado(CategoriaCuenta codigo, DateOnly semana, int consumo)
+    {
+        var categoria = Obtener(codigo);
+        var limite = categoria.PublicacionesSemanales;
+        return new(categoria, consumo,
+            limite.HasValue ? Math.Max(0, limite.Value - consumo) : null,
+            semana, semana.AddDays(7),
+            TienePermiso(codigo, PermisoCuenta.AdjuntarVariasFotos) ? 4 : 1);
+    }
+
+    private static void ValidarPermisoDeCreacion(EstadoCategoriaDto estado)
+    {
+        if (!estado.Categoria.PermitePrimerRecuerdo
+            && !estado.Categoria.Permisos.Contains(nameof(PermisoCuenta.CrearRecuerdo)))
+            throw new UnauthorizedAccessException("Tu categoría no permite crear recuerdos.");
+    }
+
+    private static void ValidarCantidadDeAdjuntos(int cantidad, int maximo)
+    {
+        if (cantidad < 0 || cantidad > 4)
+            throw new ArgumentException("Una publicación admite hasta 4 adjuntos.");
+        if (cantidad > maximo)
+            throw new UnauthorizedAccessException("Tu categoría permite un solo adjunto por publicación.");
+    }
+
+    private static void ValidarPermisoDeMusica(EstadoCategoriaDto estado, bool tieneMusica)
+    {
+        if (tieneMusica
+            && !estado.Categoria.Permisos.Contains(nameof(PermisoCuenta.AgregarMusicaAPublicacion)))
+            throw new UnauthorizedAccessException("La música en publicaciones está disponible desde Aedo.");
+    }
+
+    private static void ValidarRecuerdoPropio(Publicacion publicacion)
+    {
+        if (publicacion.PublicacionOriginalId.HasValue)
+            throw new ArgumentException("Esta operación crea recuerdos propios.");
+    }
+
+    private async Task<int> GuardarRecuerdoConCupo(
+        Publicacion publicacion, EstadoCategoriaDto estado, CancellationToken ct)
+    {
+        publicacion.FechaCreación = reloj.GetUtcNow().UtcDateTime;
+        var id = await progreso.CrearConCupo(
+            publicacion, estado.SemanaInicio, estado.Categoria.PublicacionesSemanales, ct);
+        return id ?? throw CrearErrorCupo(estado);
+    }
 
     #endregion
 }

@@ -59,26 +59,10 @@ public class ComentarioServicio(
     public async Task<ComentarioDto> Crear(
         Comentario comentario, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(comentario);
-        if (categoriaServicio is not null) await categoriaServicio.ExigirPermiso(comentario.UsuarioId,
-            global::ProyectoFinalTPI.Backend.Entidades.PermisoCuenta.Comentar, cancellationToken);
-        await ValidarPublicacion(comentario.PublicacionId, cancellationToken);
-        ValidarId(comentario.UsuarioId, "usuario");
-
-        string contenido = ValidarContenido(comentario);
-
-        var usuario = await _usuarioRepositorio.ObtenerPorIdAsync(comentario.UsuarioId)
-            ?? throw new KeyNotFoundException("El usuario indicado no existe.");
-
-        var padre = await ObtenerPadreValido(comentario, cancellationToken);
-
-        PrepararComentario(comentario, contenido, usuario, padre);
-
+        await PrepararCreacion(comentario, cancellationToken);
         await _comentarioRepositorio.Crear(comentario, cancellationToken);
-        
         await NotificarComentario(comentario, cancellationToken);
         await VerificarLogrosComentario(comentario.UsuarioId, comentario.PublicacionId, cancellationToken);
-
         return comentario.ToDto(comentario.UsuarioId);
     }
     public async Task Eliminar(
@@ -154,27 +138,25 @@ public class ComentarioServicio(
             ? null
             : CursorCronologicoCodec.Crear(ultimoConMasResultados.FechaCreacion, ultimoConMasResultados.Id)
         };
-    private async Task VerificarLogrosComentario(int usuarioId, int publicacionId, CancellationToken cancellationToken)
+    private async Task VerificarLogrosComentario(
+    int usuarioId, int publicacionId, CancellationToken cancellationToken)
     {
         var publicacion = await _comentarioRepositorio.ObtenerPublicacionAsync(publicacionId, cancellationToken);
         if (publicacion == null) return;
+        await VerificarPrimeraPalabra(usuarioId, publicacion.UsuarioId, cancellationToken);
+        await VerificarConversador(usuarioId, cancellationToken);
+    }
+    private async Task VerificarPrimeraPalabra(int usuarioId, int autorId, CancellationToken cancellationToken)
+    {
+        if (autorId == usuarioId) return;
+        var cantidad = await _comentarioRepositorio.ContarComentariosEnPosteosAjenosAsync(usuarioId, cancellationToken);
+        if (cantidad >= 1) await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.PrimeraPalabra);
+    }
 
-        if (publicacion.UsuarioId != usuarioId)
-        {
-            int comentariosEnPosteosAjenos = await _comentarioRepositorio
-                .ContarComentariosEnPosteosAjenosAsync(usuarioId, cancellationToken);
-
-            if (comentariosEnPosteosAjenos >= 1)
-            {
-                await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.PrimeraPalabra);
-            }
-        }
-
-        int totalComentarios = await _comentarioRepositorio.ContarComentariosTotalesAsync(usuarioId, cancellationToken);
-        if (totalComentarios >= 25)
-        {
-            await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.Conversador);
-        }
+    private async Task VerificarConversador(int usuarioId, CancellationToken cancellationToken)
+    {
+        var cantidad = await _comentarioRepositorio.ContarComentariosTotalesAsync(usuarioId, cancellationToken);
+        if (cantidad >= 25) await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.Conversador);
     }
     private async Task<Publicacion?> ObtenerPublicacionParaNotificacion(
     int publicacionId, CancellationToken cancellationToken)
@@ -276,5 +258,24 @@ public class ComentarioServicio(
             throw new ArgumentException("No se puede interactuar con un comentario eliminado.");
         return comentario;
     }
+    private async Task PrepararCreacion(Comentario comentario, CancellationToken cancellationToken)
+    {
+        var contenido = await ValidarCreacionComentario(comentario, cancellationToken);
+        var usuario = await _usuarioRepositorio.ObtenerPorIdAsync(comentario.UsuarioId)
+            ?? throw new KeyNotFoundException("El usuario indicado no existe.");
+        var padre = await ObtenerPadreValido(comentario, cancellationToken);
+        PrepararComentario(comentario, contenido, usuario, padre);
+    }
+
+    private async Task<string> ValidarCreacionComentario(Comentario comentario, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(comentario);
+        if (categoriaServicio is not null)
+            await categoriaServicio.ExigirPermiso(comentario.UsuarioId, PermisoCuenta.Comentar, cancellationToken);
+        await ValidarPublicacion(comentario.PublicacionId, cancellationToken);
+        ValidarId(comentario.UsuarioId, "usuario");
+        return ValidarContenido(comentario);
+    }
+
     #endregion
 }

@@ -1,7 +1,8 @@
-﻿using ProyectoFinalTPI.Backend.Entidades;
+﻿using ProyectoFinalTPI.Backend.Dtos.Usuario;
+using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
-using ProyectoFinalTPI.Backend.Dtos.Usuario;
+using ProyectoFinalTPI.Backend.Repositorio;
 
 namespace ProyectoFinalTPI.Backend.Servicio
 {
@@ -14,17 +15,13 @@ namespace ProyectoFinalTPI.Backend.Servicio
             _logrosUsuariosRepositorio = logrosUsuariosRepositorio;
         }
 
+        #region Operaciones públicas
+
         public async Task<bool> VerificarYDarLogro(int idUsuario, LogroEnum logro)
         {
             int idLogro = (int)logro;
-            bool ya_logrado = await _logrosUsuariosRepositorio.ExisteRegistro(idUsuario, idLogro);
-            if (ya_logrado)
-            {
-                return false;
-            }
-            var nuevoLogroDesbloqueado = CrearLogroDeUsuario(idUsuario, idLogro, DateTime.UtcNow);
-
-            return await _logrosUsuariosRepositorio.Guardar(nuevoLogroDesbloqueado);
+            if (await _logrosUsuariosRepositorio.ExisteRegistro(idUsuario, idLogro)) return false;
+            return await _logrosUsuariosRepositorio.Guardar(CrearLogroDeUsuario(idUsuario, idLogro));
         }
         public async Task<List<Logros_Usuarios>> MostrarLogrosDeUsuario(int idUsuario)
         {
@@ -34,31 +31,47 @@ namespace ProyectoFinalTPI.Backend.Servicio
         public async Task<List<LogroEstadoDto>> ObtenerCatalogoParaUsuario(int idUsuario)
         {
             var catalogo = await _logrosUsuariosRepositorio.ObtenerCatalogo();
-            var obtenidos = (await _logrosUsuariosRepositorio.ObtenerPorUsuario(idUsuario))
-                .ToDictionary(registro => registro.LogroId, registro => registro.FechaDesbloqueo);
+            Dictionary<int, DateTime> obtenidos = await ObtenerFechaDeDesbloqueo(idUsuario);
 
-            return catalogo.Select(logro => new LogroEstadoDto
+            return catalogo.Select(logro => MapearLogroEstado(logro, obtenidos)).ToList();
+        }
+
+        #endregion
+
+        #region Métodos privados y validaciones
+
+        private Logros_Usuarios CrearLogroDeUsuario(int idUsuario, int idLogro)
+        {
+            var LogroUsuario = new Logros_Usuarios
+            {
+                UsuarioId = idUsuario,
+                LogroId = idLogro,
+                FechaDesbloqueo = DateTime.UtcNow
+            };
+            
+            return LogroUsuario;
+        }
+        private static LogroEstadoDto MapearLogroEstado(Logro logro, Dictionary<int, DateTime> obtenidos)
+        {
+            var desbloqueado = obtenidos.TryGetValue(logro.Id, out var fecha)
+            return new LogroEstadoDto
             {
                 Id = logro.Id,
                 Titulo = logro.Titulo,
                 Descripcion = logro.Descripcion,
                 UrlIcono = logro.UrlIcono,
                 PuntosRecompensa = logro.PuntosRecompensa,
-                Desbloqueado = obtenidos.ContainsKey(logro.Id),
-                FechaDesbloqueo = obtenidos.TryGetValue(logro.Id, out var fecha) ? fecha : null
-            }).ToList();
+                Desbloqueado = desbloqueado,
+                FechaDesbloqueo = desbloqueado ? fecha : null
+            };
         }
 
-        private Logros_Usuarios CrearLogroDeUsuario(int idUsuario, int idLogro, DateTime fechaDesbloqueo)
+        private async Task<Dictionary<int, DateTime>> ObtenerFechaDeDesbloqueo(int idUsuario)
         {
-            var LogroUsuario = new Logros_Usuarios
-            {
-                UsuarioId = idUsuario,
-                LogroId = idLogro,
-                FechaDesbloqueo = fechaDesbloqueo
-            };
-            
-            return LogroUsuario;
+            return (await _logrosUsuariosRepositorio.ObtenerPorUsuario(idUsuario))
+                .ToDictionary(registro => registro.LogroId, registro => registro.FechaDesbloqueo);
         }
+
+        #endregion
     }
 }
