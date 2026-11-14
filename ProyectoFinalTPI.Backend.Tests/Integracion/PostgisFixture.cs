@@ -6,9 +6,19 @@ namespace ProyectoFinalTPI.Backend.Tests.Integracion;
 // Un servidor temporal para la clase de tests. Cada factory crea su propia base.
 public sealed class PostgisFixture : IAsyncLifetime
 {
-    public string ConnectionString => "Host=localhost;Port=5432;Database=postgres;Username=postgres;Password=60lD1r06e71";
+    private readonly PostgreSqlContainer _contenedor = new PostgreSqlBuilder()
+        .WithImage("postgis/postgis:16-3.4")
+        .WithDatabase("postgres")
+        .WithUsername("postgres")
+        .WithPassword(Guid.NewGuid().ToString("N"))
+        .Build();
 
-    public Task InitializeAsync() => Task.CompletedTask;
+    public string ConnectionString => _contenedor.GetConnectionString();
 
-    public Task DisposeAsync() => Task.CompletedTask;
+    public Task InitializeAsync() => _contenedor.StartAsync();
+
+    public async Task DisposeAsync()
+    {
+        await _contenedor.DisposeAsync();
+    }
 }
