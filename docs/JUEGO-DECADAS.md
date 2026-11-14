@@ -19,3 +19,17 @@ dotnet test ProyectoFinalTPI.Backend.Tests --filter "FullyQualifiedName~JuegoDec
 ```
 
 Las pruebas de integración usan PostgreSQL/PostGIS en un contenedor y una base temporal propia. No consultan ni modifican la base productiva.
+
+## Arranque y migraciones después de cambiar de rama
+
+El directorio `ProyectoFinalTPI.Backend/wwwroot` se conserva en Git mediante `.gitkeep`. Los manifiestos de archivos estáticos de ASP.NET pueden referenciarlo aunque la API no publique archivos propios.
+
+Si una compilación anterior dejó referencias a una carpeta eliminada, actualizá la rama y ejecutá `dotnet clean`. Desde la carpeta del proyecto web (`ProyectoFinalTPI.Backend/ProyectoFinalTPI.Backend`), aplicá las migraciones indicando el proyecto de repositorio, donde está `ApplicationDbContext`:
+
+```powershell
+dotnet clean
+dotnet ef database update --project ..\ProyectoFinalTPI.Backend.Repositorio --startup-project . --context ApplicationDbContext
+dotnet run
+```
+
+No hay que agregar una migración para corregir una carpeta ausente.
