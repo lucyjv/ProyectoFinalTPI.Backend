@@ -66,7 +66,7 @@ builder.Services.AddCors(options =>
 });
 
 // Add services to the container.
-builder.Services.AddControllersWithViews(options =>
+builder.Services.AddControllers(options =>
 {
     // Las coordenadas multipart usan punto decimal, independientemente del servidor.
     var formFactory = options.ValueProviderFactories.OfType<Microsoft.AspNetCore.Mvc.ModelBinding.FormValueProviderFactory>().Single();
@@ -367,7 +367,6 @@ if (args.Contains("--initialize-docker"))
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
-    app.UseExceptionHandler("/Home/Error");
     app.UseHsts();
 }
 
@@ -402,7 +401,6 @@ app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapStaticAssets();
 app.MapControllers();
 
 // ── Ruta del Hub de chat ───────────────────────────────────────────────
@@ -411,10 +409,7 @@ app.MapHub<ChatHub>("/hubs/chat");
 app.MapHub<NotificacionHub>("/hubs/notificaciones");
 // ─────────────────────────────────────────────────────────────────────────────
 
-app.MapControllerRoute(
-    name: "default",
-    pattern: "{controller=Home}/{action=Index}/{id?}")
-    .WithStaticAssets();
+app.MapGet("/", () => Results.Redirect("/swagger"));
 
 app.Run();
 
