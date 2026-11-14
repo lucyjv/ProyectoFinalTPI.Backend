@@ -93,6 +93,8 @@ builder.Services.AddSingleton<IDriver>(provider =>
 });
 
 builder.Services.AddScoped<IPublicacionRepositorio, PublicacionRepositorio>();
+builder.Services.AddScoped<IJuegoDecadasRepositorio, JuegoDecadasRepositorio>();
+builder.Services.AddScoped<IJuegoDecadasServicio, JuegoDecadasServicio>();
 builder.Services.AddOptions<OpcionesNeo4j>()
     .Bind(builder.Configuration.GetSection(OpcionesNeo4j.Seccion))
     .Validate(opciones => opciones.TiempoMaximoConsultaFeedSegundos is > 0 and <= 120,
