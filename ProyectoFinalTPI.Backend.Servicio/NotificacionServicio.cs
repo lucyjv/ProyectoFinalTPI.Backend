@@ -48,12 +48,30 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
         /// <inheritdoc/>
         public Task NotificarPuntuacionEnPublicacionAsync(
-            int usuarioDestinatarioId, int publicacionId, int puntuadorId,
+            int usuarioDestinatarioId, int publicacionId, int puntuadorId, int? puntaje = null,
             CancellationToken cancellationToken = default) =>
             NotificarSiNoHayPendienteAsync(
                 usuarioDestinatarioId,
                 TipoNotificacion.PuntuacionEnPublicacion,
-                publicacionId, puntuadorId, cancellationToken);
+                publicacionId, puntuadorId, cancellationToken, puntaje);
+
+        /// <inheritdoc/>
+        public Task NotificarMeGustaPublicacionAsync(
+            int usuarioDestinatarioId, int publicacionId, int usuarioQueDioLikeId,
+            CancellationToken cancellationToken = default) =>
+            NotificarSiNoHayPendienteAsync(
+                usuarioDestinatarioId,
+                TipoNotificacion.MeGustaPublicacion,
+                publicacionId, usuarioQueDioLikeId, cancellationToken);
+
+        /// <inheritdoc/>
+        public Task NotificarCompartirPublicacionAsync(
+            int usuarioDestinatarioId, int publicacionId, int reposteadorId,
+            CancellationToken cancellationToken = default) =>
+            NotificarSiNoHayPendienteAsync(
+                usuarioDestinatarioId,
+                TipoNotificacion.CompartirPublicacion,
+                publicacionId, reposteadorId, cancellationToken);
 
         /// <inheritdoc/>
         public Task NotificarAscensoCategoriaAsync(
@@ -151,7 +169,8 @@ namespace ProyectoFinalTPI.Backend.Servicio
         private async Task NotificarSiNoHayPendienteAsync(
                 int destinatarioId, TipoNotificacion tipo,
                 int? publicacionId, int? emisorId,
-                CancellationToken cancellationToken)
+                CancellationToken cancellationToken = default,
+                int? puntaje = null)
         {
             if (await _repositorio.ExisteNotificacionPendienteAsync(
                 destinatarioId, tipo, publicacionId, cancellationToken))
@@ -159,15 +178,16 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
             await GuardarYEnviarAsync(
                 destinatarioId, tipo, publicacionId,
-                emisorId, cancellationToken);
+                emisorId, cancellationToken, puntaje);
         }
         private async Task GuardarYEnviarAsync(
             int destinatarioId, TipoNotificacion tipo,
             int? publicacionId, int? emisorId,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken = default,
+            int? puntaje = null)
         {
             var notificacion = CrearNotificacion(
-                destinatarioId, tipo, publicacionId, emisorId);
+                destinatarioId, tipo, publicacionId, emisorId, puntaje);
             await _repositorio.GuardarAsync(
                 notificacion, cancellationToken);
             await EnviarAsync(
@@ -176,13 +196,14 @@ namespace ProyectoFinalTPI.Backend.Servicio
         }
         private static Notificacion CrearNotificacion(
             int destinatarioId, TipoNotificacion tipo,
-            int? publicacionId, int? emisorId) =>
+            int? publicacionId, int? emisorId, int? puntaje = null) =>
             new()
             {
                 UsuarioDestinatarioId = destinatarioId,
                 Tipo = tipo,
                 PublicacionId = publicacionId,
                 EmisorId = emisorId,
+                Puntaje = puntaje,
                 FechaCreacion = DateTime.UtcNow
             };
         private async Task EnviarAsync(
@@ -218,7 +239,8 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 FechaCreacion = notificacion.FechaCreacion,
                 PublicacionId = notificacion.PublicacionId,
                 EmisorId = notificacion.EmisorId,
-                EmisorUsername = emisorUsername
+                EmisorUsername = emisorUsername,
+                Puntaje = notificacion.Puntaje
             };
 
         #endregion

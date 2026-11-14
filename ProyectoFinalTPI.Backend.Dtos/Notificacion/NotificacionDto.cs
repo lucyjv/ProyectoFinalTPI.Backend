@@ -38,5 +38,8 @@ namespace ProyectoFinalTPI.Backend.Dtos.Notificacion
 
         /// <summary>Username del usuario que originó el evento.</summary>
         public string? EmisorUsername { get; set; }
+
+        /// <summary>Puntaje asignado (1-5) si el tipo es PuntuacionEnPublicacion.</summary>
+        public int? Puntaje { get; set; }
     }
 }

@@ -569,6 +569,9 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Property<int?>("PublicacionId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("Puntaje")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Tipo")
                         .IsRequired()
                         .HasMaxLength(50)

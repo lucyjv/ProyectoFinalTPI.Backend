@@ -289,6 +289,9 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
                       .HasConversion<string>()
                       .HasMaxLength(50);
 
+                entity.Property(e => e.Puntaje)
+                      .IsRequired(false);
+
                 // FK al destinatario: si el usuario es eliminado, sus notificaciones también.
                 entity.HasOne(e => e.UsuarioDestinatario)
                       .WithMany()
