@@ -23,7 +23,7 @@ public class LogrosReglasIntegracionTests(PostgisFixture postgres, Neo4jLogrosFi
     : IClassFixture<PostgisFixture>, IClassFixture<Neo4jLogrosFixture>
 {
     [Fact]
-    public async Task CuentaNuevaNoDesbloqueaLogrosNiHeredaLosDeOtraCuentaAlRegistrarseOIngresar()
+    public async Task QueCuentaNuevaNoDesbloqueeLogrosNiHeredeLosDeOtraCuentaAlRegistrarseOIngresar()
     {
         await using var factory = new PublicacionesApiFactory(postgres);
         using var client = factory.CreateClient();
@@ -59,7 +59,7 @@ public class LogrosReglasIntegracionTests(PostgisFixture postgres, Neo4jLogrosFi
     }
 
     [Fact]
-    public async Task LoginCuentaUnIngresoPorDiaDesbloqueaTresYSieteYNoCuentaClavesInvalidas()
+    public async Task QueLoginCuenteUnIngresoPorDiaDesbloqueeTresYSieteYNoCuenteClavesInvalidas()
     {
         var clock = new Reloj { Ahora = new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.Zero) };
         await using var factory = new PublicacionesApiFactory(postgres, timeProvider: clock);
@@ -85,7 +85,7 @@ public class LogrosReglasIntegracionTests(PostgisFixture postgres, Neo4jLogrosFi
     }
 
     [Fact]
-    public async Task SaltarUnDiaReiniciaLaRacha()
+    public async Task QueSaltarUnDiaReinicieLaRacha()
     {
         var clock = new Reloj { Ahora = new DateTimeOffset(2026, 10, 1, 23, 59, 0, TimeSpan.Zero) };
         await using var factory = new PublicacionesApiFactory(postgres, timeProvider: clock);
@@ -102,7 +102,7 @@ public class LogrosReglasIntegracionTests(PostgisFixture postgres, Neo4jLogrosFi
     }
 
     [Fact]
-    public async Task RecuerdosSinAdjuntoPersistenYSumanPublicaciones_PeroNoFotos()
+    public async Task QueRecuerdosSinAdjuntoPersistanYSumenPublicaciones_PeroNoFotos()
     {
         var reloj = new RelojCategoria(DateTimeOffset.UtcNow);
         await using var factory = new PublicacionesApiFactory(postgres)
@@ -136,7 +136,7 @@ public class LogrosReglasIntegracionTests(PostgisFixture postgres, Neo4jLogrosFi
     }
 
     [Fact]
-    public async Task LinceSeEntregaEnLaPublicacionQuinceYNoEnLaCatorce()
+    public async Task QueLinceSeEntregueEnLaPublicacionQuinceYNoEnLaCatorce()
     {
         var reloj = new RelojCategoria(DateTimeOffset.UtcNow);
         await using var factory = new PublicacionesApiFactory(postgres)
@@ -159,7 +159,7 @@ public class LogrosReglasIntegracionTests(PostgisFixture postgres, Neo4jLogrosFi
     }
 
     [Fact]
-    public async Task CronistaRequiereCincoRecuerdosCercanosYLaUbicacionActualCompleta()
+    public async Task QueCronistaRequieraCincoRecuerdosCercanosYLaUbicacionActualCompleta()
     {
         await using var factory = new PublicacionesApiFactory(postgres);
         using var client = factory.CreateClient();
@@ -181,7 +181,7 @@ public class LogrosReglasIntegracionTests(PostgisFixture postgres, Neo4jLogrosFi
     }
 
     [Fact]
-    public async Task PuntuacionesPersistenYDesbloqueanPopularLeyendaYGenerosoEnSusUmbrales()
+    public async Task QuePuntuacionesPersistanYDesbloqueenPopularLeyendaYGenerosoEnSusUmbrales()
     {
         await using var factory = new PublicacionesApiFactory(postgres, neo4j.Driver);
         using var client = factory.CreateClient();
@@ -235,7 +235,7 @@ public class LogrosReglasIntegracionTests(PostgisFixture postgres, Neo4jLogrosFi
     [Theory]
     [InlineData("repost")]
     [InlineData("citar")]
-    public async Task ViajeroCuentaRepostsDeNeo4jYCitasSinContarRepetidosPropiosNiDeOtrosUsuarios(string accionFinal)
+    public async Task QueViajeroCuenteRepostsDeNeo4jYCitasSinContarRepetidosPropiosNiDeOtrosUsuarios(string accionFinal)
     {
         // El grafo pertenece exclusivamente al contenedor temporal de esta clase.
         await using (var session = neo4j.Driver.AsyncSession())

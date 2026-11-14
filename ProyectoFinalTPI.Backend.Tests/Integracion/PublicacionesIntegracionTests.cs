@@ -54,7 +54,7 @@ public class PublicacionesIntegracionTests : IClassFixture<PostgisFixture>
     };
 
     [Fact]
-    public async Task RutasDeComentariosPermitenResponderReaccionarYEliminarConPublicacionPorQuery()
+    public async Task QueRutasDeComentariosPermitanResponderReaccionarYEliminarConPublicacionPorQuery()
     {
         await using var factory = new PublicacionesApiFactory(_postgres);
         using var client = factory.CreateClient();
@@ -122,7 +122,7 @@ public class PublicacionesIntegracionTests : IClassFixture<PostgisFixture>
     [InlineData("DELETE", "/api/comentarios/8")]
     [InlineData("PUT", "/api/comentarios/8/reaccion")]
     [InlineData("DELETE", "/api/comentarios/8/reaccion")]
-    public async Task RutasDeComentariosRechazanPublicacionPorQueryAusenteOInvalida(string metodo, string ruta)
+    public async Task QueRutasDeComentariosRechacenPublicacionPorQueryAusenteOInvalida(string metodo, string ruta)
     {
         await using var factory = new PublicacionesApiFactory(_postgres);
         using var client = factory.CreateClient();
@@ -142,7 +142,7 @@ public class PublicacionesIntegracionTests : IClassFixture<PostgisFixture>
     }
 
     [Fact]
-    public async Task HashtagAgrupaPublicacionesVisiblesConCoincidenciaExactaYPaginacion()
+    public async Task QueHashtagAgrupePublicacionesVisiblesConCoincidenciaExactaYPaginacion()
     {
         await using var factory = new PublicacionesApiFactory(_postgres);
         using var client = factory.CreateClient();
@@ -172,7 +172,7 @@ public class PublicacionesIntegracionTests : IClassFixture<PostgisFixture>
     }
 
     [Fact]
-    public async Task TendenciasCuentanLaSemanaYBusquedaEncuentraHashtagsHistoricos()
+    public async Task QueTendenciasCuentenLaSemanaYBusquedaEncuentreHashtagsHistoricos()
     {
         await using var factory = new PublicacionesApiFactory(_postgres);
         using var client = factory.CreateClient();
@@ -198,7 +198,7 @@ public class PublicacionesIntegracionTests : IClassFixture<PostgisFixture>
     [Theory]
     [InlineData("buscar")]
     [InlineData("tendencias")]
-    public async Task HashtagsPuedenUsarNombresDeLasOperacionesSinColisionar(string hashtag)
+    public async Task QueHashtagsPuedanUsarNombresDeLasOperacionesSinColisionar(string hashtag)
     {
         await using var factory = new PublicacionesApiFactory(_postgres);
         using var client = factory.CreateClient();
@@ -215,7 +215,7 @@ public class PublicacionesIntegracionTests : IClassFixture<PostgisFixture>
     [InlineData(17, HttpStatusCode.OK)]
     [InlineData(0, HttpStatusCode.BadRequest)]
     [InlineData(-1, HttpStatusCode.BadRequest)]
-    public async Task GuardadasRecibeUsuarioEnLaRutaSimplificada(int usuarioId, HttpStatusCode esperado)
+    public async Task QueGuardadasRecibaUsuarioEnLaRutaSimplificada(int usuarioId, HttpStatusCode esperado)
     {
         await using var factory = new PublicacionesApiFactory(_postgres);
         using var client = factory.CreateClient();

@@ -23,7 +23,7 @@ public sealed class PerfilEdicionTests
     }
 
     [Fact]
-    public async Task CambiarUsernameActualizaSoloAlUsuarioDelIdAutenticado()
+    public async Task QueCambiarUsernameActualiceSoloAlUsuarioDelIdAutenticado()
     {
         var servicio = CrearServicio();
         var perfil = await servicio.CambiarUsernamePropioAsync(7, " nuevo ");
@@ -36,7 +36,7 @@ public sealed class PerfilEdicionTests
     }
 
     [Fact]
-    public async Task CambiarUsernameRechazaUnoOcupadoSinGuardar()
+    public async Task QueCambiarUsernameRechaceUnoOcupadoSinGuardar()
     {
         var servicio = CrearServicio();
         _usuarios.Setup(r => r.ObtenerPorUsernameAsync("ocupado", It.IsAny<CancellationToken>()))
@@ -49,7 +49,7 @@ public sealed class PerfilEdicionTests
     }
 
     [Fact]
-    public async Task CambiarFotoGuardaUrlDevueltaPorAlmacenamiento()
+    public async Task QueCambiarFotoGuardeUrlDevueltaPorAlmacenamiento()
     {
         var servicio = CrearServicio();
         _fotos.Setup(f => f.SubirAsync(It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
@@ -66,7 +66,7 @@ public sealed class PerfilEdicionTests
     }
 
     [Fact]
-    public async Task CambiarFotoRechazaContenidoDisfrazadoSinSubirlo()
+    public async Task QueCambiarFotoRechaceContenidoDisfrazadoSinSubirlo()
     {
         var servicio = CrearServicio();
         using var archivo = new MemoryStream("not an image"u8.ToArray());

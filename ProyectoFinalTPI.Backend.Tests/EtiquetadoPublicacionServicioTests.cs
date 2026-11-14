@@ -158,6 +158,55 @@ public class EtiquetadoPublicacionServicioTests
 
     #endregion
 
+    #region Validación de Autor y Desetiquetado
+
+    [Fact]
+    public async Task QueEtiquetarAutorASiMismoLanceInvalidOperationException()
+    {
+        //Arrange
+        const int publicacionId = 25;
+        const int autorId = 10;
+
+        _publicacionRepositorioMock
+            .Setup(r => r.ExistePublicacionVisible(publicacionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        _publicacionRepositorioMock
+            .Setup(r => r.ObtenerPorId(publicacionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ProyectoFinalTPI.Backend.Entidades.Publicacion { Id = publicacionId, UsuarioId = autorId });
+
+        //Act & Assert
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _servicio.EtiquetarUsuarios(publicacionId, new[] { autorId }));
+
+        Assert.Equal("El autor de la publicación no puede etiquetarse a sí mismo.", ex.Message);
+    }
+
+    [Theory]
+    [InlineData(0, 10)]
+    [InlineData(-1, 10)]
+    [InlineData(25, 0)]
+    [InlineData(25, -1)]
+    public async Task QueDesetiquetarConIdsInvalidosLanceArgumentException(int publicacionId, int usuarioId)
+    {
+        //Act & Assert
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            _servicio.DesetiquetarUsuario(publicacionId, usuarioId));
+    }
+
+    [Fact]
+    public async Task QueCompletarEtiquetasConColeccionVaciaRetorneSinConsultarRepositorios()
+    {
+        //Act
+        await _servicio.CompletarEtiquetas(Array.Empty<ProyectoFinalTPI.Backend.Dtos.Publicacion.PublicacionDetalleDto>());
+
+        //Assert
+        _usuarioRepositorioMock.Verify(r => r.ObtenerUsuariosPorIdsAsync(It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()), Times.Never);
+        _neo4jDriverMock.VerifyNoOtherCalls();
+    }
+
+    #endregion
+
     #region Helpers Privados
 
     private void ConfigurarNeo4j(int relacionesCreadas, Action<string, object>? onRun = null)

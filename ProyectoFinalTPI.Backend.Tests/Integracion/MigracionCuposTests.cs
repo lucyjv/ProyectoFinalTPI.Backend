@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.DependencyInjection;
@@ -12,7 +12,7 @@ namespace ProyectoFinalTPI.Backend.Tests.Integracion;
 public class MigracionCuposTests(PostgisFixture postgres) : IClassFixture<PostgisFixture>
 {
     [Fact]
-    public async Task LaMigracionCuentaLosRecuerdosPreviosIncluidosOcultosSinContarCitas()
+    public async Task QueLaMigracionCuenteLosRecuerdosPreviosIncluidosOcultosSinContarCitas()
     {
         await using var factory = new PublicacionesApiFactory(postgres);
         using var cliente = factory.CreateClient();

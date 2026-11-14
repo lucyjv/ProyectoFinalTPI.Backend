@@ -37,4 +37,33 @@ public class MultimediaServicioTests
     }
 
     #endregion
+
+    #region Validación de Configuración
+
+    [Theory]
+    [InlineData(null, "key", "secret")]
+    [InlineData("name", null, "secret")]
+    [InlineData("name", "key", null)]
+    [InlineData("", "", "")]
+    public async Task QueSubirAsyncSinConfiguracionCloudinaryLanceInvalidOperationException(
+        string? cloudName, string? apiKey, string? apiSecret)
+    {
+        //Arrange
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(
+            new Dictionary<string, string?>
+            {
+                ["Cloudinary:CloudName"] = cloudName,
+                ["Cloudinary:ApiKey"] = apiKey,
+                ["Cloudinary:ApiSecret"] = apiSecret
+            }).Build();
+        var servicio = new MultimediaServicio(configuration);
+
+        //Act & Assert
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            servicio.SubirAsync(null, null, "https://ejemplo.com/imagen.png", MultimediaEnum.Foto));
+
+        Assert.Contains("Para subir archivos configurá Cloudinary:CloudName", ex.Message);
+    }
+
+    #endregion
 }
