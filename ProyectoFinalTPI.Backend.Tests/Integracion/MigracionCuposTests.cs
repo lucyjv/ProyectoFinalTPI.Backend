@@ -33,7 +33,7 @@ public class MigracionCuposTests(PostgisFixture postgres) : IClassFixture<Postgi
             PublicacionOriginalId = id == 104 ? 101 : null
         });
         await db.SaveChangesAsync();
-        var anterior = db.Database.GetMigrations().Last(m => !m.EndsWith("AplicarCategoriasYAdjuntos"));
+        var anterior = db.Database.GetMigrations().TakeWhile(m => !m.EndsWith("AplicarCategoriasYAdjuntos")).Last();
         var migrador = db.Database.GetService<IMigrator>();
         await migrador.MigrateAsync(anterior);
         await migrador.MigrateAsync();
