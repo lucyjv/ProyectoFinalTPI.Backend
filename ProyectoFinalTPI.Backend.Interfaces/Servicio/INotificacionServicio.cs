@@ -36,8 +36,25 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Servicio
         /// <param name="usuarioDestinatarioId">Autor de la publicación.</param>
         /// <param name="publicacionId">Publicación que recibió la puntuación.</param>
         /// <param name="puntuadorId">Usuario que puntuó.</param>
+        /// <param name="puntaje">Valor de la puntuación otorgada (opcional).</param>
         Task NotificarPuntuacionEnPublicacionAsync(
-            int usuarioDestinatarioId, int publicacionId, int puntuadorId,
+            int usuarioDestinatarioId, int publicacionId, int puntuadorId, int? puntaje = null,
+            CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Notifica al autor de una publicación que recibió un Me Gusta / Like.
+        /// Solo se genera una notificación por publicación mientras no haya sido leída.
+        /// </summary>
+        Task NotificarMeGustaPublicacionAsync(
+            int usuarioDestinatarioId, int publicacionId, int usuarioQueDioLikeId,
+            CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Notifica al autor de una publicación que su recuerdo fue compartido / reposteado.
+        /// Solo se genera una notificación por publicación mientras no haya sido leída.
+        /// </summary>
+        Task NotificarCompartirPublicacionAsync(
+            int usuarioDestinatarioId, int publicacionId, int reposteadorId,
             CancellationToken cancellationToken = default);
 
         /// <summary>

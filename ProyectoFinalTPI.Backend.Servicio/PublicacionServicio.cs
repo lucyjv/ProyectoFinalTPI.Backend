@@ -68,6 +68,13 @@ namespace ProyectoFinalTPI.Backend.Servicio
             await ValidarInteraccionConPublicacion(publicacionId, usuarioId, cancellationToken);
             await _publicacionRepositorio.CrearLike(publicacionId, usuarioId, cancellationToken);
 
+            var publicacion = await _publicacionRepositorio.ObtenerPorId(publicacionId, cancellationToken);
+            if (publicacion != null && publicacion.UsuarioId != usuarioId)
+            {
+                await _notificacionServicio.NotificarMeGustaPublicacionAsync(
+                    publicacion.UsuarioId, publicacionId, usuarioId, cancellationToken);
+            }
+
             //vuelve a consultar a Neo4j para saber camo quedo esa publicacion (cantidad de likes, quien le dio MG) y arma el DTO
             return await _publicacionRepositorio.ObtenerEstadoLike(publicacionId, usuarioId, cancellationToken);
         }
@@ -222,6 +229,11 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
             var targetId = original.PublicacionOriginalId ?? original.Id;
             await _publicacionRepositorio.CrearRepost(targetId, usuarioId, cancellationToken);
+            if (original.UsuarioId != usuarioId)
+            {
+                await _notificacionServicio.NotificarCompartirPublicacionAsync(
+                    original.UsuarioId, targetId, usuarioId, cancellationToken);
+            }
             await VerificacionLogroCompartir(usuarioId, cancellationToken);
             return await _publicacionRepositorio.ObtenerEstadoRepost(targetId, usuarioId, cancellationToken);
         }
@@ -885,7 +897,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
             if (publicacion != null && publicacion.UsuarioId != usuarioId)
             {
                 await _notificacionServicio.NotificarPuntuacionEnPublicacionAsync(
-                    publicacion.UsuarioId, publicacionId, usuarioId, cancellationToken);
+                    publicacion.UsuarioId, publicacionId, usuarioId, puntaje, cancellationToken);
             }
         }
         private Task ActualizarCategoriaPorRecuerdo(

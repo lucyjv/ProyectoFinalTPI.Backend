@@ -1,4 +1,4 @@
-﻿using Moq;
+using Moq;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Entidades.Categorias;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
@@ -12,7 +12,7 @@ public class LimitesCategoriaTests
     [Theory]
     [InlineData("2026-11-15T02:59:59Z", "2026-11-08")]
     [InlineData("2026-11-15T03:00:00Z", "2026-11-15")]
-    public async Task LaSemanaCambiaElDomingoALasCeroDeArgentina(string ahora, string semana)
+    public async Task QueLaSemanaCambieElDomingoALasCeroDeArgentina(string ahora, string semana)
     {
         var repo = Preparar(ReputacionEnum.Errante);
         var servicio = new CategoriaServicio(repo.Object, new RelojCategoria(DateTimeOffset.Parse(ahora)));
@@ -22,7 +22,7 @@ public class LimitesCategoriaTests
     }
 
     [Fact]
-    public async Task UnaCuentaQueYaPublicoNoVuelveAErranteAunqueBorreSuRecuerdo()
+    public async Task QueUnaCuentaQueYaPublicoNoVuelvaAErranteAunqueBorreSuRecuerdo()
     {
         var repo = Preparar(ReputacionEnum.Errante);
         repo.Setup(r => r.TieneRecuerdos(1, default)).ReturnsAsync(true);
@@ -35,7 +35,7 @@ public class LimitesCategoriaTests
     [InlineData(ReputacionEnum.Nostalgico, 1)]
     [InlineData(ReputacionEnum.Aedo, 1)]
     [InlineData(ReputacionEnum.Mnnemónide, 4)]
-    public async Task LaCantidadDeAdjuntosDependeDeLaCategoria(ReputacionEnum reputacion, int maximo)
+    public async Task QueLaCantidadDeAdjuntosDependaDeLaCategoria(ReputacionEnum reputacion, int maximo)
     {
         var servicio = new CategoriaServicio(Preparar(reputacion).Object);
         Assert.Equal(maximo, (await servicio.ObtenerEstado(1)).MaximoAdjuntos);
@@ -45,7 +45,7 @@ public class LimitesCategoriaTests
     }
 
     [Fact]
-    public async Task ErrantePuedePublicarElPrimeroPeroNoComentarNiPuntuarNiRepostear()
+    public async Task QueErrantePuedaPublicarElPrimeroPeroNoComentarNiPuntuarNiRepostear()
     {
         var servicio = new CategoriaServicio(Preparar(ReputacionEnum.Errante).Object);
         await servicio.ValidarCreacion(1, 0, false);
@@ -56,7 +56,7 @@ public class LimitesCategoriaTests
     [Theory]
     [InlineData(ReputacionEnum.Nostalgico, false)]
     [InlineData(ReputacionEnum.Aedo, true)]
-    public async Task LaMusicaSePermiteDesdeAedo(ReputacionEnum reputacion, bool permitido)
+    public async Task QueLaMusicaSePermitaDesdeAedo(ReputacionEnum reputacion, bool permitido)
     {
         var servicio = new CategoriaServicio(Preparar(reputacion).Object);
         if (permitido) await servicio.ValidarCreacion(1, 0, true);
@@ -64,7 +64,7 @@ public class LimitesCategoriaTests
     }
 
     [Fact]
-    public async Task ElCupoAgotadoSeRechazaAntesDeGuardar()
+    public async Task QueElCupoAgotadoSeRechaceAntesDeGuardar()
     {
         var repo = Preparar(ReputacionEnum.Nostalgico);
         repo.Setup(r => r.ObtenerConsumo(1, It.IsAny<DateOnly>(), default)).ReturnsAsync(5);

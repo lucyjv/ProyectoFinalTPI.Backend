@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -19,7 +19,7 @@ public class LimitesYAdjuntosIntegracionTests(PostgisFixture postgres, Neo4jLogr
     : IClassFixture<PostgisFixture>, IClassFixture<Neo4jLogrosFixture>
 {
     [Fact]
-    public async Task CincoIncluyenElPrimeroYElGrupo_BorrarNoDevuelveCupo_ElDomingoSeRenueva()
+    public async Task QueCincoIncluyanElPrimeroYElGrupo_BorrarNoDevuelvaCupo_ElDomingoSeRenueve()
     {
         var reloj = new RelojCategoria(DateTimeOffset.Parse("2026-11-15T02:59:59Z"));
         await using var factory = new PublicacionesApiFactory(postgres, neo4j.Driver)
@@ -50,7 +50,7 @@ public class LimitesYAdjuntosIntegracionTests(PostgisFixture postgres, Neo4jLogr
     }
 
     [Fact]
-    public async Task DoceCreacionesConcurrentesNoSuperanElCupoDeCinco()
+    public async Task QueDoceCreacionesConcurrentesNoSuperenElCupoDeCinco()
     {
         await using var factory = new PublicacionesApiFactory(postgres, neo4j.Driver);
         using var client = factory.CreateClient();
@@ -67,7 +67,7 @@ public class LimitesYAdjuntosIntegracionTests(PostgisFixture postgres, Neo4jLogr
     }
 
     [Fact]
-    public async Task MnemosineGuardaCuatroAdjuntosMixtosYMusica_NostalgicoRechazaDos_YCincoSonInvalidos()
+    public async Task QueMnemosineGuardeCuatroAdjuntosMixtosYMusica_NostalgicoRechaceDos_YCincoSonInvalidos()
     {
         await using var factory = new PublicacionesApiFactory(postgres, neo4j.Driver);
         using var client = factory.CreateClient();
@@ -97,7 +97,7 @@ public class LimitesYAdjuntosIntegracionTests(PostgisFixture postgres, Neo4jLogr
     }
 
     [Fact]
-    public async Task TreintaPuntosDanAedoYSieteRecuerdos_LikesRepostsYEtiquetasNoConsumenCupo()
+    public async Task QueTreintaPuntosDanAedoYSieteRecuerdos_LikesRepostsYEtiquetasNoConsumenCupo()
     {
         await using var factory = new PublicacionesApiFactory(postgres, neo4j.Driver);
         using var client = factory.CreateClient();
@@ -124,7 +124,7 @@ public class LimitesYAdjuntosIntegracionTests(PostgisFixture postgres, Neo4jLogr
     }
 
     [Fact]
-    public async Task ParaVosPriorizaLaCategoriaDelAutorEnLaVersionActualDelFeed()
+    public async Task QueParaVosPrioriceLaCategoriaDelAutorEnLaVersionActualDelFeed()
     {
         await using (var session = neo4j.Driver.AsyncSession())
             await (await session.RunAsync("MATCH (n) DETACH DELETE n")).ConsumeAsync();
@@ -143,7 +143,7 @@ public class LimitesYAdjuntosIntegracionTests(PostgisFixture postgres, Neo4jLogr
     }
 
     [Fact]
-    public async Task ErranteConservaLikesYGuardados_PeroComentarPuntuarYCompartirRequierenElPrimerRecuerdo()
+    public async Task QueErranteConserveLikesYGuardados_PeroComentarPuntuarYCompartirRequieranElPrimerRecuerdo()
     {
         await using var factory = new PublicacionesApiFactory(postgres, neo4j.Driver);
         using var client = factory.CreateClient();
@@ -170,7 +170,7 @@ public class LimitesYAdjuntosIntegracionTests(PostgisFixture postgres, Neo4jLogr
     }
 
     [Fact]
-    public async Task CrearRequiereSesionYUsaElAutorAutenticadoAunqueElFormularioIndiqueOtro()
+    public async Task QueCrearRequieraSesionYUseElAutorAutenticadoAunqueElFormularioIndiqueOtro()
     {
         await using var factory = new PublicacionesApiFactory(postgres, neo4j.Driver);
         using var client = factory.CreateClient();

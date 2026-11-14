@@ -1,4 +1,4 @@
-﻿using ProyectoFinalTPI.Backend.Dtos.Usuario;
+using ProyectoFinalTPI.Backend.Dtos.Usuario;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Entidades.Categorias;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
@@ -6,7 +6,10 @@ using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 
 namespace ProyectoFinalTPI.Backend.Servicio;
 
-public sealed class CategoriaServicio(ICategoriaRepositorio progreso, TimeProvider? reloj = null) : ICategoriaServicio
+public sealed class CategoriaServicio(
+    ICategoriaRepositorio progreso,
+    TimeProvider? reloj = null,
+    INotificacionServicio? notificaciones = null) : ICategoriaServicio
 {
     private readonly TimeProvider reloj = reloj ?? TimeProvider.System;
     private const int PuntosParaAedo = 30;
@@ -32,7 +35,7 @@ public sealed class CategoriaServicio(ICategoriaRepositorio progreso, TimeProvid
         CategoriaCuenta categoria, PermisoCuenta permiso) =>
         BuscarDefinicion(categoria).Permisos.Contains(permiso);
 
-    public Task ActualizarPorRecuerdo(
+    public async Task ActualizarPorRecuerdo(
         Publicacion? publicacion,
         int puntosRecibidos,
         CancellationToken ct = default)
@@ -40,12 +43,18 @@ public sealed class CategoriaServicio(ICategoriaRepositorio progreso, TimeProvid
         if (publicacion is null ||
             publicacion.EstaOculto ||
             publicacion.PublicacionOriginalId.HasValue)
-            return Task.CompletedTask;
+            return;
 
         var destino = ResolverAscenso(puntosRecibidos);
 
-        return progreso.PromoverHasta(
+        var ascendio = await progreso.PromoverHasta(
             publicacion.UsuarioId, destino, ct);
+
+        if (ascendio && notificaciones is not null)
+        {
+            await notificaciones.NotificarAscensoCategoriaAsync(
+                publicacion.UsuarioId, ct);
+        }
     }
 
     public async Task<EstadoCategoriaDto> ObtenerEstado(int usuarioId, CancellationToken ct = default)

@@ -50,6 +50,11 @@ namespace ProyectoFinalTPI.Backend.Entidades
         /// </summary>
         public int? EmisorId { get; set; }
         public Usuario? Emisor { get; set; }
+
+        /// <summary>
+        /// Puntaje otorgado en caso de notificación por puntuación de recuerdo.
+        /// </summary>
+        public int? Puntaje { get; set; }
     }
 
     public enum TipoNotificacion
@@ -61,6 +66,8 @@ namespace ProyectoFinalTPI.Backend.Entidades
         MensajesCorreo,
         MensajeChat,
         Administrativa,
-        EtiquetadoEnPublicacion
+        EtiquetadoEnPublicacion,
+        MeGustaPublicacion,
+        CompartirPublicacion
     }
 }
