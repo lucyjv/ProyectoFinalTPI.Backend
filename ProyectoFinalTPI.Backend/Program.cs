@@ -206,6 +206,8 @@ else
 
 // Auth
 builder.Services.AddScoped<IAuthServicio, AuthServicio>();
+builder.Services.AddSingleton<ProyectoFinalTPI.Backend.IGoogleIdentityVerifier, ProyectoFinalTPI.Backend.GoogleIdentityVerifier>();
+builder.Services.AddDataProtection();
 builder.Services.AddScoped<IProcesadorRecuperacionContrasena>(p =>
     (AuthServicio)p.GetRequiredService<IAuthServicio>());
 builder.Services.AddScoped<IRecuperacionContrasenaRepositorio, RecuperacionContrasenaRepositorio>();

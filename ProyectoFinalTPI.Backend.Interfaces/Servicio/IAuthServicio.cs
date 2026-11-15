@@ -13,6 +13,8 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Servicio
         /// <summary>
         /// Autentica un usuario. Lanza UnauthorizedAccessException si las credenciales son incorrectas.
         /// </summary>
+        Task<ResultadoAutenticacionDto?> GoogleAsync(IdentidadGoogle identidad, string? username, string? userAgent = null, CancellationToken cancellationToken = default);
+
         Task<ResultadoAutenticacionDto> LoginAsync(LoginDto dto, string? userAgent = null, CancellationToken cancellationToken = default);
 
         Task<ResultadoAutenticacionDto> RenovarAsync(string refreshToken, CancellationToken cancellationToken = default);

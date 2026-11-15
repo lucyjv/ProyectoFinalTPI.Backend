@@ -16,6 +16,13 @@ namespace ProyectoFinalTPI.Backend.Repositorio
             _context = context;
         }
 
+        public Task<Usuario?> ObtenerPorGoogleAsync(string subject, CancellationToken cancellationToken = default) =>
+            _context.Usuarios.FirstOrDefaultAsync(u => u.GoogleSubject == subject, cancellationToken);
+
+        public async Task<bool> VincularGoogleAsync(int usuarioId, string subject, CancellationToken cancellationToken = default) =>
+            await _context.Usuarios.Where(u => u.Id == usuarioId && u.PuedeVincularGoogle && u.GoogleSubject == null && !u.EstaEliminado)
+                .ExecuteUpdateAsync(s => s.SetProperty(u => u.GoogleSubject, subject), cancellationToken) == 1;
+
         public async Task<Usuario?> ObtenerPorIdAsync(int id)
         {
             return await _context.Usuarios.FirstOrDefaultAsync(u => u.Id == id && !u.EstaEliminado);

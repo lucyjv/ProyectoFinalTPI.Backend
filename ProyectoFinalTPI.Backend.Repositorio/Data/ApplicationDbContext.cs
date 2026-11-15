@@ -125,6 +125,9 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
                 .HasValue<Usuario_Marca>("Usuario_Marca")
                 .HasValue<Moderador>("Moderador");
 
+            modelBuilder.Entity<Usuario>().Property(u => u.GoogleSubject).HasMaxLength(255);
+            modelBuilder.Entity<Usuario>().HasIndex(u => u.GoogleSubject).IsUnique();
+
             modelBuilder.Entity<Usuario>()
                 .HasIndex(usuario => usuario.Email)
                 .IsUnique();

@@ -5,6 +5,9 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Repositorio
 {
     public interface IUsuarioRepositorio
     {
+        Task<Usuario?> ObtenerPorGoogleAsync(string subject, CancellationToken cancellationToken = default);
+        Task<bool> VincularGoogleAsync(int usuarioId, string subject, CancellationToken cancellationToken = default);
+
         Task<Usuario?> ObtenerPorIdAsync(int id);
 
         Task<bool> ExisteUsuario(int id, CancellationToken cancellationToken = default);

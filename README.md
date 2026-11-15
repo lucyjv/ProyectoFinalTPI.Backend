@@ -1041,3 +1041,5 @@ Método	|   Ruta	|   Descripción
 ## Monitoreo
 
 Configuración, activación en Azure, consultas y validación: [Application Insights](docs/APPLICATION_INSIGHTS.md).
+
+Acceso con Google: configuración, migración y reglas en [docs/GOOGLE_LOGIN.md](docs/GOOGLE_LOGIN.md).

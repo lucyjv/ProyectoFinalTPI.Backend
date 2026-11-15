@@ -1,3 +1,6 @@
+using Microsoft.AspNetCore.DataProtection;
+using System.Security.Cryptography;
+using Microsoft.EntityFrameworkCore;
 using ProyectoFinalTPI.Backend.Mappings;
 using Swashbuckle.AspNetCore.Annotations;
 using Microsoft.AspNetCore.Authorization;
@@ -26,6 +29,63 @@ public class AuthController : ControllerBase
         _authServicio = authServicio;
         _environment = environment;
         _usuarioRepositorio = usuarioRepositorio;
+    }
+
+    private const string GoogleCookie = "__Host-Nostalgiar.Google";
+
+    [SwaggerOperation(Summary = "Obtiene la configuración pública y un desafío temporal para Google.")]
+    [HttpGet("google/config")]
+    [EnableRateLimiting("auth-intentos")]
+    public IActionResult GoogleConfig([FromServices] IConfiguration configuration,
+        [FromServices] IDataProtectionProvider protection)
+    {
+        var clientId = configuration["Google:ClientId"];
+        Response.Headers.CacheControl = "no-store";
+        if (string.IsNullOrWhiteSpace(clientId)) return Ok(new { habilitado = false });
+        var nonce = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+        var protector = protection.CreateProtector("GoogleLogin.v1").ToTimeLimitedDataProtector();
+        Response.Cookies.Append(GoogleCookie, protector.Protect(nonce, TimeSpan.FromMinutes(10)),
+            CookieOptions(DateTime.UtcNow.AddMinutes(10)));
+        return Ok(new { habilitado = true, clientId, nonce });
+    }
+
+    [SwaggerOperation(Summary = "Valida la identidad de Google e inicia sesión o solicita un username.")]
+    [SwaggerResponse(StatusCodes.Status401Unauthorized, "Identidad o desafío de Google inválido o expirado.")]
+    [SwaggerResponse(StatusCodes.Status409Conflict, "El correo o username ya está registrado con otro método.")]
+    [HttpPost("google")]
+    [EnableRateLimiting("auth-intentos")]
+    public async Task<IActionResult> Google([FromBody] GoogleLoginDto dto,
+        [FromServices] ProyectoFinalTPI.Backend.IGoogleIdentityVerifier verifier,
+        [FromServices] IDataProtectionProvider protection, CancellationToken cancellationToken)
+    {
+        if (!EsSolicitudDelFrontend()) return BadRequest(new { mensaje = "Solicitud de autenticación inválida." });
+        Response.Headers.CacheControl = "no-store";
+        string nonce;
+        try
+        {
+            if (!Request.Cookies.TryGetValue(GoogleCookie, out var challenge))
+                return Unauthorized(new { mensaje = "El acceso con Google venció. Recargá la página para intentar nuevamente." });
+            nonce = protection.CreateProtector("GoogleLogin.v1").ToTimeLimitedDataProtector().Unprotect(challenge);
+        }
+        catch (CryptographicException)
+        {
+            return Unauthorized(new { mensaje = "El acceso con Google venció. Recargá la página para intentar nuevamente." });
+        }
+        try
+        {
+            var identidad = await verifier.VerificarAsync(dto.Credential, nonce, cancellationToken);
+            var resultado = await _authServicio.GoogleAsync(identidad, dto.Username, UserAgent(), cancellationToken);
+            if (resultado is null) return Ok(new { requiereUsername = true });
+            EscribirRefreshCookie(resultado);
+            Response.Cookies.Delete(GoogleCookie, CookieOptions(DateTimeOffset.UnixEpoch.UtcDateTime));
+            return Ok(resultado.Respuesta);
+        }
+        catch (ProyectoFinalTPI.Backend.GoogleNoDisponibleException ex)
+        { return StatusCode(StatusCodes.Status503ServiceUnavailable, new { mensaje = ex.Message }); }
+        catch (UnauthorizedAccessException ex) { return Unauthorized(new { mensaje = ex.Message }); }
+        catch (InvalidOperationException ex) { return Conflict(new { mensaje = ex.Message }); }
+        catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: "23505" })
+        { return Conflict(new { mensaje = "El correo o el nombre de usuario ya está en uso. Volvé a intentar." }); }
     }
 
     [HttpPost("registro")]

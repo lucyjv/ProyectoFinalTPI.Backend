@@ -63,10 +63,55 @@ public class AuthServicio : IAuthServicio, IProcesadorRecuperacionContrasena
         CancellationToken cancellationToken = default)
     {
         var usuario = await ObtenerUsuarioParaLogin(dto.Email, cancellationToken);
+        if (usuario.SoloGoogle) throw new UnauthorizedAccessException("Este correo está registrado con Google. Continuá con Google.");
         await ValidarCredenciales(usuario, dto.Contraseña, cancellationToken);
 
         return await CrearSesionAsync(usuario, userAgent, cancellationToken);
     }
+    public async Task<ResultadoAutenticacionDto?> GoogleAsync(
+        IdentidadGoogle identidad, string? username, string? userAgent = null, CancellationToken cancellationToken = default)
+    {
+        var usuario = await _usuarioRepositorio.ObtenerPorGoogleAsync(identidad.Subject, cancellationToken);
+        if (usuario is not null)
+        {
+            if (!CuentaHabilitada(usuario, DateTime.UtcNow))
+                throw new UnauthorizedAccessException("La cuenta no está habilitada.");
+            return await CrearSesionAsync(usuario, userAgent, cancellationToken);
+        }
+
+        var email = NormalizarEmail(identidad.Email);
+        usuario = await _usuarioRepositorio.ObtenerPorEmailAsync(email, cancellationToken);
+        if (usuario is not null)
+        {
+            if (!CuentaHabilitada(usuario, DateTime.UtcNow))
+                throw new UnauthorizedAccessException("La cuenta no está habilitada.");
+            if (!usuario.PuedeVincularGoogle || usuario.SoloGoogle || !identidad.CorreoAcreditado || usuario.GoogleSubject is not null)
+                throw new InvalidOperationException("Este correo ya está registrado con otro método de acceso. Iniciá sesión con el método original.");
+            if (!await _usuarioRepositorio.VincularGoogleAsync(usuario.Id, identidad.Subject, cancellationToken))
+            {
+                var vinculada = await _usuarioRepositorio.ObtenerPorGoogleAsync(identidad.Subject, cancellationToken);
+                if (vinculada?.Id != usuario.Id)
+                    throw new InvalidOperationException("No se pudo vincular esta cuenta. Volvé a intentar.");
+            }
+            // ExecuteUpdate bypasses EF tracking. Keep the loaded entity in sync before
+            // daily-login achievements save it again through UsuarioServicio.
+            usuario.GoogleSubject = identidad.Subject;
+            return await CrearSesionAsync(usuario, userAgent, cancellationToken);
+        }
+
+        // A successful Google authentication is not registration consent: ask for a username first.
+        if (string.IsNullOrWhiteSpace(username)) return null;
+        username = username.Trim();
+        if (username.Length is < 3 or > 50)
+            throw new ArgumentException("El nombre debe tener entre 3 y 50 caracteres.");
+        if (await _usuarioRepositorio.ExistePorUsernameAsync(username, cancellationToken))
+            throw new InvalidOperationException("Ya existe una cuenta registrada con ese nombre de usuario.");
+        usuario = new Usuario_Personal { Username = username, Email = email, GoogleSubject = identidad.Subject,
+            SoloGoogle = true, PuedeVincularGoogle = false, Contraseña = "", FechaCreacion = DateTime.UtcNow };
+        await _usuarioRepositorio.AgregarAsync(usuario, cancellationToken);
+        return await CrearSesionAsync(usuario, userAgent, cancellationToken);
+    }
+
     public async Task<ResultadoAutenticacionDto> RenovarAsync(
         string refreshToken,
         CancellationToken cancellationToken = default)
@@ -109,7 +154,7 @@ public class AuthServicio : IAuthServicio, IProcesadorRecuperacionContrasena
         if (!_recuperacionOptions.Habilitado) return null;
         var usuario = await _usuarioRepositorio.ObtenerPorEmailAsync(NormalizarEmail(email), cancellationToken);
         var ahora = _reloj.GetUtcNow().UtcDateTime;
-        if (!CuentaHabilitada(usuario, ahora)) return null;
+        if (!CuentaHabilitada(usuario, ahora) || usuario!.SoloGoogle) return null;
 
         var recuperacion = new RecuperacionContrasena
         {
@@ -139,7 +184,7 @@ public class AuthServicio : IAuthServicio, IProcesadorRecuperacionContrasena
         var ahora = _reloj.GetUtcNow().UtcDateTime;
 
         if (recuperacion is null || recuperacion.FechaUso is not null || recuperacion.FechaRevocacion is not null
-            || recuperacion.FechaExpiracion <= ahora || !CuentaHabilitada(recuperacion.Usuario, ahora)
+            || recuperacion.FechaExpiracion <= ahora || !CuentaHabilitada(recuperacion.Usuario, ahora) || recuperacion.Usuario.SoloGoogle
             || !HashCoincide(dto.Token, recuperacion.TokenHash))
             throw EnlaceNoValido();
 
@@ -265,8 +310,11 @@ public class AuthServicio : IAuthServicio, IProcesadorRecuperacionContrasena
     private async Task<Usuario_Personal> PrepararUsuarioParaRegistro(RegistroDto dto, CancellationToken cancellationToken)
     {
         var email = NormalizarEmail(dto.Email);
-        if (await _usuarioRepositorio.ExistePorEmailAsync(email, cancellationToken))
-            throw new InvalidOperationException("Ya existe una cuenta registrada con ese email.");
+        var existente = await _usuarioRepositorio.ObtenerPorEmailAsync(email, cancellationToken);
+        if (existente is not null || await _usuarioRepositorio.ExistePorEmailAsync(email, cancellationToken))
+            throw new InvalidOperationException(existente?.SoloGoogle == true
+                ? "Este correo está registrado con Google. Continuá con Google."
+                : "Ya existe una cuenta registrada con ese email.");
 
         var username = dto.Username.Trim();
         if (await _usuarioRepositorio.ExistePorUsernameAsync(username, cancellationToken))
