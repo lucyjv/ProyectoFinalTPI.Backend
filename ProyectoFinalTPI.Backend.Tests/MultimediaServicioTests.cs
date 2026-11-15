@@ -59,8 +59,9 @@ public class MultimediaServicioTests
         var servicio = new MultimediaServicio(configuration);
 
         //Act & Assert
+        using var archivo = new MemoryStream(new byte[] { 1, 2, 3 });
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            servicio.SubirAsync(null, null, "https://ejemplo.com/imagen.png", MultimediaEnum.Foto));
+            servicio.SubirAsync(archivo, "imagen.png", null, MultimediaEnum.Foto));
 
         Assert.Contains("Para subir archivos configurá Cloudinary:CloudName", ex.Message);
     }

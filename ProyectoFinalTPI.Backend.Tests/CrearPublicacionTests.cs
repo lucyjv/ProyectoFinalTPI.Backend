@@ -81,7 +81,7 @@ public class CrearPublicacionTests
             services.RemoveAll<IMultimediaServicio>();
             services.AddSingleton<IMultimediaServicio>(new MultimediaServicio(new ConfigurationBuilder().Build()));
         }));
-        using var client = api.CreateClient();
+        using var client = AutenticacionPruebas.CrearCliente(api, 1);
         using var scope = api.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         db.Usuarios.Add(new Usuario_Personal { Id = 1, Username = "test", Email = "test@example.com" });
