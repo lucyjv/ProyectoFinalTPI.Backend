@@ -29,7 +29,7 @@ public class CrearPublicacionTests
     {
         //Arrange
         await using var factory = new ApiFactory();
-        using var client = factory.CreateClient();
+        using var client = AutenticacionPruebas.CrearCliente(factory, 1);
         await factory.Seed();
         using var form = Form(archivo: archivo, overrides: new() { ["TipoMultimedia"] = tipo });
 
@@ -117,7 +117,7 @@ public class CrearPublicacionTests
     {
         //Arrange
         await using var factory = new ApiFactory();
-        using var client = factory.CreateClient();
+        using var client = AutenticacionPruebas.CrearCliente(factory, 1);
         await factory.Seed();
         using var form = Form(overrides: new() { [campo] = valor });
 
@@ -135,7 +135,7 @@ public class CrearPublicacionTests
     {
         //Arrange
         await using var factory = new ApiFactory();
-        using var client = factory.CreateClient();
+        using var client = AutenticacionPruebas.CrearCliente(factory, 1);
         using var form = Form(archivo: true, overrides: new() { ["UrlArchivo"] = "https://example.com/a.jpg" });
 
         //Act
@@ -151,7 +151,7 @@ public class CrearPublicacionTests
     {
         //Arrange
         await using var factory = new ApiFactory();
-        using var client = factory.CreateClient();
+        using var client = AutenticacionPruebas.CrearCliente(factory, 1);
         using var form = Form();
 
         //Act
@@ -168,7 +168,7 @@ public class CrearPublicacionTests
     {
         //Arrange
         await using var factory = new ApiFactory();
-        using var client = factory.CreateClient();
+        using var client = AutenticacionPruebas.CrearCliente(factory, 1);
         await factory.Seed();
         factory.MediaFalla = true;
         using var form = Form();
@@ -194,7 +194,7 @@ public class CrearPublicacionTests
     {
         //Arrange
         await using var factory = new ApiFactory { RequerirMultimedia = requerida };
-        using var client = factory.CreateClient();
+        using var client = AutenticacionPruebas.CrearCliente(factory, 1);
         await factory.Seed();
         factory.MediaFalla = true;
         using var form = Form(sinMultimedia: true);
@@ -229,7 +229,7 @@ public class CrearPublicacionTests
     {
         //Arrange
         await using var factory = new ApiFactory { RequerirMultimedia = true };
-        using var client = factory.CreateClient();
+        using var client = AutenticacionPruebas.CrearCliente(factory, 1);
         await factory.Seed();
         using var form = Form(archivo: archivo);
 
@@ -246,7 +246,7 @@ public class CrearPublicacionTests
     {
         //Arrange
         await using var factory = new ApiFactory();
-        using var client = factory.CreateClient();
+        using var client = AutenticacionPruebas.CrearCliente(factory, 1);
         await factory.Seed();
         using var form = Form(sinMultimedia: true);
         form.Add(new ByteArrayContent(Array.Empty<byte>()), "Archivo", "vacio.jpg");
@@ -339,6 +339,7 @@ public class CrearPublicacionTests
             builder.UseEnvironment("Testing");
             builder.ConfigureServices(services =>
             {
+                AutenticacionPruebas.Registrar(services);
                 services.RemoveAll<DbContextOptions<ApplicationDbContext>>();
                 services.RemoveAll<IDbContextOptionsConfiguration<ApplicationDbContext>>();
                 var nombre = Guid.NewGuid().ToString();

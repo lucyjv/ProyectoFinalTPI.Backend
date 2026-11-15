@@ -6,6 +6,8 @@ namespace ProyectoFinalTPI.Backend.Dtos.Publicacion;
 public sealed class CaracteristicasFeedDto
 {
     public int Id { get; set; }
+    public ReputacionEnum? ReputacionAutor { get; set; }
+    public bool EsCuentaMarca { get; set; }
     public CategoriaEnum Categoria { get; set; }
     public DateTime FechaCreacion { get; set; }
     public double Latitud { get; set; }

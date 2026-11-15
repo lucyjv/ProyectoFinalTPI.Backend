@@ -11,7 +11,7 @@ namespace ProyectoFinalTPI.Backend.Tests.Integracion;
 public class LogrosMigracionesIntegracionTests(PostgisFixture postgres) : IClassFixture<PostgisFixture>
 {
     [Fact]
-    public async Task RetiraSoloLosTresLogrosYConservaUsuariosYLosOtrosDesbloqueos()
+    public async Task QueRetireSoloLosTresLogrosYConserveUsuariosYLosOtrosDesbloqueos()
     {
         var connection = new NpgsqlConnectionStringBuilder(postgres.ConnectionString)
         {

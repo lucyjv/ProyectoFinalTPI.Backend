@@ -445,6 +445,87 @@ public class NotificacionServicioTests
             It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    [Fact]
+    public async Task QueNotificarPuntuacionGuardePuntajeYLoMapeeADto()
+    {
+        //Arrange
+        _repositorioMock.Setup(r => r.ExisteNotificacionPendienteAsync(
+                It.IsAny<int>(), It.IsAny<TipoNotificacion>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        Notificacion? guardada = null;
+        _repositorioMock.Setup(r => r.GuardarAsync(It.IsAny<Notificacion>(), It.IsAny<CancellationToken>()))
+            .Callback<Notificacion, CancellationToken>((n, _) => guardada = n)
+            .Returns(Task.CompletedTask);
+
+        //Act
+        await _servicio.NotificarPuntuacionEnPublicacionAsync(
+            usuarioDestinatarioId: 10,
+            publicacionId: 42,
+            puntuadorId: 5,
+            puntaje: 5);
+
+        //Assert
+        Assert.NotNull(guardada);
+        Assert.Equal(5, guardada.Puntaje);
+        Assert.Equal(TipoNotificacion.PuntuacionEnPublicacion, guardada.Tipo);
+
+        _pushMock.Verify(p => p.EnviarAsync(
+            10,
+            It.Is<NotificacionDto>(d => d.Puntaje == 5 && d.Tipo == TipoNotificacion.PuntuacionEnPublicacion),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task QueNotificarMeGustaGuardeYEnvieNotificacion()
+    {
+        //Arrange
+        _repositorioMock.Setup(r => r.ExisteNotificacionPendienteAsync(
+                It.IsAny<int>(), It.IsAny<TipoNotificacion>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        //Act
+        await _servicio.NotificarMeGustaPublicacionAsync(
+            usuarioDestinatarioId: 10,
+            publicacionId: 42,
+            usuarioQueDioLikeId: 7);
+
+        //Assert
+        _repositorioMock.Verify(r => r.GuardarAsync(
+            It.Is<Notificacion>(n => n.Tipo == TipoNotificacion.MeGustaPublicacion && n.UsuarioDestinatarioId == 10 && n.PublicacionId == 42 && n.EmisorId == 7),
+            It.IsAny<CancellationToken>()), Times.Once);
+
+        _pushMock.Verify(p => p.EnviarAsync(
+            10,
+            It.Is<NotificacionDto>(d => d.Tipo == TipoNotificacion.MeGustaPublicacion && d.PublicacionId == 42),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task QueNotificarCompartirGuardeYEnvieNotificacion()
+    {
+        //Arrange
+        _repositorioMock.Setup(r => r.ExisteNotificacionPendienteAsync(
+                It.IsAny<int>(), It.IsAny<TipoNotificacion>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        //Act
+        await _servicio.NotificarCompartirPublicacionAsync(
+            usuarioDestinatarioId: 10,
+            publicacionId: 42,
+            reposteadorId: 8);
+
+        //Assert
+        _repositorioMock.Verify(r => r.GuardarAsync(
+            It.Is<Notificacion>(n => n.Tipo == TipoNotificacion.CompartirPublicacion && n.UsuarioDestinatarioId == 10 && n.PublicacionId == 42 && n.EmisorId == 8),
+            It.IsAny<CancellationToken>()), Times.Once);
+
+        _pushMock.Verify(p => p.EnviarAsync(
+            10,
+            It.Is<NotificacionDto>(d => d.Tipo == TipoNotificacion.CompartirPublicacion && d.PublicacionId == 42),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     #endregion
 
     #region Obtener Notificaciones

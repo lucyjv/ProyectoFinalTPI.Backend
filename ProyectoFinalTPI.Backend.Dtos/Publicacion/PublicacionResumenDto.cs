@@ -18,6 +18,8 @@ namespace ProyectoFinalTPI.Backend.Dtos.Publicacion
 
         public string UrlMultimedia { get; set; } = string.Empty;
         public MultimediaEnum TipoMultimedia { get; set; }
+        public List<AdjuntoPublicacionDto> Adjuntos { get; set; } = new();
+        public MusicaPublicacionDto? Musica { get; set; }
 
         public AutorResumenDto Autor { get; set; } = null!;
     }

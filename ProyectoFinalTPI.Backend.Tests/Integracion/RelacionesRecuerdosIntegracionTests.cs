@@ -85,7 +85,7 @@ public class RelacionesRecuerdosIntegracionTests(PostgisFixture postgres) : ICla
     }
 
     [Fact]
-    public async Task LugarYDia_RespetanMetrosFechaCompletaVisibilidadYNoSonTransitivos()
+    public async Task QueLugarYDia_RespetenMetrosFechaCompletaVisibilidadYNoSeanTransitivos()
     {
         await using var factory = new PublicacionesApiFactory(postgres);
         using var client = factory.CreateClient();
@@ -113,7 +113,7 @@ public class RelacionesRecuerdosIntegracionTests(PostgisFixture postgres) : ICla
     }
 
     [Fact]
-    public async Task Cursor_NoPierdeEmpatesYValidaContextoYParametros()
+    public async Task QueCursor_NoPierdaEmpatesYValideContextoYParametros()
     {
         await using var factory = new PublicacionesApiFactory(postgres);
         using var client = factory.CreateClient();
@@ -146,7 +146,7 @@ public class RelacionesRecuerdosIntegracionTests(PostgisFixture postgres) : ICla
     }
 
     [Fact]
-    public async Task OrigenOcultoInexistenteORepostDeOculto_NoExponeRelaciones()
+    public async Task QueOrigenOcultoInexistenteORepostDeOculto_NoExpongaRelaciones()
     {
         await using var factory = new PublicacionesApiFactory(postgres);
         using var client = factory.CreateClient();

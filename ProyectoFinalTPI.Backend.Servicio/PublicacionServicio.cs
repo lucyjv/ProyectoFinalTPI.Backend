@@ -31,6 +31,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
         private readonly ILogroServicio _logroServicio;
         private readonly OpcionesPublicacion _opcionesPublicacion;
         private readonly IResumenPublicacionConsulta? _resumenConsulta;
+        private readonly ICategoriaServicio? _categoriaServicio;
 
         public PublicacionServicio(
             IPublicacionRepositorio publicacionRepositorio,
@@ -41,7 +42,10 @@ namespace ProyectoFinalTPI.Backend.Servicio
             IOptions<FeedRecomendacionesOptions> opcionesFeed,
             INotificacionServicio notificacionServicio,
             ILogroServicio logroServicio,
-            IOptions<OpcionesPublicacion>? opcionesPublicacion = null, IResumenPublicacionConsulta? resumenConsulta = null, IProveedorRankingFeed? proveedorRanking = null)
+            IOptions<OpcionesPublicacion>? opcionesPublicacion = null, 
+            IResumenPublicacionConsulta? resumenConsulta = null, 
+            IProveedorRankingFeed? proveedorRanking = null, 
+            ICategoriaServicio? categoriaServicio = null)
         {
             _publicacionRepositorio = publicacionRepositorio;
             _resumenConsulta = resumenConsulta;
@@ -54,6 +58,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
             _notificacionServicio = notificacionServicio;
             _logroServicio = logroServicio;
             _opcionesPublicacion = opcionesPublicacion?.Value ?? new OpcionesPublicacion();
+            _categoriaServicio = categoriaServicio;
         }
 
         #region Interacciones (Likes y Puntuaciones)
@@ -62,6 +67,13 @@ namespace ProyectoFinalTPI.Backend.Servicio
         {
             await ValidarInteraccionConPublicacion(publicacionId, usuarioId, cancellationToken);
             await _publicacionRepositorio.CrearLike(publicacionId, usuarioId, cancellationToken);
+
+            var publicacion = await _publicacionRepositorio.ObtenerPorId(publicacionId, cancellationToken);
+            if (publicacion != null && publicacion.UsuarioId != usuarioId)
+            {
+                await _notificacionServicio.NotificarMeGustaPublicacionAsync(
+                    publicacion.UsuarioId, publicacionId, usuarioId, cancellationToken);
+            }
 
             //vuelve a consultar a Neo4j para saber camo quedo esa publicacion (cantidad de likes, quien le dio MG) y arma el DTO
             return await _publicacionRepositorio.ObtenerEstadoLike(publicacionId, usuarioId, cancellationToken);
@@ -152,6 +164,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
         public async Task<PuntuacionPublicacionDto> Puntuar(
             int publicacionId, int usuarioId, int puntaje, CancellationToken cancellationToken = default)
         {
+            if (_categoriaServicio is not null) await _categoriaServicio.ExigirPermiso(usuarioId, global::ProyectoFinalTPI.Backend.Entidades.PermisoCuenta.PuntuarPublicacion, cancellationToken);
             ValidarPuntaje(puntaje);
             await ValidarInteraccionConPublicacion(publicacionId, usuarioId, cancellationToken);
 
@@ -162,6 +175,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
             var estadoNuevo = await _publicacionRepositorio.ObtenerEstadoPuntuacion(publicacionId, usuarioId, cancellationToken);
             await VerificacionLogrosPuntuacion(usuarioId, publicacion, estadoNuevo, cancellationToken);
+            await ActualizarCategoriaPorRecuerdo(publicacion, estadoNuevo.PuntosTotales, cancellationToken);
 
             return estadoNuevo;
         }
@@ -207,6 +221,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
         public async Task<RepostPublicacionDto> Repostear(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
         {
+            if (_categoriaServicio is not null) await _categoriaServicio.ExigirPermiso(usuarioId, global::ProyectoFinalTPI.Backend.Entidades.PermisoCuenta.Compartir, cancellationToken);
             ValidarIdPublicacion(publicacionId);
             ValidarIdUsuario(usuarioId);
             await VerificarAutorExistente(usuarioId);
@@ -214,6 +229,11 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
             var targetId = original.PublicacionOriginalId ?? original.Id;
             await _publicacionRepositorio.CrearRepost(targetId, usuarioId, cancellationToken);
+            if (original.UsuarioId != usuarioId)
+            {
+                await _notificacionServicio.NotificarCompartirPublicacionAsync(
+                    original.UsuarioId, targetId, usuarioId, cancellationToken);
+            }
             await VerificacionLogroCompartir(usuarioId, cancellationToken);
             return await _publicacionRepositorio.ObtenerEstadoRepost(targetId, usuarioId, cancellationToken);
         }
@@ -227,6 +247,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
         }
         public async Task<int> Citar(int publicacionId, int usuarioId, string descripcion, CancellationToken cancellationToken = default)
         {
+            if (_categoriaServicio is not null) await _categoriaServicio.ExigirPermiso(usuarioId, global::ProyectoFinalTPI.Backend.Entidades.PermisoCuenta.Compartir, cancellationToken);
             ValidarIdPublicacion(publicacionId);
             ValidarIdUsuario(usuarioId);
             ValidarDescripcion(descripcion);
@@ -315,55 +336,15 @@ namespace ProyectoFinalTPI.Backend.Servicio
             var autores = await _seguimientoServicio.ObtenerSeguidosIdsAsync(usuarioId, cancellationToken);
             if (autores.Count == 0) return new();
             using var etapa = new TelemetriaFeed("seguidos");
-            var items = new List<PublicacionDetalleDto>();
-            var agotado = false;
-            for (var lote = 0; lote < _opcionesFeed.CantidadMaximaLotesSeguidos; lote++)
+            var pagina = await LeerPaginaSeguidos(autores, avance, limite, cancellationToken);
+            await CompletarInteraccionesPaginaFeed(pagina.Items, usuarioId, cancellationToken);
+            etapa.Completar();
+            return new()
             {
-                var cantidad = Math.Max(1, limite - items.Count);
-                var originales = await _publicacionRepositorio.ObtenerFeedSeguidos(autores, avance, cantidad, cancellationToken);
-                var reposts = await _publicacionRepositorio.ObtenerRepostsDeSeguidosPaginados(autores, avance, cantidad, cancellationToken);
-                var eventos = originales.Select(p => new EventoSeguido(p.Id, 0, "", p.FechaCreacion, p))
-                    .Concat(reposts.Select(r => new EventoSeguido(r.PublicacionId, r.ReposteadorId, r.ReposteadorUsername, r.Fecha, null)))
-                    .OrderByDescending(e => e.Fecha).ThenByDescending(e => e.PublicacionId)
-                    .ThenByDescending(e => e.ReposteadorId).ToArray();
-                var porId = originales.GroupBy(p => p.Id).ToDictionary(g => g.Key, g => g.First());
-                var idsFaltantes = eventos.Take(cantidad + 1).Where(e => e.ReposteadorId > 0 && !porId.ContainsKey(e.PublicacionId))
-                    .Select(e => e.PublicacionId).Distinct().ToArray();
-                if (idsFaltantes.Length > 0)
-                    foreach (var p in await _publicacionRepositorio.ObtenerPublicacionesPorIds(idsFaltantes, cancellationToken)) porId[p.Id] = p;
-                var idsSinNombre = eventos.Take(cantidad + 1).Where(e => e.ReposteadorId > 0 && string.IsNullOrWhiteSpace(e.Username))
-                    .Select(e => e.ReposteadorId).Distinct().ToArray();
-                var nombres = idsSinNombre.Length == 0 ? new Dictionary<int, string>()
-                    : (await _usuarioRepositorio.ObtenerUsuariosPorIdsAsync(idsSinNombre, cancellationToken)).ToDictionary(u => u.Id, u => u.Username);
-                foreach (var evento in eventos.Take(cantidad + 1))
-                {
-                    var detalle = evento.Original;
-                    if (evento.ReposteadorId > 0 && porId.TryGetValue(evento.PublicacionId, out var original))
-                        detalle = CrearDetalleRepost(original, evento.ReposteadorId,
-                            string.IsNullOrWhiteSpace(evento.Username) ? nombres.GetValueOrDefault(evento.ReposteadorId, "") : evento.Username, evento.Fecha);
-                    if (detalle is not null)
-                    {
-                        if (items.Count == limite) return await FinalizarSeguidos(avance, false);
-                        items.Add(detalle);
-                    }
-                    avance = new() { FechaCreacion = evento.Fecha, Id = evento.PublicacionId, ReposteadorId = evento.ReposteadorId };
-                }
-                agotado = eventos.Length <= cantidad + 1 && originales.Count < cantidad + 1 && reposts.Count < cantidad + 1;
-                if (agotado || eventos.Length == 0) break;
-            }
-            return await FinalizarSeguidos(avance, agotado);
-
-            async Task<ResultadoPaginadoDto<PublicacionDetalleDto>> FinalizarSeguidos(CursorCronologicoDto? posicion, bool fin)
-            {
-                await CompletarInteraccionesPaginaFeed(items, usuarioId, cancellationToken);
-                etapa.Completar();
-                return new()
-                {
-                    Items = items,
-                    SiguienteCursor = fin || posicion is null ? null
-                        : CursorCronologicoCodec.Crear(posicion.FechaCreacion, posicion.Id, posicion.ReposteadorId)
-                };
-            }
+                Items = pagina.Items,
+                SiguienteCursor = pagina.Agotado || pagina.Avance is null ? null
+                    : CursorCronologicoCodec.Crear(pagina.Avance.FechaCreacion, pagina.Avance.Id, pagina.Avance.ReposteadorId)
+            };
         }
 
         private sealed record EventoSeguido(int PublicacionId, int ReposteadorId, string Username,
@@ -498,18 +479,16 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
         #region Creacion y Eliminacion
 
-        public async Task<int> Crear(Publicacion publicacion, Stream? archivo = null, string? nombreArchivo = null, Point? gpsUsuario = null)
+        public Task<int> Crear(Publicacion publicacion, Stream? archivo = null, string? nombreArchivo = null, Point? gpsUsuario = null) =>
+            Crear(publicacion, archivo, nombreArchivo, gpsUsuario, null);
+
+        public async Task<int> Crear(Publicacion publicacion, Stream? archivo, string? nombreArchivo, Point? gpsUsuario,
+            IReadOnlyList<AdjuntoEntradaDto>? adjuntos)
         {
-            await VerificarAutorExistente(publicacion.UsuarioId);
-
-            publicacion.UrlMultimedia = await ProcesarMultimedia(publicacion, archivo, nombreArchivo);
-            IniciarEstadoPublicacion(publicacion);
-
-            int idPublicacion = await _publicacionRepositorio.Crear(publicacion);
-
+            await PrepararPublicacionNueva(publicacion, archivo, nombreArchivo, adjuntos);
+            var id = await GuardarRecuerdo(publicacion);
             await VerificacionLogrosCrearPublicacion(publicacion, gpsUsuario);
-
-            return idPublicacion;
+            return id;
         }
         public async Task Eliminar(int id, int? autorId = null, CancellationToken cancellationToken = default)
         {
@@ -636,29 +615,25 @@ namespace ProyectoFinalTPI.Backend.Servicio
             if (!await _publicacionRepositorio.ExistePublicacionVisible(publicacionId, cancellationToken))
                 throw new KeyNotFoundException("La publicacion no existe o no esta disponible");
         }
-        private async Task<string> ProcesarMultimedia(
-        Publicacion publicacion,
-        Stream? archivo,
-        string? nombreArchivo)
-            {
-                if (archivo == null && string.IsNullOrWhiteSpace(publicacion.UrlMultimedia))
-                {
-                    if (_opcionesPublicacion.RequerirMultimedia)
-                        throw new ArgumentException("Debe subir un archivo o indicar una URL.");
-                    // No invocar al proveedor ni inventar una imagen para recuerdos de texto.
-                    return string.Empty;
-                }
+        private IReadOnlyList<AdjuntoEntradaDto> NormalizarAdjuntos(
+            Publicacion publicacion, Stream? archivo, string? nombreArchivo,
+            IReadOnlyList<AdjuntoEntradaDto>? adjuntos)
+        {
+            var entradas = ObtenerEntradasAdjuntas(publicacion, archivo, nombreArchivo, adjuntos);
+            ValidarCantidadAdjuntos(entradas.Count);
+            foreach (var entrada in entradas) ValidarAdjunto(entrada);
+            return entradas;
+        }
 
-                string? urlExistente = string.IsNullOrEmpty(publicacion.UrlMultimedia)
-                    ? null
-                    : publicacion.UrlMultimedia;
+        private static void ValidarMusica(Publicacion publicacion)
+        {
+            if (publicacion.MusicaSpotifyId is null && publicacion.MusicaTitulo is null && publicacion.MusicaArtista is null) return;
+            if (!Regex.IsMatch(publicacion.MusicaSpotifyId ?? "", "^[A-Za-z0-9]{22}$")
+                || string.IsNullOrWhiteSpace(publicacion.MusicaTitulo) || publicacion.MusicaTitulo.Length > 120
+                || string.IsNullOrWhiteSpace(publicacion.MusicaArtista) || publicacion.MusicaArtista.Length > 120)
+                throw new ArgumentException("La música requiere una canción de Spotify, título y artista válidos.");
+        }
 
-                return await _multimediaServicio.SubirAsync(
-                    archivo,
-                    nombreArchivo,
-                    urlExistente,
-                    publicacion.TipoMultimedia);
-            }
         private static void IniciarEstadoPublicacion(Publicacion publicacion)
         {
             publicacion.FechaCreación = DateTime.UtcNow;
@@ -755,6 +730,8 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 Fecha = original.Fecha,
                 FechaCreacion = fecha,
                 Categoria = original.Categoria,
+                Adjuntos = original.Adjuntos,
+                Musica = original.Musica,
                 UrlMultimedia = original.UrlMultimedia,
                 TipoMultimedia = original.TipoMultimedia,
                 Autor = original.Autor,
@@ -920,9 +897,172 @@ namespace ProyectoFinalTPI.Backend.Servicio
             if (publicacion != null && publicacion.UsuarioId != usuarioId)
             {
                 await _notificacionServicio.NotificarPuntuacionEnPublicacionAsync(
-                    publicacion.UsuarioId, publicacionId, usuarioId, cancellationToken);
+                    publicacion.UsuarioId, publicacionId, usuarioId, puntaje, cancellationToken);
             }
         }
+        private Task ActualizarCategoriaPorRecuerdo(
+        Publicacion? publicacion,
+        int puntosRecibidos,
+        CancellationToken ct = default) =>
+        _categoriaServicio?.ActualizarPorRecuerdo(
+            publicacion, puntosRecibidos, ct)
+        ?? Task.CompletedTask;
+
+        private async Task PrepararPublicacionNueva(Publicacion publicacion, Stream? archivo, string? nombreArchivo,
+            IReadOnlyList<AdjuntoEntradaDto>? adjuntos)
+        {
+            var entradas = await ValidarPublicacionNueva(publicacion, archivo, nombreArchivo, adjuntos);
+            await ProcesarAdjuntos(publicacion, entradas);
+            IniciarEstadoPublicacion(publicacion);
+        }
+        private async Task<IReadOnlyList<AdjuntoEntradaDto>> ValidarPublicacionNueva(
+            Publicacion publicacion, Stream? archivo, string? nombreArchivo,
+            IReadOnlyList<AdjuntoEntradaDto>? adjuntos)
+        {
+            ArgumentNullException.ThrowIfNull(publicacion);
+            await VerificarAutorExistente(publicacion.UsuarioId);
+            var entradas = NormalizarAdjuntos(publicacion, archivo, nombreArchivo, adjuntos);
+            ValidarMusica(publicacion);
+            if (_categoriaServicio is not null)
+                await _categoriaServicio.ValidarCreacion(publicacion.UsuarioId, entradas.Count, publicacion.MusicaSpotifyId != null);
+            return entradas;
+        }
+
+        private Task<int> GuardarRecuerdo(Publicacion publicacion) =>
+            _categoriaServicio is null
+                ? _publicacionRepositorio.Crear(publicacion)
+                : _categoriaServicio.CrearRecuerdo(publicacion);
+
+        private async Task ProcesarAdjuntos(Publicacion publicacion, IReadOnlyList<AdjuntoEntradaDto> entradas)
+        {
+            publicacion.Adjuntos.Clear();
+            foreach (var entrada in entradas)
+            {
+                var url = await _multimediaServicio.SubirAsync(entrada.Archivo, entrada.NombreArchivo, entrada.Url, entrada.Tipo);
+                publicacion.Adjuntos.Add(new AdjuntoPublicacion { Url = url, Tipo = entrada.Tipo, Orden = publicacion.Adjuntos.Count });
+            }
+            publicacion.UrlMultimedia = publicacion.Adjuntos.FirstOrDefault()?.Url ?? string.Empty;
+            publicacion.TipoMultimedia = publicacion.Adjuntos.FirstOrDefault()?.Tipo ?? MultimediaEnum.Foto;
+        }
+        private static IReadOnlyList<AdjuntoEntradaDto> ObtenerEntradasAdjuntas(
+    Publicacion publicacion, Stream? archivo, string? nombreArchivo,
+    IReadOnlyList<AdjuntoEntradaDto>? adjuntos)
+        {
+            var tieneAnterior = archivo is not null || !string.IsNullOrWhiteSpace(publicacion.UrlMultimedia);
+            if (adjuntos is { Count: > 0 } && tieneAnterior)
+                throw new ArgumentException("No combines Adjuntos con Archivo o UrlArchivo.");
+            return adjuntos is { Count: > 0 } ? adjuntos
+                : tieneAnterior ? new[] { new AdjuntoEntradaDto(archivo, nombreArchivo, archivo is null ? publicacion.UrlMultimedia : null, publicacion.TipoMultimedia) }
+                : Array.Empty<AdjuntoEntradaDto>();
+        }
+
+        private void ValidarCantidadAdjuntos(int cantidad)
+        {
+            if (cantidad > 4) throw new ArgumentException("Una publicación admite hasta 4 adjuntos.");
+            if (_opcionesPublicacion.RequerirMultimedia && cantidad == 0)
+                throw new ArgumentException("Debe subir un archivo o indicar una URL.");
+        }
+
+        private static void ValidarAdjunto(AdjuntoEntradaDto entrada)
+        {
+            if (!Enum.IsDefined(entrada.Tipo)) throw new ArgumentException("El tipo de adjunto no es válido.");
+            if ((entrada.Archivo is null) == string.IsNullOrWhiteSpace(entrada.Url))
+                throw new ArgumentException("Cada adjunto requiere un archivo o una URL, exclusivamente.");
+            ValidarArchivoAdjunto(entrada.Archivo);
+            ValidarUrlAdjunto(entrada);
+        }
+
+        private static void ValidarArchivoAdjunto(Stream? archivo)
+        {
+            if (archivo is { CanSeek: true } && (archivo.Length == 0 || archivo.Length > 50 * 1024 * 1024))
+                throw new ArgumentException("Cada archivo debe tener contenido y ocupar hasta 50 MB.");
+        }
+
+        private static void ValidarUrlAdjunto(AdjuntoEntradaDto entrada)
+        {
+            if (entrada.Archivo is null
+                && (!Uri.TryCreate(entrada.Url, UriKind.Absolute, out var uri) || uri.Scheme != "https"))
+                throw new ArgumentException("La URL del adjunto debe ser HTTPS.");
+        }
+
+        private async Task<(List<PublicacionDetalleDto> Items, CursorCronologicoDto? Avance, bool Agotado)> LeerPaginaSeguidos(
+            IReadOnlyCollection<int> autores, CursorCronologicoDto? avance, int limite, CancellationToken cancellationToken)
+        {
+            var items = new List<PublicacionDetalleDto>();
+            var agotado = false;
+            for (var lote = 0; lote < _opcionesFeed.CantidadMaximaLotesSeguidos; lote++)
+            {
+                var cantidad = Math.Max(1, limite - items.Count);
+                var datos = await ObtenerLoteSeguidos(autores, avance, cantidad, cancellationToken);
+                foreach (var evento in datos.Eventos.Take(cantidad + 1))
+                {
+                    var detalle = ResolverDetalleEvento(evento, datos.Publicaciones, datos.Nombres);
+                    if (detalle is not null)
+                    {
+                        if (items.Count == limite) return (items, avance, false);
+                        items.Add(detalle);
+                    }
+                    avance = new() { FechaCreacion = evento.Fecha, Id = evento.PublicacionId, ReposteadorId = evento.ReposteadorId };
+                }
+                agotado = datos.Agotado;
+                if (agotado || datos.Eventos.Length == 0) break;
+            }
+            return (items, avance, agotado);
+        }
+        private async Task<(EventoSeguido[] Eventos, Dictionary<int, PublicacionDetalleDto> Publicaciones,
+    Dictionary<int, string> Nombres, bool Agotado)> ObtenerLoteSeguidos(
+    IReadOnlyCollection<int> autores, CursorCronologicoDto? avance, int cantidad, CancellationToken cancellationToken)
+        {
+            var originales = await _publicacionRepositorio.ObtenerFeedSeguidos(autores, avance, cantidad, cancellationToken);
+            var reposts = await _publicacionRepositorio.ObtenerRepostsDeSeguidosPaginados(autores, avance, cantidad, cancellationToken);
+            var eventos = CrearEventosSeguidos(originales, reposts);
+            var porId = originales.GroupBy(p => p.Id).ToDictionary(g => g.Key, g => g.First());
+            await CompletarOriginalesDeReposts(eventos, cantidad, porId, cancellationToken);
+            var nombres = await ObtenerNombresDeReposts(eventos, cantidad, cancellationToken);
+            var agotado = eventos.Length <= cantidad + 1 && originales.Count < cantidad + 1 && reposts.Count < cantidad + 1;
+            return (eventos, porId, nombres, agotado);
+        }
+
+        private static EventoSeguido[] CrearEventosSeguidos(
+            IEnumerable<PublicacionDetalleDto> originales,
+            IEnumerable<(int PublicacionId, int ReposteadorId, string ReposteadorUsername, DateTime Fecha)> reposts) =>
+            originales.Select(p => new EventoSeguido(p.Id, 0, "", p.FechaCreacion, p))
+                .Concat(reposts.Select(r => new EventoSeguido(r.PublicacionId, r.ReposteadorId, r.ReposteadorUsername, r.Fecha, null)))
+                .OrderByDescending(e => e.Fecha).ThenByDescending(e => e.PublicacionId)
+                .ThenByDescending(e => e.ReposteadorId).ToArray();
+
+        private async Task CompletarOriginalesDeReposts(
+            IEnumerable<EventoSeguido> eventos, int cantidad,
+            Dictionary<int, PublicacionDetalleDto> porId, CancellationToken cancellationToken)
+        {
+            var ids = eventos.Take(cantidad + 1).Where(e => e.ReposteadorId > 0 && !porId.ContainsKey(e.PublicacionId))
+                .Select(e => e.PublicacionId).Distinct().ToArray();
+            if (ids.Length == 0) return;
+            foreach (var publicacion in await _publicacionRepositorio.ObtenerPublicacionesPorIds(ids, cancellationToken))
+                porId[publicacion.Id] = publicacion;
+        }
+
+        private async Task<Dictionary<int, string>> ObtenerNombresDeReposts(
+            IEnumerable<EventoSeguido> eventos, int cantidad, CancellationToken cancellationToken)
+        {
+            var ids = eventos.Take(cantidad + 1).Where(e => e.ReposteadorId > 0 && string.IsNullOrWhiteSpace(e.Username))
+                .Select(e => e.ReposteadorId).Distinct().ToArray();
+            return ids.Length == 0 ? new Dictionary<int, string>()
+                : (await _usuarioRepositorio.ObtenerUsuariosPorIdsAsync(ids, cancellationToken))
+                    .ToDictionary(usuario => usuario.Id, usuario => usuario.Username);
+        }
+
+        private static PublicacionDetalleDto? ResolverDetalleEvento(
+            EventoSeguido evento, IReadOnlyDictionary<int, PublicacionDetalleDto> publicaciones,
+            IReadOnlyDictionary<int, string> nombres)
+        {
+            if (evento.ReposteadorId <= 0 || !publicaciones.TryGetValue(evento.PublicacionId, out var original))
+                return evento.Original;
+            var username = string.IsNullOrWhiteSpace(evento.Username)
+                ? nombres.GetValueOrDefault(evento.ReposteadorId, "") : evento.Username;
+            return CrearDetalleRepost(original, evento.ReposteadorId, username, evento.Fecha);
+        }
+
         #region Verificación de Logros
         private async Task VerificacionLogrosCrearPublicacion(Publicacion publicacion, Point? gpsUsuario)
         {
@@ -930,6 +1070,53 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
             await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.PrimerPaso);
 
+            await VerificarLogroCronistaLocal(publicacion, gpsUsuario, usuarioId);
+            
+            await VerificarLogroLinceDeLasPraderas(usuarioId);
+            
+            await VerificarLogroFotografoDelRecuerdo(publicacion, usuarioId);
+
+            await VerificarLogrosDeDecadas(usuarioId);
+        }
+
+        private async Task VerificarLogroFotografoDelRecuerdo(Publicacion publicacion, int usuarioId)
+        {
+            if (publicacion.Adjuntos.Any(a => a.Tipo == MultimediaEnum.Foto)
+                || (!string.IsNullOrEmpty(publicacion.UrlMultimedia) && publicacion.TipoMultimedia == MultimediaEnum.Foto))
+            {
+                int posteosConFoto = await _publicacionRepositorio.ContarPosteosConImagenDelUsuario(usuarioId);
+
+                if (posteosConFoto >= 10)
+                {
+                    await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.FotografoDelRecuerdo);
+                }
+            }
+        }
+
+        private async Task VerificarLogroLinceDeLasPraderas(int usuarioId)
+        {
+            int cantidadPublicaciones = await _usuarioRepositorio.ContarPublicacionesVisiblesAsync(usuarioId);
+            if (cantidadPublicaciones >= 15)
+            {
+                await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.LinceDeLasPraderas);
+            }
+        }
+
+        private async Task VerificarLogrosDeDecadas(int usuarioId)
+        {
+            int decadasDelUsuario = await _publicacionRepositorio.ContarPosteosDeDiferentesEpocasDelUsuario(usuarioId);
+            if (decadasDelUsuario >= 3)
+            {
+                await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.VozDeUnaEpoca);
+            }
+            if (decadasDelUsuario == 6)
+            {
+                await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.DecadaCompleta);
+            }
+        }
+
+        private async Task VerificarLogroCronistaLocal(Publicacion publicacion, Point? gpsUsuario, int usuarioId)
+        {
             if (gpsUsuario != null && publicacion.Lugar?.Coordenadas != null)
             {
                 double distancia = publicacion.Lugar.Coordenadas.Distance(gpsUsuario);
@@ -944,33 +1131,8 @@ namespace ProyectoFinalTPI.Backend.Servicio
                     }
                 }
             }
-
-            int cantidadPublicaciones = await _usuarioRepositorio.ContarPublicacionesVisiblesAsync(usuarioId);
-            if (cantidadPublicaciones >= 15)
-            {
-                await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.LinceDeLasPraderas);
-            }
-
-            if (!string.IsNullOrEmpty(publicacion.UrlMultimedia) && publicacion.TipoMultimedia == MultimediaEnum.Foto)
-            {
-                int posteosConFoto = await _publicacionRepositorio.ContarPosteosConImagenDelUsuario(usuarioId);
-
-                if (posteosConFoto >= 10)
-                {
-                    await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.FotografoDelRecuerdo);
-                }
-            }
-
-            int decadasDelUsuario = await _publicacionRepositorio.ContarPosteosDeDiferentesEpocasDelUsuario(usuarioId);
-            if (decadasDelUsuario >= 3)
-            {
-                await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.VozDeUnaEpoca);
-            }
-            if (decadasDelUsuario == 6)
-            {
-                await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.DecadaCompleta);
-            }
         }
+
         private async Task VerificacionLogrosPuntuacion(int usuarioId, Publicacion? publicacion, PuntuacionPublicacionDto estadoNuevo, CancellationToken cancellationToken)
         {
             int totalPuntosOtorgados = await _publicacionRepositorio.SumarPuntosOtorgadosPorUsuario(usuarioId, cancellationToken);

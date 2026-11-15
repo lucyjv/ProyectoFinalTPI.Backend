@@ -29,6 +29,7 @@ public sealed class ManejoExcepcionesMiddleware(
                 AlmacenSesionNoDisponibleException => (503, "Feed no disponible", exception.Message),
                 ConflictoRelacionesException => (409, "Conflicto de relaciones", exception.Message),
                 ReporteDuplicadoException => (409, "Reporte duplicado", exception.Message),
+                CupoPublicacionesAgotadoException => (429, "Cupo semanal agotado", exception.Message),
                 ArgumentException => (400, "Solicitud inválida", exception.Message),
                 UnauthorizedAccessException => (403, "Acceso denegado", exception.Message),
                 KeyNotFoundException => (404, "Recurso no encontrado", exception.Message),

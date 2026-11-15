@@ -3,6 +3,9 @@ namespace ProyectoFinalTPI.Backend.Servicio;
 // Define los pesos, el límite de candidatos y el plazo de vistas recientes (14 días por defecto).
 public sealed class FeedRecomendacionesOptions
 {
+    public double BonificacionAedo { get; set; } = 1d;
+    public double BonificacionMnemosine { get; set; } = 3d;
+
     public const string Seccion = "FeedRecomendaciones";
 
     public int DiasDeExclusionDeImpresiones { get; set; } = 14;

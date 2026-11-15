@@ -11,6 +11,7 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Servicio
         List<Publicacion> ObtenerPublicacionPorCategoria(CategoriaEnum categoria);
 
         Task<int> Crear(Publicacion publicacion, Stream? archivo = null, string? nombreArchivo = null, Point? gpsUsuario = null);
+        Task<int> Crear(Publicacion publicacion, Stream? archivo, string? nombreArchivo, Point? gpsUsuario, IReadOnlyList<AdjuntoEntradaDto>? adjuntos);
         Task<ResultadoMapaDto> ObtenerPines(PublicacionFiltroDto filtro, CancellationToken cancellationToken = default);
         Task<PublicacionResumenDto> ObtenerResumenPorId(int id, CancellationToken cancellationToken = default);
 

@@ -24,6 +24,35 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "postgis");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.AdjuntoPublicacion", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Orden")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PublicacionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Tipo")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PublicacionId", "Orden")
+                        .IsUnique();
+
+                    b.ToTable("adjuntos_publicacion", (string)null);
+                });
+
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Comentario", b =>
                 {
                     b.Property<int>("Id")
@@ -66,6 +95,22 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.HasIndex("PublicacionId", "ComentarioPadreId", "FechaCreacion", "Id");
 
                     b.ToTable("Comentario", (string)null);
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.ConsumoPublicaciones", b =>
+                {
+                    b.Property<int>("UsuarioId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly>("SemanaInicio")
+                        .HasColumnType("date");
+
+                    b.Property<int>("Cantidad")
+                        .HasColumnType("integer");
+
+                    b.HasKey("UsuarioId", "SemanaInicio");
+
+                    b.ToTable("consumos_publicaciones", (string)null);
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Grupo", b =>
@@ -530,6 +575,9 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Property<int?>("PublicacionId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("Puntaje")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Tipo")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -586,6 +634,18 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
 
                     b.Property<string>("MotivoOculto")
                         .HasColumnType("text");
+
+                    b.Property<string>("MusicaArtista")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("MusicaSpotifyId")
+                        .HasMaxLength(22)
+                        .HasColumnType("character varying(22)");
+
+                    b.Property<string>("MusicaTitulo")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
 
                     b.Property<bool>("PermitirMomentosAutomaticos")
                         .ValueGeneratedOnAdd()
@@ -1046,6 +1106,15 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.HasDiscriminator().HasValue("Moderador");
                 });
 
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.AdjuntoPublicacion", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Publicacion", null)
+                        .WithMany("Adjuntos")
+                        .HasForeignKey("PublicacionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Comentario", b =>
                 {
                     b.HasOne("ProyectoFinalTPI.Backend.Entidades.Comentario", "ComentarioPadre")
@@ -1070,6 +1139,15 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Navigation("Publicacion");
 
                     b.Navigation("Usuario");
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.ConsumoPublicaciones", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Grupo", b =>
@@ -1346,6 +1424,8 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Publicacion", b =>
                 {
+                    b.Navigation("Adjuntos");
+
                     b.Navigation("Comentarios");
 
                     b.Navigation("Momentos");

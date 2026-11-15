@@ -1,3 +1,4 @@
+using ProyectoFinalTPI.Backend.Dtos.Publicacion;
 using Microsoft.Extensions.Options;
 using ProyectoFinalTPI.Backend.Servicio;
 
@@ -40,6 +41,8 @@ namespace ProyectoFinalTPI.Backend.Requests.Publicaciones
         [EnumDataType(typeof(MultimediaEnum))]
         public MultimediaEnum TipoMultimedia { get; set; }
 
+        public List<AdjuntoPublicacionRequest> Adjuntos { get; set; } = new();
+        public MusicaPublicacionDto? Musica { get; set; }
         public IFormFile? Archivo { get; set; }
 
         public string? UrlArchivo { get; set; }
@@ -53,6 +56,10 @@ namespace ProyectoFinalTPI.Backend.Requests.Publicaciones
         {
             if (GpsLatitud.HasValue != GpsLongitud.HasValue)
                 yield return new ValidationResult("La ubicación actual requiere latitud y longitud.", new[] { nameof(GpsLatitud), nameof(GpsLongitud) });
+            if (Adjuntos.Count > 4)
+                yield return new ValidationResult("Una publicación admite hasta 4 adjuntos.", new[] { nameof(Adjuntos) });
+            if (Adjuntos.Count > 0 && (Archivo != null || !string.IsNullOrWhiteSpace(UrlArchivo)))
+                yield return new ValidationResult("No combines Adjuntos con Archivo o UrlArchivo.", new[] { nameof(Adjuntos) });
             if (Fecha == default)
                 yield return new ValidationResult("Debe indicar una fecha.", new[] { nameof(Fecha) });
 
@@ -62,7 +69,7 @@ namespace ProyectoFinalTPI.Backend.Requests.Publicaciones
             var requerirMultimedia = validationContext.GetService(typeof(IOptions<OpcionesPublicacion>))
                 is IOptions<OpcionesPublicacion> opciones && opciones.Value.RequerirMultimedia;
 
-            if (requerirMultimedia && Archivo == null && string.IsNullOrWhiteSpace(UrlArchivo))
+            if (requerirMultimedia && Adjuntos.Count == 0 && Archivo == null && string.IsNullOrWhiteSpace(UrlArchivo))
             {
                 yield return new ValidationResult(
                     "Debe subir un archivo o indicar una URL.",

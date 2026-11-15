@@ -13,9 +13,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
     public class ChatServicio : IChatServicio
     {
         private readonly IMensajeChatRepositorio _repositorio;
-
         private static readonly TimeSpan TiempoExpiracion = TimeSpan.FromDays(7);
-
         private readonly INotificacionServicio _notificacionServicio;
 
         public ChatServicio(
@@ -26,87 +24,112 @@ namespace ProyectoFinalTPI.Backend.Servicio
             _notificacionServicio = notificacionServicio;
         }
 
+        #region Operaciones públicas
+
         /// <inheritdoc/>
         public async Task<MensajeChatDto> EnviarMensajeAsync(
             int emisorId, string emisorUsername, int destinatarioId, string contenido)
         {
             var ahora = DateTime.UtcNow;
-            var mensaje = new MensajeChat
-            {
-                EmisorId = emisorId,
-                DestinatarioId = destinatarioId,
-                Contenido = contenido,
-                FechaEnvio = ahora,
-                FechaExpiracion = ahora.Add(TiempoExpiracion)
-            };
+            var mensaje = CrearMensaje(emisorId, destinatarioId, contenido, ahora);
 
             await _repositorio.GuardarAsync(mensaje);
 
             await _notificacionServicio.NotificarMensajeChatAsync(
                 destinatarioId, emisorId);
-
-            return new MensajeChatDto
-            {
-                Id = mensaje.Id,
-                EmisorId = emisorId,
-                EmisorUsername = emisorUsername,
-                DestinatarioId = destinatarioId,
-                Contenido = contenido,
-                FechaEnvio = ahora
-            };
+            return CrearMensajeDto(mensaje.Id, emisorId, emisorUsername, destinatarioId, contenido, ahora);
         }
-
         /// <inheritdoc/>
         public async Task<IEnumerable<MensajeChatDto>> ObtenerHistorialAsync(
             int usuarioAId, int usuarioBId)
         {
             var mensajes = await _repositorio.ObtenerHistorialAsync(usuarioAId, usuarioBId);
 
-            return mensajes.Select(m => new MensajeChatDto
-            {
-                Id             = m.Id,
-                EmisorId       = m.EmisorId,
-                EmisorUsername = m.Emisor?.Username ?? string.Empty,
-                DestinatarioId = m.DestinatarioId,
-                Contenido      = m.Contenido,
-                FechaEnvio     = m.FechaEnvio
-            });
+            return mensajes.Select(MapearMensaje);
         }
-
         /// <inheritdoc/>
         public async Task EliminarConversacionAsync(int usuarioId, int otroUsuarioId)
         {
-            if (otroUsuarioId == usuarioId)
-                throw new ArgumentException("No podés eliminar una conversación con vos mismo.");
+            ValidarUsuariosDeConversacion(usuarioId, otroUsuarioId);
 
             var eliminados = await _repositorio.EliminarConversacionAsync(usuarioId, otroUsuarioId);
 
-            if (eliminados == 0)
-                throw new KeyNotFoundException("No existe ninguna conversación entre los usuarios indicados.");
+            VerificarConversacionEliminada(eliminados);
         }
-
         /// <inheritdoc/>
         public async Task<IEnumerable<ConversacionResumenDto>> ObtenerConversacionesActivasAsync(
             int usuarioId)
         {
             var ultimos = await _repositorio.ObtenerConversacionesActivasAsync(usuarioId);
 
-            return ultimos.Select(m =>
-            {
-                // Determinamos quién es el "otro" en cada mensaje.
-                var otroId       = m.EmisorId == usuarioId ? m.DestinatarioId : m.EmisorId;
-                var otroUsername = m.EmisorId == usuarioId
-                    ? m.Destinatario?.Username ?? string.Empty
-                    : m.Emisor?.Username       ?? string.Empty;
-
-                return new ConversacionResumenDto
-                {
-                    OtroUsuarioId       = otroId,
-                    OtroUsuarioUsername = otroUsername,
-                    UltimoMensaje       = m.Contenido,
-                    FechaUltimoMensaje  = m.FechaEnvio
-                };
-            });
+            return ultimos.Select(mensaje => MapearConversacion(mensaje, usuarioId));
         }
+
+        #endregion
+        #region Métodos privados
+
+        private static MensajeChatDto CrearMensajeDto(
+            int id, int emisorId, string emisorUsername,
+            int destinatarioId, string contenido, DateTime fechaEnvio) =>
+            new()
+            {
+                Id = id,
+                EmisorId = emisorId,
+                EmisorUsername = emisorUsername,
+                DestinatarioId = destinatarioId,
+                Contenido = contenido,
+                FechaEnvio = fechaEnvio
+            };
+        private static MensajeChat CrearMensaje(
+            int emisorId, int destinatarioId,
+            string contenido, DateTime fechaEnvio) =>
+            new()
+            {
+                EmisorId = emisorId,
+                DestinatarioId = destinatarioId,
+                Contenido = contenido,
+                FechaEnvio = fechaEnvio,
+                FechaExpiracion = fechaEnvio.Add(TiempoExpiracion)
+            };
+        private static MensajeChatDto MapearMensaje(MensajeChat mensaje) =>
+            CrearMensajeDto(
+                mensaje.Id,
+                mensaje.EmisorId,
+                mensaje.Emisor?.Username ?? string.Empty,
+                mensaje.DestinatarioId,
+                mensaje.Contenido,
+                mensaje.FechaEnvio);
+        private static ConversacionResumenDto MapearConversacion(
+            MensajeChat mensaje, int usuarioId)
+        {
+            var esEmisor = mensaje.EmisorId == usuarioId;
+            var otroUsuario = esEmisor
+                ? mensaje.Destinatario
+                : mensaje.Emisor;
+            return new ConversacionResumenDto
+            {
+                OtroUsuarioId = esEmisor
+                    ? mensaje.DestinatarioId
+                    : mensaje.EmisorId,
+                OtroUsuarioUsername = otroUsuario?.Username ?? string.Empty,
+                UltimoMensaje = mensaje.Contenido,
+                FechaUltimoMensaje = mensaje.FechaEnvio
+            };
+        }
+        private static void ValidarUsuariosDeConversacion(
+            int usuarioId, int otroUsuarioId)
+        {
+            if (otroUsuarioId == usuarioId)
+                throw new ArgumentException(
+                    "No podés eliminar una conversación con vos mismo.");
+        }
+        private static void VerificarConversacionEliminada(int eliminados)
+        {
+            if (eliminados == 0)
+                throw new KeyNotFoundException(
+                    "No existe ninguna conversación entre los usuarios indicados.");
+        }
+
+        #endregion
     }
 }

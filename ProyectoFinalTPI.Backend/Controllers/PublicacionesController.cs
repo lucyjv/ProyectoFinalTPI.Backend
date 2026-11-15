@@ -10,6 +10,7 @@ using ProyectoFinalTPI.Backend.Extensions;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Dtos;
 using ProyectoFinalTPI.Backend.Dtos.Usuario;
+using ProyectoFinalTPI.Backend.Filters;
 
 namespace ProyectoFinalTPI.Backend.Controllers
 {
@@ -198,15 +199,20 @@ namespace ProyectoFinalTPI.Backend.Controllers
             }
         }
 
+        [Microsoft.AspNetCore.Authorization.Authorize]
         [HttpPost]
         [SwaggerOperation(
             Summary = "Crea una publicación.",
-            Description = "Recibe los datos del recuerdo y su ubicación como multipart/form-data. La multimedia es opcional salvo que Publicaciones:RequerirMultimedia esté activo. Si se adjunta contenido, debe enviarse un archivo o una URL HTTPS, no ambos. El archivo puede ocupar hasta 50 MB. Se utiliza el autor autenticado cuando está disponible; en caso contrario, AutorId."
+            Description = "Recibe los datos del recuerdo y su ubicación como multipart/form-data. La multimedia es opcional salvo que Publicaciones:RequerirMultimedia esté activo. Si se adjunta contenido, debe enviarse un archivo o una URL HTTPS, no ambos. El archivo puede ocupar hasta 50 MB. Usa el autor autenticado y valida el cupo semanal. Admite hasta cuatro Adjuntos según la categoría y música desde Aedo."
         )]
         [SwaggerResponse(StatusCodes.Status201Created, "Publicación creada. Devuelve su id y la cabecera Location.")]
+        [SwaggerResponse(StatusCodes.Status403Forbidden, "La categoría no permite los adjuntos o la música.", typeof(ProblemDetails))]
+        [SwaggerResponse(StatusCodes.Status429TooManyRequests, "Cupo semanal agotado.", typeof(ProblemDetails))]
         [SwaggerResponse(StatusCodes.Status400BadRequest, "Los datos del recuerdo, la ubicación o el contenido multimedia no son válidos.", typeof(ProblemDetails))]
         [SwaggerResponse(StatusCodes.Status404NotFound, "El autor indicado no existe.", typeof(ProblemDetails))]
         [SwaggerResponse(StatusCodes.Status415UnsupportedMediaType, "El formato del cuerpo no es compatible; utilice multipart/form-data.", typeof(ProblemDetails))]
+        [RequestSizeLimit(210 * 1024 * 1024)]
+        [RequestFormLimits(MultipartBodyLengthLimit = 210 * 1024 * 1024)]
         public async Task<IActionResult> Crear([FromForm] CrearPublicacionRequest request)
         {
             var autorIdAutenticado = User.ObtenerUsuarioId();
@@ -216,9 +222,12 @@ namespace ProyectoFinalTPI.Backend.Controllers
 
             using var stream = request.Archivo?.OpenReadStream();
 
-            var id = await _publicacionServicio.Crear(
-                request.ToPublicacion(autorIdFinal), stream, request.Archivo?.FileName,
-                request.ToUbicacionGps());
+            using var adjuntos = new ProyectoFinalTPI.Backend.Requests.Publicaciones.AdjuntosFormulario(request.Adjuntos);
+            var publicacion = request.ToPublicacion(autorIdFinal);
+            var gps = request.ToUbicacionGps();
+            var id = adjuntos.Elementos is null
+                ? await _publicacionServicio.Crear(publicacion, stream, request.Archivo?.FileName, gps)
+                : await _publicacionServicio.Crear(publicacion, stream, request.Archivo?.FileName, gps, adjuntos.Elementos);
 
             return Created(
                 $"/api/publicaciones/{id}",
@@ -226,6 +235,7 @@ namespace ProyectoFinalTPI.Backend.Controllers
         }
 
 
+        [Microsoft.AspNetCore.Authorization.Authorize]
         [HttpPost("{id:int}/repost")]
         [SwaggerOperation(
             Summary = "Reposteá una publicación.",
@@ -252,6 +262,7 @@ namespace ProyectoFinalTPI.Backend.Controllers
             return Ok(resultado);
         }
 
+        [Microsoft.AspNetCore.Authorization.Authorize]
         [HttpDelete("{id:int}/repost")]
         [SwaggerOperation(
             Summary = "Elimina un repost.",
@@ -278,6 +289,7 @@ namespace ProyectoFinalTPI.Backend.Controllers
             return Ok(resultado);
         }
 
+        [Microsoft.AspNetCore.Authorization.Authorize]
         [HttpPost("{id:int}/guardar")]
         [SwaggerOperation(
             Summary = "Guarda una publicación para el usuario.",
@@ -304,6 +316,7 @@ namespace ProyectoFinalTPI.Backend.Controllers
             return Ok(resultado);
         }
 
+        [Microsoft.AspNetCore.Authorization.Authorize]
         [HttpDelete("{id:int}/guardar")]
         [SwaggerOperation(
             Summary = "Elimina una publicación guardada.",
@@ -330,6 +343,7 @@ namespace ProyectoFinalTPI.Backend.Controllers
             return Ok(resultado);
         }
 
+        [Microsoft.AspNetCore.Authorization.Authorize]
         [HttpPost("{id:int}/citar")]
         [SwaggerOperation(
             Summary = "Cita una publicación con comentario propio.",
@@ -360,6 +374,7 @@ namespace ProyectoFinalTPI.Backend.Controllers
         }
 
 
+        [Microsoft.AspNetCore.Authorization.Authorize]
         [HttpDelete("{id:int}")]
         [SwaggerOperation(
             Summary = "Elimina una publicación.",
@@ -382,6 +397,7 @@ namespace ProyectoFinalTPI.Backend.Controllers
             return Ok(new { mensaje = "Publicación eliminada con éxito.", id });
         }
 
+        [Microsoft.AspNetCore.Authorization.Authorize]
         [HttpPost("{publicacionId:int}/etiquetas")]
         [SwaggerOperation(
             Summary = "Etiqueta usuarios en una publicación.",
@@ -392,6 +408,7 @@ namespace ProyectoFinalTPI.Backend.Controllers
         [SwaggerResponse(StatusCodes.Status400BadRequest, "El identificador de la publicación o la lista de usuarios no son válidos.", typeof(ProblemDetails))]
         [SwaggerResponse(StatusCodes.Status404NotFound, "La publicación o alguno de los usuarios no existen.", typeof(ProblemDetails))]
         [SwaggerResponse(StatusCodes.Status415UnsupportedMediaType, "El formato del cuerpo no es compatible; utilice application/json.", typeof(ProblemDetails))]
+        [PermisoCategoria(PermisoCuenta.EtiquetarUsuario)]
         public async Task<IActionResult> EtiquetarUsuarios(
             int publicacionId, [FromBody] EtiquetarUsuariosRequest request, CancellationToken cancellationToken)
         {

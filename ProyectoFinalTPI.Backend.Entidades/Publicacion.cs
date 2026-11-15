@@ -17,6 +17,10 @@ namespace ProyectoFinalTPI.Backend.Entidades
             public Decada DecadaDelRecuerdo => AñoDelRecuerdo.ADecada();
             public string UrlMultimedia { get; set; } = string.Empty;
             public MultimediaEnum TipoMultimedia { get; set; }
+            public ICollection<AdjuntoPublicacion> Adjuntos { get; set; } = new List<AdjuntoPublicacion>();
+            public string? MusicaSpotifyId { get; set; }
+            public string? MusicaTitulo { get; set; }
+            public string? MusicaArtista { get; set; }
             public bool EstaOculto { get; set; }
             public string? MotivoOculto { get; set; }
             public DateTime FechaCreación { get; set; } = DateTime.UtcNow;

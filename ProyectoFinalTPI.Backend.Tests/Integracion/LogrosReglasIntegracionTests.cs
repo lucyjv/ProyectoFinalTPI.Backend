@@ -11,6 +11,9 @@ using ProyectoFinalTPI.Backend.Dtos.Publicacion;
 using ProyectoFinalTPI.Backend.Dtos.Usuario;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Repositorio.Data;
+using ProyectoFinalTPI.Backend.Servicio;
+using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
+using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using Xunit;
 
 namespace ProyectoFinalTPI.Backend.Tests.Integracion;
@@ -20,7 +23,7 @@ public class LogrosReglasIntegracionTests(PostgisFixture postgres, Neo4jLogrosFi
     : IClassFixture<PostgisFixture>, IClassFixture<Neo4jLogrosFixture>
 {
     [Fact]
-    public async Task CuentaNuevaNoDesbloqueaLogrosNiHeredaLosDeOtraCuentaAlRegistrarseOIngresar()
+    public async Task QueCuentaNuevaNoDesbloqueeLogrosNiHeredeLosDeOtraCuentaAlRegistrarseOIngresar()
     {
         await using var factory = new PublicacionesApiFactory(postgres);
         using var client = factory.CreateClient();
@@ -56,7 +59,7 @@ public class LogrosReglasIntegracionTests(PostgisFixture postgres, Neo4jLogrosFi
     }
 
     [Fact]
-    public async Task LoginCuentaUnIngresoPorDiaDesbloqueaTresYSieteYNoCuentaClavesInvalidas()
+    public async Task QueLoginCuenteUnIngresoPorDiaDesbloqueeTresYSieteYNoCuenteClavesInvalidas()
     {
         var clock = new Reloj { Ahora = new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.Zero) };
         await using var factory = new PublicacionesApiFactory(postgres, timeProvider: clock);
@@ -82,7 +85,7 @@ public class LogrosReglasIntegracionTests(PostgisFixture postgres, Neo4jLogrosFi
     }
 
     [Fact]
-    public async Task SaltarUnDiaReiniciaLaRacha()
+    public async Task QueSaltarUnDiaReinicieLaRacha()
     {
         var clock = new Reloj { Ahora = new DateTimeOffset(2026, 10, 1, 23, 59, 0, TimeSpan.Zero) };
         await using var factory = new PublicacionesApiFactory(postgres, timeProvider: clock);
@@ -99,13 +102,25 @@ public class LogrosReglasIntegracionTests(PostgisFixture postgres, Neo4jLogrosFi
     }
 
     [Fact]
-    public async Task RecuerdosSinAdjuntoPersistenYSumanPublicaciones_PeroNoFotos()
+    public async Task QueRecuerdosSinAdjuntoPersistanYSumenPublicaciones_PeroNoFotos()
     {
-        await using var factory = new PublicacionesApiFactory(postgres);
+        var reloj = new RelojCategoria(DateTimeOffset.UtcNow);
+        await using var factory = new PublicacionesApiFactory(postgres)
+        {
+            ConfigurarServiciosAdicionales = servicios => servicios.AddScoped<ICategoriaServicio>(sp =>
+                new CategoriaServicio(sp.GetRequiredService<ICategoriaRepositorio>(), reloj))
+        };
         using var client = factory.CreateClient();
         var usuario = await CrearUsuario(client, "sin_adjuntos");
         var id = 0;
-        for (var i = 0; i < 10; i++) id = await CrearRecuerdo(client, multimedia: false);
+        var creados = 0;
+        async Task<int> Publicar(bool multimedia = true)
+        {
+            if (creados > 0 && creados % 5 == 0) reloj.Ahora = reloj.Ahora.AddDays(7);
+            creados++;
+            return await CrearRecuerdo(client, multimedia: multimedia);
+        }
+        for (var i = 0; i < 10; i++) id = await Publicar(multimedia: false);
         var detalle = (await client.GetFromJsonAsync<PublicacionDetalleDto>($"/api/publicaciones/{id}"))!;
         Assert.Equal(string.Empty, detalle.UrlMultimedia);
         Assert.Equal(0, factory.Media.Calls);
@@ -113,20 +128,29 @@ public class LogrosReglasIntegracionTests(PostgisFixture postgres, Neo4jLogrosFi
         Assert.False((await Perfil(client, usuario.UsuarioId)).Logros.Single(logro => logro.Id == (int)LogroEnum.FotografoDelRecuerdo).Desbloqueado);
 
         // Diez recuerdos de texto no pueden convertir la primera foto en la décima.
-        await CrearRecuerdo(client);
+        await Publicar();
         Assert.Equal(1, factory.Media.Calls);
         Assert.False((await Perfil(client, usuario.UsuarioId)).Logros.Single(logro => logro.Id == (int)LogroEnum.FotografoDelRecuerdo).Desbloqueado);
-        for (var i = 0; i < 9; i++) await CrearRecuerdo(client);
+        for (var i = 0; i < 9; i++) await Publicar();
         Assert.True((await Perfil(client, usuario.UsuarioId)).Logros.Single(logro => logro.Id == (int)LogroEnum.FotografoDelRecuerdo).Desbloqueado);
     }
 
     [Fact]
-    public async Task LinceSeEntregaEnLaPublicacionQuinceYNoEnLaCatorce()
+    public async Task QueLinceSeEntregueEnLaPublicacionQuinceYNoEnLaCatorce()
     {
-        await using var factory = new PublicacionesApiFactory(postgres);
+        var reloj = new RelojCategoria(DateTimeOffset.UtcNow);
+        await using var factory = new PublicacionesApiFactory(postgres)
+        {
+            ConfigurarServiciosAdicionales = servicios => servicios.AddScoped<ICategoriaServicio>(sp =>
+                new CategoriaServicio(sp.GetRequiredService<ICategoriaRepositorio>(), reloj))
+        };
         using var client = factory.CreateClient();
         var user = await CrearUsuario(client, "lince");
-        for (var i = 0; i < 14; i++) await CrearRecuerdo(client);
+        for (var i = 0; i < 14; i++)
+        {
+            if (i > 0 && i % 5 == 0) reloj.Ahora = reloj.Ahora.AddDays(7);
+            await CrearRecuerdo(client);
+        }
         Assert.False((await Perfil(client, user.UsuarioId)).Logros.Single(logro => logro.Id == 13).Desbloqueado);
         await CrearRecuerdo(client);
         Assert.True((await Perfil(client, user.UsuarioId)).Logros.Single(logro => logro.Id == 13).Desbloqueado);
@@ -135,11 +159,14 @@ public class LogrosReglasIntegracionTests(PostgisFixture postgres, Neo4jLogrosFi
     }
 
     [Fact]
-    public async Task CronistaRequiereCincoRecuerdosCercanosYLaUbicacionActualCompleta()
+    public async Task QueCronistaRequieraCincoRecuerdosCercanosYLaUbicacionActualCompleta()
     {
         await using var factory = new PublicacionesApiFactory(postgres);
         using var client = factory.CreateClient();
         var user = await CrearUsuario(client, "cronista");
+        using (var preparacion = factory.Services.CreateScope())
+            await preparacion.ServiceProvider.GetRequiredService<ApplicationDbContext>().Set<Usuario_Personal>()
+                .Where(u => u.Id == user.UsuarioId).ExecuteUpdateAsync(s => s.SetProperty(u => u.Reputacion, ReputacionEnum.Aedo));
         for (var i = 0; i < 4; i++) await CrearRecuerdo(client, gps: true);
         Assert.False((await Perfil(client, user.UsuarioId)).Logros.Single(logro => logro.Id == 7).Desbloqueado);
         await CrearRecuerdo(client, gps: true, latitud: -35.6);
@@ -154,13 +181,14 @@ public class LogrosReglasIntegracionTests(PostgisFixture postgres, Neo4jLogrosFi
     }
 
     [Fact]
-    public async Task PuntuacionesPersistenYDesbloqueanPopularLeyendaYGenerosoEnSusUmbrales()
+    public async Task QuePuntuacionesPersistanYDesbloqueenPopularLeyendaYGenerosoEnSusUmbrales()
     {
         await using var factory = new PublicacionesApiFactory(postgres, neo4j.Driver);
         using var client = factory.CreateClient();
         var author = await CrearUsuario(client, "autor");
         var target = await CrearRecuerdo(client);
         var voter = await CrearUsuario(client, "votante");
+        await CrearRecuerdo(client, multimedia: false);
         List<int> others;
         List<int> posts;
         using (var scope = factory.Services.CreateScope())
@@ -207,7 +235,7 @@ public class LogrosReglasIntegracionTests(PostgisFixture postgres, Neo4jLogrosFi
     [Theory]
     [InlineData("repost")]
     [InlineData("citar")]
-    public async Task ViajeroCuentaRepostsDeNeo4jYCitasSinContarRepetidosPropiosNiDeOtrosUsuarios(string accionFinal)
+    public async Task QueViajeroCuenteRepostsDeNeo4jYCitasSinContarRepetidosPropiosNiDeOtrosUsuarios(string accionFinal)
     {
         // El grafo pertenece exclusivamente al contenedor temporal de esta clase.
         await using (var session = neo4j.Driver.AsyncSession())
@@ -245,6 +273,9 @@ public class LogrosReglasIntegracionTests(PostgisFixture postgres, Neo4jLogrosFi
             Assert.Equal(HttpStatusCode.OK, (await client.PostAsync($"/api/publicaciones/{id}/repost", null)).StatusCode);
 
         var other = await CrearUsuario(client, "otro_viajero");
+        using (var preparacion = factory.Services.CreateScope())
+            await preparacion.ServiceProvider.GetRequiredService<ApplicationDbContext>().Set<Usuario_Personal>()
+                .Where(u => u.Id == other.UsuarioId).ExecuteUpdateAsync(s => s.SetProperty(u => u.Reputacion, ReputacionEnum.Nostalgico));
         Assert.Equal(HttpStatusCode.OK, (await client.PostAsync($"/api/publicaciones/{ajenas[9]}/repost", null)).StatusCode);
         await Login(client, "viajero");
         Assert.False((await Perfil(client, user.UsuarioId)).Logros.Single(logro => logro.Id == 20).Desbloqueado);

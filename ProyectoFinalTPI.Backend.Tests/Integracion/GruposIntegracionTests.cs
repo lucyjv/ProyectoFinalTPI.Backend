@@ -16,7 +16,7 @@ namespace ProyectoFinalTPI.Backend.Tests.Integracion;
 public class GruposIntegracionTests(PostgisFixture postgres) : IClassFixture<PostgisFixture>
 {
     [Fact]
-    public async Task ExpulsarPorQueryQuitaSoloLaMembresiaYConservaLosRecuerdos()
+    public async Task QueExpulsarPorQueryQuiteSoloLaMembresiaYConserveLosRecuerdos()
     {
         await using var factory = new PublicacionesApiFactory(postgres);
         using var client = factory.CreateClient();

@@ -67,7 +67,7 @@ builder.Services.AddCors(options =>
 });
 
 // Add services to the container.
-builder.Services.AddControllersWithViews(options =>
+builder.Services.AddControllers(options =>
 {
     // Las coordenadas multipart usan punto decimal, independientemente del servidor.
     var formFactory = options.ValueProviderFactories.OfType<Microsoft.AspNetCore.Mvc.ModelBinding.FormValueProviderFactory>().Single();
@@ -98,6 +98,8 @@ builder.Services.AddScoped<IPublicacionRepositorio>(provider => new PublicacionR
     provider.GetRequiredService<ApplicationDbContext>(), provider.GetService<IDriver>(),
     cacheMapa: cacheMapaHabilitada ? provider.GetService<ICacheLecturasPublicas>() : null,
     opcionesNeo4j: provider.GetRequiredService<IOptions<OpcionesNeo4j>>()));
+builder.Services.AddScoped<IJuegoDecadasRepositorio, JuegoDecadasRepositorio>();
+builder.Services.AddScoped<IJuegoDecadasServicio, JuegoDecadasServicio>();
 builder.Services.AddOptions<OpcionesNeo4j>()
     .Bind(builder.Configuration.GetSection(OpcionesNeo4j.Seccion))
     .Validate(opciones => opciones.TiempoMaximoConsultaFeedSegundos is > 0 and <= 120,
@@ -140,6 +142,8 @@ builder.Services.AddOptions<FeedRecomendacionesOptions>()
         && opciones.PesoLike >= 0
         && opciones.PesoPuntuacion >= 0
         && opciones.PesoEtiqueta >= 0
+        && double.IsFinite(opciones.BonificacionAedo) && opciones.BonificacionAedo >= 0
+        && double.IsFinite(opciones.BonificacionMnemosine) && opciones.BonificacionMnemosine >= 0
         && opciones.PesoAfinidadCategoria >= 0
         && opciones.PesoCercania >= 0
         && opciones.DistanciaDeReferenciaKm > 0,
@@ -158,6 +162,8 @@ builder.Services.AddScoped<IFotoPerfilAlmacenamiento, FotoPerfilCloudinaryAlmace
 builder.Services.AddScoped<IInteresServicio, InteresServicio>();
 builder.Services.AddScoped<ILogroServicio, LogroServicio>();
 builder.Services.AddScoped<ILogrosUsuariosRepositorio, LogrosUsuariosRepositorio>();
+builder.Services.AddScoped<ICategoriaRepositorio,CategoriaRepositorio>();
+builder.Services.AddScoped<ICategoriaServicio, CategoriaServicio>();
 
 builder.Services.AddScoped<IAdminPublicacionRepositorio, AdminPublicacionRepositorio>();
 builder.Services.AddScoped<IAdminUsuarioRepositorio, AdminUsuarioRepositorio>();
@@ -371,7 +377,6 @@ if (args.Contains("--initialize-docker"))
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
-    app.UseExceptionHandler("/Home/Error");
     app.UseHsts();
 }
 
@@ -406,7 +411,6 @@ app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapStaticAssets();
 app.MapControllers();
 
 // ── Ruta del Hub de chat ───────────────────────────────────────────────
@@ -415,10 +419,7 @@ app.MapHub<ChatHub>("/hubs/chat");
 app.MapHub<NotificacionHub>("/hubs/notificaciones");
 // ─────────────────────────────────────────────────────────────────────────────
 
-app.MapControllerRoute(
-    name: "default",
-    pattern: "{controller=Home}/{action=Index}/{id?}")
-    .WithStaticAssets();
+app.MapGet("/", () => Results.Redirect("/swagger"));
 
 app.Run();
 
