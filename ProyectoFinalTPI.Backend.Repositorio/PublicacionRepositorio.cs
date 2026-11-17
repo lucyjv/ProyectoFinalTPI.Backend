@@ -1664,10 +1664,10 @@ namespace ProyectoFinalTPI.Backend.Repositorio
 
         public async Task<int> ContarLikesOtorgados(int usuarioId, CancellationToken cancellationToken = default)
         {
-            if (usuarioId <= 0) return 0;
+            if (usuarioId <= 0 || _neo4jDriver is null) return 0;
 
             cancellationToken.ThrowIfCancellationRequested();
-            await using var session = _neo4jDriver.AsyncSession();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
 
             return await session.ExecuteReadAsync(async transaction =>
             {
@@ -1688,10 +1688,10 @@ namespace ProyectoFinalTPI.Backend.Repositorio
         }
         public async Task<int> SumarPuntosOtorgadosPorUsuario(int usuarioId, CancellationToken cancellationToken = default)
         {
-            if (usuarioId <= 0) return 0;
+            if (usuarioId <= 0 || _neo4jDriver is null) return 0;
 
             cancellationToken.ThrowIfCancellationRequested();
-            await using var session = _neo4jDriver.AsyncSession();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
 
             return await session.ExecuteReadAsync(async transaction =>
             {
@@ -1709,6 +1709,8 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                 return 0;
             });
         }
+
+        public Task Guardar(CancellationToken cancellationToken = default) => _context.SaveChangesAsync(cancellationToken);
 
     }
 }

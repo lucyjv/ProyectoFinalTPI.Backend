@@ -81,5 +81,6 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Repositorio
         Task<int> ContarRepostsDeOtrosUsuarios(int usuarioId, CancellationToken cancellationToken = default);
         Task<int> ContarLikesOtorgados(int usuarioId, CancellationToken cancellationToken = default);
         Task<int> SumarPuntosOtorgadosPorUsuario(int usuarioId, CancellationToken cancellationToken = default);
+        Task Guardar(CancellationToken cancellationToken = default);
     }
 }

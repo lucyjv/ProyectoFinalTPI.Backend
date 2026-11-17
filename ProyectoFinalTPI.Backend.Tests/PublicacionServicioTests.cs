@@ -1551,6 +1551,89 @@ namespace ProyectoFinalTPI.Backend.Tests
             Assert.Equal("usuario12", item.ReposteadoPor!.Username);
         }
 
+        [Fact]
+        public async Task QueEditarPublicacionActualiceTituloDescripcionYVersionContenido()
+        {
+            var publicacion = new Publicacion
+            {
+                Id = 10,
+                UsuarioId = 1,
+                Titulo = "Titulo anterior",
+                Descripcion = "Descripcion anterior",
+                VersionContenido = 1
+            };
+            var detalleEsperado = new PublicacionDetalleDto
+            {
+                Id = 10,
+                Titulo = "Titulo nuevo",
+                Descripcion = "Descripcion nueva"
+            };
+
+            _publicacionRepositorioMock.Setup(r => r.ObtenerPorId(10, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(publicacion);
+            _publicacionRepositorioMock.Setup(r => r.Guardar(It.IsAny<CancellationToken>()))
+                .Returns(Task.CompletedTask);
+            _publicacionRepositorioMock.Setup(r => r.ObtenerDetallePorId(10, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(detalleEsperado);
+
+            var dto = new EditarPublicacionDto
+            {
+                Titulo = "Titulo nuevo",
+                Descripcion = "Descripcion nueva"
+            };
+
+            var resultado = await _servicio.Editar(10, 1, dto);
+
+            Assert.Equal("Titulo nuevo", publicacion.Titulo);
+            Assert.Equal("Descripcion nueva", publicacion.Descripcion);
+            Assert.Equal(2, publicacion.VersionContenido);
+            Assert.Equal("Titulo nuevo", resultado.Titulo);
+            Assert.Equal("Descripcion nueva", resultado.Descripcion);
+            _publicacionRepositorioMock.Verify(r => r.Guardar(It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task QueEditarPublicacionDeOtroUsuarioLanceUnauthorizedAccessException()
+        {
+            var publicacion = new Publicacion
+            {
+                Id = 10,
+                UsuarioId = 2,
+                Titulo = "Original",
+                Descripcion = "Original"
+            };
+            _publicacionRepositorioMock.Setup(r => r.ObtenerPorId(10, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(publicacion);
+
+            var dto = new EditarPublicacionDto { Titulo = "Nuevo", Descripcion = "Nuevo" };
+
+            await Assert.ThrowsAsync<UnauthorizedAccessException>(() => _servicio.Editar(10, 1, dto));
+            _publicacionRepositorioMock.Verify(r => r.Guardar(It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task QueEditarPublicacionInexistenteLanceKeyNotFoundException()
+        {
+            _publicacionRepositorioMock.Setup(r => r.ObtenerPorId(99, It.IsAny<CancellationToken>()))
+                .ReturnsAsync((Publicacion?)null);
+
+            var dto = new EditarPublicacionDto { Titulo = "Nuevo", Descripcion = "Nuevo" };
+
+            await Assert.ThrowsAsync<KeyNotFoundException>(() => _servicio.Editar(99, 1, dto));
+        }
+
+        [Theory]
+        [InlineData("", "Descripcion valida")]
+        [InlineData("   ", "Descripcion valida")]
+        [InlineData("Titulo valido", "")]
+        [InlineData("Titulo valido", "   ")]
+        public async Task QueEditarConCamposInvalidosLanceArgumentException(string titulo, string descripcion)
+        {
+            var dto = new EditarPublicacionDto { Titulo = titulo, Descripcion = descripcion };
+
+            await Assert.ThrowsAsync<ArgumentException>(() => _servicio.Editar(10, 1, dto));
+        }
+
         #endregion
     }
 }

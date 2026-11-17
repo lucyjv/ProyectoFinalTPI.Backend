@@ -46,5 +46,6 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Servicio
         Task CompletarResumenesGuardados(IReadOnlyCollection<PublicacionDetalleDto> publicaciones, int usuarioId,
             CancellationToken cancellationToken = default);
         Task<List<PublicacionDetalleDto>> ObtenerGuardadasPorUsuarioId(int usuarioId, int? usuarioAutenticadoId, CancellationToken cancellationToken = default);
+        Task<PublicacionDetalleDto> Editar(int id, int autorId, EditarPublicacionDto dto, CancellationToken cancellationToken = default);
     }
 }
