@@ -32,6 +32,8 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
         public DbSet<TrabajoAnalisisRecuerdo> TrabajosAnalisisRecuerdos { get; set; }
         public DbSet<Notificacion> Notificaciones { get; set; }
         public DbSet<Reporte> Reportes { get; set; }
+        public DbSet<Capsula> Capsulas { get; set; }
+        public DbSet<CapsulaRecuerdo> CapsulasPublicaciones { get; set; }
 
         public override int SaveChanges(bool acceptAllChangesOnSuccess)
         {
@@ -92,6 +94,8 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
             base.OnModelCreating(modelBuilder);
 
             modelBuilder.HasPostgresExtension("postgis");
+            modelBuilder.ApplyConfiguration(new ConfiguracionCapsula());
+            modelBuilder.ApplyConfiguration(new ConfiguracionCapsulaRecuerdo());
             modelBuilder.Entity<ConsumoPublicaciones>(e =>
             {
                 e.ToTable("consumos_publicaciones");

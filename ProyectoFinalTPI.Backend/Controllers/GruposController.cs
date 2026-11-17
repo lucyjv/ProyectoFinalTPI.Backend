@@ -221,7 +221,9 @@ public class GruposController(IGrupoServicio grupoServicio) : ControllerBase
         using var stream = request.Archivo?.OpenReadStream();
         using var adjuntos = new ProyectoFinalTPI.Backend.Requests.Publicaciones.AdjuntosFormulario(request.Adjuntos);
         var publicacion = request.ToPublicacion(grupoId, usuarioId.Value);
-        var id = adjuntos.Elementos is null
+        var id = request.CapsulasIds.Count > 0
+            ? await grupoServicio.CrearRecuerdo(grupoId, usuarioId.Value, publicacion, stream, request.Archivo?.FileName, cancellationToken, adjuntos.Elementos, request.CapsulasIds)
+            : adjuntos.Elementos is null
             ? await grupoServicio.CrearRecuerdo(grupoId, usuarioId.Value, publicacion, stream, request.Archivo?.FileName, cancellationToken)
             : await grupoServicio.CrearRecuerdo(grupoId, usuarioId.Value, publicacion, stream, request.Archivo?.FileName, cancellationToken, adjuntos.Elementos);
         return Created($"/api/publicaciones/{id}", new { id });

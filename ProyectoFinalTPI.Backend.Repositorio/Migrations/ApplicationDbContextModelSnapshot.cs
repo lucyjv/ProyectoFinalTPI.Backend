@@ -53,6 +53,79 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.ToTable("adjuntos_publicacion", (string)null);
                 });
 
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Capsula", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Descripcion")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("FechaActualizacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Nombre")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int?>("PortadaAdjuntoId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("PortadaPublicacionId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PortadaRecursoId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("PropietarioId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Visibilidad")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PortadaAdjuntoId");
+
+                    b.HasIndex("PortadaPublicacionId");
+
+                    b.HasIndex("PropietarioId", "Id");
+
+                    b.ToTable("capsulas", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_capsulas_PortadaUnica", "\"PortadaRecursoId\" IS NULL OR (\"PortadaPublicacionId\" IS NULL AND \"PortadaAdjuntoId\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_capsulas_Visibilidad", "\"Visibilidad\" IN (0, 1)");
+                        });
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.CapsulaRecuerdo", b =>
+                {
+                    b.Property<int>("CapsulaId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PublicacionId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("FechaIncorporacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("CapsulaId", "PublicacionId");
+
+                    b.HasIndex("PublicacionId");
+
+                    b.ToTable("capsulas_publicaciones", (string)null);
+                });
+
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Comentario", b =>
                 {
                     b.Property<int>("Id")
@@ -1115,6 +1188,50 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Capsula", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.AdjuntoPublicacion", "PortadaAdjunto")
+                        .WithMany()
+                        .HasForeignKey("PortadaAdjuntoId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Publicacion", "PortadaPublicacion")
+                        .WithMany()
+                        .HasForeignKey("PortadaPublicacionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario", "Propietario")
+                        .WithMany()
+                        .HasForeignKey("PropietarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("PortadaAdjunto");
+
+                    b.Navigation("PortadaPublicacion");
+
+                    b.Navigation("Propietario");
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.CapsulaRecuerdo", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Capsula", "Capsula")
+                        .WithMany("Recuerdos")
+                        .HasForeignKey("CapsulaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Publicacion", "Publicacion")
+                        .WithMany("Capsulas")
+                        .HasForeignKey("PublicacionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Capsula");
+
+                    b.Navigation("Publicacion");
+                });
+
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Comentario", b =>
                 {
                     b.HasOne("ProyectoFinalTPI.Backend.Entidades.Comentario", "ComentarioPadre")
@@ -1394,6 +1511,11 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Navigation("Publicacion");
                 });
 
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Capsula", b =>
+                {
+                    b.Navigation("Recuerdos");
+                });
+
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Comentario", b =>
                 {
                     b.Navigation("Reacciones");
@@ -1425,6 +1547,8 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Publicacion", b =>
                 {
                     b.Navigation("Adjuntos");
+
+                    b.Navigation("Capsulas");
 
                     b.Navigation("Comentarios");
 

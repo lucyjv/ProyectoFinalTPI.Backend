@@ -153,12 +153,17 @@ builder.Services.AddScoped<IComentarioRepositorio, ComentarioRepositorio>();
 builder.Services.AddScoped<IComentarioServicio, ComentarioServicio>();
 builder.Services.AddScoped<IGrupoRepositorio, GrupoRepositorio>();
 builder.Services.AddScoped<IGrupoServicio, GrupoServicio>();
+builder.Services.AddScoped<ICapsulaRepositorio, CapsulaRepositorio>();
+builder.Services.AddScoped<ICapsulaServicio, CapsulaServicio>();
 builder.Services.AddScoped<IEtiquetadoPublicacionServicio, EtiquetadoPublicacionServicio>();
 builder.Services.AddScoped<IUsuarioRepositorio, UsuarioRepositorio>();
 builder.Services.AddScoped<ISesionUsuarioRepositorio, SesionUsuarioRepositorio>();
 builder.Services.AddScoped<ISeguimientoServicio, SeguimientoServicio>();
 builder.Services.AddScoped<IMultimediaServicio, MultimediaServicio>();
 builder.Services.AddScoped<IFotoPerfilAlmacenamiento, FotoPerfilCloudinaryAlmacenamiento>();
+builder.Services.AddHttpClient<IPortadaCapsulaAlmacenamiento, PortadaCapsulaCloudinaryAlmacenamiento>(cliente =>
+    cliente.Timeout = TimeSpan.FromSeconds(30))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddScoped<IInteresServicio, InteresServicio>();
 builder.Services.AddScoped<ILogroServicio, LogroServicio>();
 builder.Services.AddScoped<ILogrosUsuariosRepositorio, LogrosUsuariosRepositorio>();

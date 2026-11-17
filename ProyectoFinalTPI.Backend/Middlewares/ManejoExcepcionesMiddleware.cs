@@ -55,6 +55,7 @@ public sealed class ManejoExcepcionesMiddleware(
 
             context.Response.Clear();
             context.Response.StatusCode = estado;
+            context.Response.Headers.CacheControl = "no-store";
             await context.Response.WriteAsJsonAsync(problema,
                 options: (System.Text.Json.JsonSerializerOptions?)null, contentType: "application/problem+json", cancellationToken: context.RequestAborted);
         }
