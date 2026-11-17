@@ -7,9 +7,6 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Servicio
 {
     public interface IPublicacionServicio
     {
-        List<Publicacion> ObtenerPublicaciones();
-        List<Publicacion> ObtenerPublicacionPorCategoria(CategoriaEnum categoria);
-
         Task<int> Crear(Publicacion publicacion, Stream? archivo = null, string? nombreArchivo = null, Point? gpsUsuario = null);
         Task<int> Crear(Publicacion publicacion, Stream? archivo, string? nombreArchivo, Point? gpsUsuario, IReadOnlyList<AdjuntoEntradaDto>? adjuntos);
         Task<ResultadoMapaDto> ObtenerPines(PublicacionFiltroDto filtro, CancellationToken cancellationToken = default);

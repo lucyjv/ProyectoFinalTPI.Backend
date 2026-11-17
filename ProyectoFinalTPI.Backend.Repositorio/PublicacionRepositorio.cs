@@ -847,28 +847,6 @@ namespace ProyectoFinalTPI.Backend.Repositorio
         private IDriver ObtenerNeo4jDriver() => _neo4jDriver ??
             throw new InvalidOperationException("El driver de Neo4j no esta configurado");
 
-        public List<Publicacion> ObtenerTodasPublicaciones()
-        {
-            return _context.Publicaciones
-                           .Where(p => !p.EstaOculto)
-                           .Include(p => p.Usuario)
-                           .Include(p => p.Lugar)
-                           .ToList();
-        }
-
-        public void GuardarPublicacion(Publicacion publicacion)
-        {
-            _context.Publicaciones.Add(publicacion);
-            _context.SaveChanges();
-        }
-
-        public List<Publicacion> ObtenerPublicacionPorCategoria(CategoriaEnum categoria)
-        {
-            return _context.Publicaciones
-                           .Where(p => p.Categoria == categoria && !p.EstaOculto)
-                           .ToList();
-        }
-
         public async Task<int> Crear(Publicacion publicacion)
         {
             await _context.Publicaciones.AddAsync(publicacion);

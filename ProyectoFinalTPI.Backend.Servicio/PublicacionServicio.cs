@@ -210,15 +210,6 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
         #region Consultas y Feeds
 
-        public List<Publicacion> ObtenerPublicaciones()
-        {
-            return _publicacionRepositorio.ObtenerTodasPublicaciones();
-        }
-        public List<Publicacion> ObtenerPublicacionPorCategoria(CategoriaEnum categoria)
-        {
-            return _publicacionRepositorio.ObtenerPublicacionPorCategoria(categoria);
-        }
-
         public async Task<RepostPublicacionDto> Repostear(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
         {
             if (_categoriaServicio is not null) await _categoriaServicio.ExigirPermiso(usuarioId, global::ProyectoFinalTPI.Backend.Entidades.PermisoCuenta.Compartir, cancellationToken);

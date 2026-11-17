@@ -6,9 +6,6 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Repositorio
 {
     public interface IPublicacionRepositorio
     {
-        List<Publicacion> ObtenerTodasPublicaciones();
-        List<Publicacion> ObtenerPublicacionPorCategoria(CategoriaEnum categoria);
-
         Task<int> Crear(Publicacion publicacion);
         Task<Publicacion?> ObtenerPorId(int id, CancellationToken cancellationToken = default);
         Task<List<PublicacionPinDto>> ObtenerPines(PublicacionFiltroDto filtro, int limite, CancellationToken cancellationToken = default);
