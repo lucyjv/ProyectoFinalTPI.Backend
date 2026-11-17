@@ -210,15 +210,6 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
         #region Consultas y Feeds
 
-        public List<Publicacion> ObtenerPublicaciones()
-        {
-            return _publicacionRepositorio.ObtenerTodasPublicaciones();
-        }
-        public List<Publicacion> ObtenerPublicacionPorCategoria(CategoriaEnum categoria)
-        {
-            return _publicacionRepositorio.ObtenerPublicacionPorCategoria(categoria);
-        }
-
         public async Task<RepostPublicacionDto> Repostear(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
         {
             if (_categoriaServicio is not null) await _categoriaServicio.ExigirPermiso(usuarioId, global::ProyectoFinalTPI.Backend.Entidades.PermisoCuenta.Compartir, cancellationToken);
@@ -496,6 +487,34 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
             var eliminado = await _publicacionRepositorio.Eliminar(id, autorId, cancellationToken);
             VerificarEliminar(eliminado);
+        }
+
+        public async Task<PublicacionDetalleDto> Editar(
+            int id, int autorId, EditarPublicacionDto dto, CancellationToken cancellationToken = default)
+        {
+            ValidarIdPublicacion(id);
+            ValidarIdUsuario(autorId);
+            ArgumentNullException.ThrowIfNull(dto);
+            if (string.IsNullOrWhiteSpace(dto.Titulo) || dto.Titulo.Trim().Length > 200)
+                throw new ArgumentException("El título es obligatorio y no puede superar 200 caracteres.");
+            if (string.IsNullOrWhiteSpace(dto.Descripcion) || dto.Descripcion.Trim().Length > 5000)
+                throw new ArgumentException("La descripción es obligatoria y no puede superar 5000 caracteres.");
+
+            var publicacion = await _publicacionRepositorio.ObtenerPorId(id, cancellationToken);
+            if (publicacion is null)
+                throw new KeyNotFoundException("La publicación no existe.");
+
+            if (publicacion.UsuarioId != autorId)
+                throw new UnauthorizedAccessException("Solo el autor puede editar este recuerdo.");
+
+            publicacion.Titulo = dto.Titulo.Trim();
+            publicacion.Descripcion = dto.Descripcion.Trim();
+            publicacion.VersionContenido++;
+
+            await _publicacionRepositorio.Guardar(cancellationToken);
+
+            var detalle = await _publicacionRepositorio.ObtenerDetallePorId(id, cancellationToken);
+            return detalle ?? throw new KeyNotFoundException("No se pudo obtener la publicación actualizada.");
         }
        
         #endregion

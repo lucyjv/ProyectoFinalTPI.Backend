@@ -273,11 +273,13 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 => throw new InvalidOperationException("No se configuró el almacenamiento de fotos de perfil.");
         }
         private async Task<bool> ConsultarSiLoSigo(
-    int usuarioId, int? usuarioAutenticadoId, CancellationToken cancellationToken)
+            int usuarioId, int? usuarioAutenticadoId, CancellationToken cancellationToken)
         {
-            if (!usuarioAutenticadoId.HasValue || usuarioAutenticadoId.Value <= 0
+            if (_seguimientoServicio is null
+                || !usuarioAutenticadoId.HasValue
+                || usuarioAutenticadoId.Value <= 0
                 || usuarioAutenticadoId.Value == usuarioId) return false;
-            var seguidos = await _seguimientoServicio!.ObtenerSeguidosIdsAsync(
+            var seguidos = await _seguimientoServicio.ObtenerSeguidosIdsAsync(
                 usuarioAutenticadoId.Value, cancellationToken);
             return seguidos.Contains(usuarioId);
         }

@@ -398,6 +398,37 @@ namespace ProyectoFinalTPI.Backend.Controllers
         }
 
         [Microsoft.AspNetCore.Authorization.Authorize]
+        [HttpPut("{id:int}")]
+        [SwaggerOperation(
+            Summary = "Edita un recuerdo propio.",
+            Description = "Permite modificar el título y la descripción de una publicación creada por el usuario autenticado."
+        )]
+        [SwaggerResponse(StatusCodes.Status200OK, "Recuerdo actualizado con éxito.", typeof(PublicacionDetalleDto))]
+        [SwaggerResponse(StatusCodes.Status400BadRequest, "Datos inválidos.", typeof(ProblemDetails))]
+        [SwaggerResponse(StatusCodes.Status401Unauthorized, "No autenticado.")]
+        [SwaggerResponse(StatusCodes.Status403Forbidden, "No tienes permiso para editar este recuerdo.", typeof(ProblemDetails))]
+        [SwaggerResponse(StatusCodes.Status404NotFound, "La publicación no existe.", typeof(ProblemDetails))]
+        public async Task<IActionResult> Editar(
+            int id,
+            [FromBody] EditarPublicacionDto dto,
+            CancellationToken cancellationToken = default)
+        {
+            var autorIdAutenticado = User.ObtenerUsuarioId();
+            if (!autorIdAutenticado.HasValue || autorIdAutenticado.Value <= 0)
+                return Unauthorized();
+
+            if (dto is null)
+                return BadRequest(new ProblemDetails
+                {
+                    Title = "Solicitud inválida",
+                    Detail = "Debe proporcionar los datos a editar."
+                });
+
+            var resultado = await _publicacionServicio.Editar(id, autorIdAutenticado.Value, dto, cancellationToken);
+            return Ok(resultado);
+        }
+
+        [Microsoft.AspNetCore.Authorization.Authorize]
         [HttpPost("{publicacionId:int}/etiquetas")]
         [SwaggerOperation(
             Summary = "Etiqueta usuarios en una publicación.",
@@ -412,6 +443,14 @@ namespace ProyectoFinalTPI.Backend.Controllers
         public async Task<IActionResult> EtiquetarUsuarios(
             int publicacionId, [FromBody] EtiquetarUsuariosRequest request, CancellationToken cancellationToken)
         {
+            if (request?.UsuariosIds == null)
+            {
+                return BadRequest(new ProblemDetails
+                {
+                    Detail = "Debe indicar los IDs de los usuarios."
+                });
+            }
+
             PublicacionDetalleDto? detalle = null;
             if (_publicacionServicio != null)
             {

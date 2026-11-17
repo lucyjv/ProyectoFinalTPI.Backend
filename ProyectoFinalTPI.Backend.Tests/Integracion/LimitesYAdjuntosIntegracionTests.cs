@@ -15,6 +15,7 @@ using Xunit;
 
 namespace ProyectoFinalTPI.Backend.Tests.Integracion;
 
+[Trait("Categoria", "Integracion")]
 public class LimitesYAdjuntosIntegracionTests(PostgisFixture postgres, Neo4jLogrosFixture neo4j)
     : IClassFixture<PostgisFixture>, IClassFixture<Neo4jLogrosFixture>
 {

@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -824,6 +825,52 @@ namespace ProyectoFinalTPI.Backend.Tests
 
             //Assert
             Assert.Equal(cancelacion.Token, result.CancellationToken);
+        }
+
+        [Fact]
+        public async Task QueEditarSinAutenticacionDevuelvaUnauthorized()
+        {
+            _controller.ControllerContext.HttpContext.User = new ClaimsPrincipal();
+
+            var resultado = await _controller.Editar(1, new EditarPublicacionDto { Titulo = "T", Descripcion = "D" });
+
+            Assert.IsType<UnauthorizedResult>(resultado);
+        }
+
+        [Fact]
+        public async Task QueEditarConDtoNuloDevuelvaBadRequest()
+        {
+            _controller.ControllerContext.HttpContext.User = new ClaimsPrincipal(new ClaimsIdentity(new[]
+            {
+                new Claim(ClaimTypes.NameIdentifier, "5")
+            }, "TestAuth"));
+
+            var resultado = await _controller.Editar(1, null!);
+
+            var badRequest = Assert.IsType<BadRequestObjectResult>(resultado);
+            var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
+            Assert.Equal("Debe proporcionar los datos a editar.", problem.Detail);
+        }
+
+        [Fact]
+        public async Task QueEditarCorrectamenteDevuelvaOkConDetalle()
+        {
+            _controller.ControllerContext.HttpContext.User = new ClaimsPrincipal(new ClaimsIdentity(new[]
+            {
+                new Claim(ClaimTypes.NameIdentifier, "5")
+            }, "TestAuth"));
+
+            var dto = new EditarPublicacionDto { Titulo = "Nuevo", Descripcion = "Nueva historia" };
+            var detalle = new PublicacionDetalleDto { Id = 1, Titulo = "Nuevo", Descripcion = "Nueva historia" };
+
+            _publicacionServicioMock
+                .Setup(s => s.Editar(1, 5, dto, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(detalle);
+
+            var resultado = await _controller.Editar(1, dto);
+
+            var ok = Assert.IsType<OkObjectResult>(resultado);
+            Assert.Same(detalle, ok.Value);
         }
 
         #endregion

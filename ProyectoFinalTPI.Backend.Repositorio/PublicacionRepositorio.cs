@@ -852,28 +852,6 @@ namespace ProyectoFinalTPI.Backend.Repositorio
         private IDriver ObtenerNeo4jDriver() => _neo4jDriver ??
             throw new InvalidOperationException("El driver de Neo4j no esta configurado");
 
-        public List<Publicacion> ObtenerTodasPublicaciones()
-        {
-            return _context.Publicaciones
-                           .Where(p => !p.EstaOculto)
-                           .Include(p => p.Usuario)
-                           .Include(p => p.Lugar)
-                           .ToList();
-        }
-
-        public void GuardarPublicacion(Publicacion publicacion)
-        {
-            _context.Publicaciones.Add(publicacion);
-            _context.SaveChanges();
-        }
-
-        public List<Publicacion> ObtenerPublicacionPorCategoria(CategoriaEnum categoria)
-        {
-            return _context.Publicaciones
-                           .Where(p => p.Categoria == categoria && !p.EstaOculto)
-                           .ToList();
-        }
-
         public async Task<int> Crear(Publicacion publicacion)
         {
             await _context.Publicaciones.AddAsync(publicacion);
@@ -1687,10 +1665,10 @@ namespace ProyectoFinalTPI.Backend.Repositorio
 
         public async Task<int> ContarLikesOtorgados(int usuarioId, CancellationToken cancellationToken = default)
         {
-            if (usuarioId <= 0) return 0;
+            if (usuarioId <= 0 || _neo4jDriver is null) return 0;
 
             cancellationToken.ThrowIfCancellationRequested();
-            await using var session = _neo4jDriver.AsyncSession();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
 
             return await session.ExecuteReadAsync(async transaction =>
             {
@@ -1711,10 +1689,10 @@ namespace ProyectoFinalTPI.Backend.Repositorio
         }
         public async Task<int> SumarPuntosOtorgadosPorUsuario(int usuarioId, CancellationToken cancellationToken = default)
         {
-            if (usuarioId <= 0) return 0;
+            if (usuarioId <= 0 || _neo4jDriver is null) return 0;
 
             cancellationToken.ThrowIfCancellationRequested();
-            await using var session = _neo4jDriver.AsyncSession();
+            await using var session = ObtenerNeo4jDriver().AsyncSession();
 
             return await session.ExecuteReadAsync(async transaction =>
             {
@@ -1732,6 +1710,8 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                 return 0;
             });
         }
+
+        public Task Guardar(CancellationToken cancellationToken = default) => _context.SaveChangesAsync(cancellationToken);
 
     }
 }
