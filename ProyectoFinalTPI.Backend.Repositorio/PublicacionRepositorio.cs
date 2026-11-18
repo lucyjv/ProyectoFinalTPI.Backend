@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.Extensions.Options;
 using System.Text.RegularExpressions;
 using Neo4j.Driver;
@@ -11,6 +13,7 @@ using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Configuracion;
 using ProyectoFinalTPI.Backend.Repositorio.Data;
+using ProyectoFinalTPI.Backend.Repositorio.Cache;
 
 namespace ProyectoFinalTPI.Backend.Repositorio
 {
@@ -277,13 +280,15 @@ namespace ProyectoFinalTPI.Backend.Repositorio
 
         private readonly ApplicationDbContext _context;
         private readonly IDriver? _neo4jDriver;
+        private readonly ICacheLecturasPublicas? _cacheMapa;
         private readonly TimeSpan _tiempoMaximoConsultaFeed;
 
         public PublicacionRepositorio(ApplicationDbContext context, IDriver? neo4jDriver = null,
-            IOptions<OpcionesNeo4j>? opcionesNeo4j = null)
+            ICacheLecturasPublicas? cacheMapa = null, IOptions<OpcionesNeo4j>? opcionesNeo4j = null)
         {
             _context = context;
             _neo4jDriver = neo4jDriver;
+            _cacheMapa = cacheMapa;
             _tiempoMaximoConsultaFeed = TimeSpan.FromSeconds(
                 (opcionesNeo4j?.Value ?? new OpcionesNeo4j()).TiempoMaximoConsultaFeedSegundos);
         }
@@ -871,8 +876,17 @@ namespace ProyectoFinalTPI.Backend.Repositorio
 
         public async Task<int> Crear(Publicacion publicacion)
         {
+            // El alta y sus asociaciones se confirman juntas, incluso sin el servicio de cupos.
+            await using var transaccion = publicacion.Capsulas.Count > 0 && _context.Database.IsRelational()
+                ? await _context.Database.BeginTransactionAsync() : null;
+            if (publicacion.Capsulas.Count > 0)
+            {
+                await PersistenciaCapsulas.BloquearPropietario(_context, publicacion.UsuarioId, CancellationToken.None);
+                await PersistenciaCapsulas.PrepararAsociaciones(_context, publicacion, CancellationToken.None);
+            }
             await _context.Publicaciones.AddAsync(publicacion);
             await _context.SaveChangesAsync();
+            if (transaccion is not null) await transaccion.CommitAsync();
             return publicacion.Id;
         }
 
@@ -884,6 +898,24 @@ namespace ProyectoFinalTPI.Backend.Repositorio
         }
 
         public async Task<List<PublicacionPinDto>> ObtenerPines(PublicacionFiltroDto filtro, int limite, CancellationToken cancellationToken = default)
+        {
+            if (_cacheMapa is null) return await ConsultarPines(filtro, limite, cancellationToken);
+
+            var parametros = FormattableString.Invariant($"{filtro.MinLatitud:R}|{filtro.MaxLatitud:R}|{filtro.MinLongitud:R}|{filtro.MaxLongitud:R}|{(int?)filtro.Categoria}|{filtro.FechaDesde?.Ticks}|{filtro.FechaHasta?.Ticks}|{limite}");
+            var clave = $"mapa:consulta:v2:{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(parametros)))}";
+            Task<List<PublicacionPinDto>>? consulta = null;
+            Task<List<PublicacionPinDto>> LeerPostgres() => consulta ??= ConsultarPines(filtro, limite, cancellationToken);
+
+            var pines = await _cacheMapa.Obtener(clave, async () =>
+            {
+                var resultado = await LeerPostgres();
+                return resultado.Count > 0 ? resultado : null;
+            }, cancellationToken);
+
+            return pines is { Count: > 0 } ? pines : await LeerPostgres();
+        }
+
+        private async Task<List<PublicacionPinDto>> ConsultarPines(PublicacionFiltroDto filtro, int limite, CancellationToken cancellationToken)
         {
             var consulta = _context.Publicaciones
                 .AsNoTracking()

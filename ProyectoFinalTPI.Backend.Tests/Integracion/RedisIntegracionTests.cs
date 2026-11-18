@@ -11,6 +11,12 @@ using ProyectoFinalTPI.Backend.Repositorio.Cache;
 using ProyectoFinalTPI.Backend.Repositorio.Data;
 using ProyectoFinalTPI.Backend.Entidades;
 using Xunit;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Caching.Distributed;
+using NetTopologySuite.Geometries;
+using System.Net.Http.Json;
+using ProyectoFinalTPI.Backend.Dtos.Mapa;
+using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 namespace ProyectoFinalTPI.Backend.Tests.Integracion;
 [Trait("Categoria", "Integracion")]
 public class RedisIntegracionTests : IAsyncLifetime, IClassFixture<PostgisFixture>
@@ -52,6 +58,58 @@ public class RedisIntegracionTests : IAsyncLifetime, IClassFixture<PostgisFixtur
             configuracion.AsyncTimeout = 1000;
         }
         return new RedisCache(Options.Create(new RedisCacheOptions { ConfigurationOptions = configuracion, InstanceName = prefijo }));
+    }
+
+    [Fact]
+    public async Task QueElMapaConserveLosPinesAlRecargarYConsultePostgresSiLaCacheFalla()
+    {
+        var prefijo = Guid.NewGuid() + ":";
+        using var redis = Crear(prefijo, timeoutCorto: true);
+        var cache = new CacheLecturasPublicas(redis, NullLogger<CacheLecturasPublicas>.Instance);
+        await using var factory = new PublicacionesApiFactory(_postgres)
+        {
+            ConfigurarServiciosAdicionales = services => services.AddScoped<IPublicacionRepositorio>(p =>
+                new PublicacionRepositorio(p.GetRequiredService<ApplicationDbContext>(), cacheMapa: cache))
+        };
+        using var http = factory.CreateClient();
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            db.Publicaciones.Add(new Publicacion
+            {
+                Usuario = new Usuario_Personal { Username = "ana", Email = "ana@example.test" },
+                Lugar = new Lugar { Nombre = "Plaza", Direccion = "Centro", Coordenadas = new Point(-58.38, -34.60) { SRID = 4326 } },
+                Fecha = new DateTime(1995, 2, 3, 0, 0, 0, DateTimeKind.Utc),
+                Titulo = "Recuerdo de prueba", Categoria = CategoriaEnum.Lugares
+            });
+            await db.SaveChangesAsync();
+        }
+
+        const string consulta = "/api/publicaciones/mapa?minLatitud=-35&maxLatitud=-34&minLongitud=-59&maxLongitud=-58&categoria=Lugares";
+        async Task<ResultadoMapaDto> Leer(string desde, string hasta) =>
+            (await http.GetFromJsonAsync<ResultadoMapaDto>($"{consulta}&fechaDesde={desde}T00:00:00Z&fechaHasta={hasta}T00:00:00Z"))!;
+
+        var inicial = await Leer("1990-01-01", "2000-01-01");
+        var pin = Assert.Single(inicial.Pines);
+        var version = await redis.GetStringAsync("publico:generacion:v1");
+        Assert.NotNull(version);
+        using var conexion = await ConnectionMultiplexer.ConnectAsync(Conexion);
+        var servidor = conexion.GetServer(conexion.GetEndPoints().Single());
+        var clave = Assert.Single(servidor.Keys(pattern: $"{prefijo}publico:{version}:mapa:consulta:v2:*"));
+        var ttl = await conexion.GetDatabase().KeyTimeToLiveAsync(clave);
+        Assert.InRange(ttl!.Value, TimeSpan.FromMinutes(29), TimeSpan.FromMinutes(30));
+
+        var recarga = Assert.Single((await Leer("1990-01-01", "2000-01-01")).Pines);
+        Assert.Equal((pin.Id, pin.Latitud, pin.Longitud, pin.Categoria, pin.Titulo, pin.Año),
+            (recarga.Id, recarga.Latitud, recarga.Longitud, recarga.Categoria, recarga.Titulo, recarga.Año));
+        Assert.Empty((await Leer("2000-01-01", "2010-01-01")).Pines);
+        Assert.Single(servidor.Keys(pattern: $"{prefijo}publico:{version}:mapa:consulta:v2:*"));
+
+        await redis.SetStringAsync(clave.ToString()[prefijo.Length..], "[]");
+        Assert.Equal(pin.Id, Assert.Single((await Leer("1990-01-01", "2000-01-01")).Pines).Id);
+
+        await _redis.StopAsync();
+        Assert.Equal(pin.Id, Assert.Single((await Leer("1990-01-01", "2000-01-01")).Pines).Id);
     }
 
     [Fact]

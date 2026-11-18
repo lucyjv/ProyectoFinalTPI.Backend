@@ -121,15 +121,23 @@ public class GrupoServicio(
         string? nombreArchivo = null, CancellationToken cancellationToken = default) =>
         CrearRecuerdo(grupoId, usuarioId, publicacion, archivo, nombreArchivo, cancellationToken, null);
 
+    public Task<int> CrearRecuerdo(
+        int grupoId, int usuarioId, Publicacion publicacion, Stream? archivo,
+        string? nombreArchivo, CancellationToken cancellationToken, IReadOnlyList<global::ProyectoFinalTPI.Backend.Dtos.Publicacion.AdjuntoEntradaDto>? adjuntos) =>
+        CrearRecuerdo(grupoId, usuarioId, publicacion, archivo, nombreArchivo, cancellationToken, adjuntos, Array.Empty<int>());
+
     public async Task<int> CrearRecuerdo(
         int grupoId, int usuarioId, Publicacion publicacion, Stream? archivo,
-        string? nombreArchivo, CancellationToken cancellationToken, IReadOnlyList<global::ProyectoFinalTPI.Backend.Dtos.Publicacion.AdjuntoEntradaDto>? adjuntos)
+        string? nombreArchivo, CancellationToken cancellationToken, IReadOnlyList<global::ProyectoFinalTPI.Backend.Dtos.Publicacion.AdjuntoEntradaDto>? adjuntos,
+        IReadOnlyCollection<int> capsulasIds)
     {
         ValidarGrupoYUsuario(grupoId, usuarioId);
         ArgumentNullException.ThrowIfNull(publicacion);
         await VerificarPermisoParaPublicar(
             grupoId, usuarioId, cancellationToken);
         AsociarRecuerdoAlGrupo(publicacion, grupoId, usuarioId);
+        if (capsulasIds.Count > 0)
+            return await publicacionServicio.Crear(publicacion, archivo, nombreArchivo, null, adjuntos, capsulasIds);
         return adjuntos is null ? await publicacionServicio.Crear(publicacion, archivo, nombreArchivo)
             : await publicacionServicio.Crear(publicacion, archivo, nombreArchivo, null, adjuntos);
     }

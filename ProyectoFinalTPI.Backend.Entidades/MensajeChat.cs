@@ -31,5 +31,11 @@ namespace ProyectoFinalTPI.Backend.Entidades
         /// Se persiste para que la consulta de limpieza use un índice simple.
         /// </summary>
         public DateTime FechaExpiracion { get; set; }
+
+        /// <summary>Indica si el mensaje fue retirado por moderación.</summary>
+        public bool EstaEliminado { get; set; }
+
+        /// <summary>Fecha en que un administrador retiró el mensaje.</summary>
+        public DateTime? FechaEliminacion { get; set; }
     }
 }

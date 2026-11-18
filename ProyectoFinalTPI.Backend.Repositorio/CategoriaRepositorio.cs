@@ -66,6 +66,7 @@ public sealed class CategoriaRepositorio(
         var consumo = await contexto.Set<ConsumoPublicaciones>().SingleOrDefaultAsync(
             c => c.UsuarioId == publicacion.UsuarioId && c.SemanaInicio == semana, ct);
         if (limite.HasValue && (consumo?.Cantidad ?? 0) >= limite.Value) return null;
+        await PersistenciaCapsulas.PrepararAsociaciones(contexto, publicacion, ct);
         if (consumo is null)
         {
             consumo = new() { UsuarioId = publicacion.UsuarioId, SemanaInicio = semana };
