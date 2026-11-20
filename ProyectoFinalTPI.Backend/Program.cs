@@ -163,6 +163,10 @@ builder.Services.AddScoped<IInteresServicio, InteresServicio>();
 builder.Services.AddScoped<ILogroServicio, LogroServicio>();
 builder.Services.AddScoped<ILogrosUsuariosRepositorio, LogrosUsuariosRepositorio>();
 builder.Services.AddScoped<ICategoriaRepositorio,CategoriaRepositorio>();
+builder.Services.AddScoped<ConsumoDiarioPuntosNostalgiaRepositorio>();
+builder.Services.AddScoped<IConsumoDiarioPuntosNostalgiaRepositorio>(
+    provider => provider.GetRequiredService<ConsumoDiarioPuntosNostalgiaRepositorio>());
+builder.Services.AddScoped<IRankingMusicaRepositorio, RankingMusicaRepositorio>();
 builder.Services.AddScoped<ICategoriaServicio, CategoriaServicio>();
 
 builder.Services.AddScoped<IAdminPublicacionRepositorio, AdminPublicacionRepositorio>();
