@@ -36,12 +36,16 @@ public class CrearRecuerdoGrupoRequest : IValidatableObject
     public MultimediaEnum TipoMultimedia { get; set; }
 
     public List<AdjuntoPublicacionRequest> Adjuntos { get; set; } = new();
+    [Required, MaxLength(100)]
+    public List<int> CapsulasIds { get; set; } = new();
     public MusicaPublicacionDto? Musica { get; set; }
     public IFormFile? Archivo { get; set; }
     public string? UrlArchivo { get; set; }
 
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
+        if (CapsulasIds is null || CapsulasIds.Any(id => id <= 0))
+            yield return new ValidationResult("Las cápsulas deben tener identificadores positivos.", new[] { nameof(CapsulasIds) });
         if (Adjuntos.Count > 4)
             yield return new ValidationResult("Una publicación admite hasta 4 adjuntos.", new[] { nameof(Adjuntos) });
         if (Adjuntos.Count > 0 && (Archivo != null || !string.IsNullOrWhiteSpace(UrlArchivo)))

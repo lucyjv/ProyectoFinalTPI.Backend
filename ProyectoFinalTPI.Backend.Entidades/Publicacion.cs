@@ -31,6 +31,7 @@ namespace ProyectoFinalTPI.Backend.Entidades
             public Usuario_Interactivo Usuario { get; set; } = null!;
             public ICollection<Comentario> Comentarios { get; set; } = new List<Comentario>();
             public ICollection<PublicacionMomento> Momentos { get; set; } = new List<PublicacionMomento>();
+            public ICollection<CapsulaRecuerdo> Capsulas { get; set; } = new List<CapsulaRecuerdo>();
             public bool PermitirMomentosAutomaticos { get; set; } = true;
             public long VersionRelaciones { get; set; }
             public long VersionContenido { get; set; } = 1;

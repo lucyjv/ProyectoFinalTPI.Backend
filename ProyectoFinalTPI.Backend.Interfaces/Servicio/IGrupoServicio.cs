@@ -22,4 +22,6 @@ public interface IGrupoServicio
         string? nombreArchivo = null, CancellationToken cancellationToken = default);
     Task<int> CrearRecuerdo(int grupoId, int usuarioId, Publicacion publicacion, Stream? archivo,
         string? nombreArchivo, CancellationToken cancellationToken, IReadOnlyList<ProyectoFinalTPI.Backend.Dtos.Publicacion.AdjuntoEntradaDto>? adjuntos);
+    Task<int> CrearRecuerdo(int grupoId, int usuarioId, Publicacion publicacion, Stream? archivo,
+        string? nombreArchivo, CancellationToken cancellationToken, IReadOnlyList<AdjuntoEntradaDto>? adjuntos, IReadOnlyCollection<int> capsulasIds);
 }
