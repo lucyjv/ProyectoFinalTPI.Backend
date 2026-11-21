@@ -13,4 +13,7 @@ public interface IRankingMusicaServicio
         int candidaturaId, int usuarioId, bool esAdministrador, string titulo, string artista, CancellationToken ct = default);
     Task RetirarCandidatura(int candidaturaId, int usuarioId, bool esAdministrador, CancellationToken ct = default);
     Task<VotoRankingMusicaDto> PuntuarMusica(int candidaturaId, int usuarioId, int puntos, CancellationToken ct = default);
+
+    /// <summary>Procesa la ronda si corresponde y devuelve la fecha del próximo cierre.</summary>
+    Task<DateTimeOffset?> ProcesarRonda(CancellationToken ct = default);
 }

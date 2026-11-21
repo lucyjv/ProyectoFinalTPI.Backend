@@ -172,9 +172,12 @@ builder.Services.AddScoped<IRankingMusicaRepositorio, RankingMusicaRepositorio>(
 builder.Services.AddScoped<ICategoriaServicio, CategoriaServicio>();
 builder.Services.AddScoped<ICupoPuntosNostalgiaServicio, CupoPuntosNostalgiaServicio>();
 builder.Services.AddScoped<IRankingMusicaServicio, RankingMusicaServicio>();
-builder.Services.AddScoped<ICierreRankingMusicaServicio, CierreRankingMusicaServicio>();
 builder.Services.AddOptions<RankingMusicaOptions>()
-    .Bind(builder.Configuration.GetSection(RankingMusicaOptions.Seccion));
+    .Bind(builder.Configuration.GetSection(RankingMusicaOptions.Seccion))
+    .Validate(opciones => opciones.DuracionDias > 0, "La duración del ranking de música debe ser mayor a cero.")
+    .ValidateOnStart();
+if (!builder.Environment.IsEnvironment("Testing"))
+    builder.Services.AddHostedService<RankingMusicaWorker>();
 
 builder.Services.AddScoped<IAdminPublicacionRepositorio, AdminPublicacionRepositorio>();
 builder.Services.AddScoped<IAdminUsuarioRepositorio, AdminUsuarioRepositorio>();

@@ -256,10 +256,9 @@ public class LogrosReglasIntegracionTests(PostgisFixture postgres, Neo4jLogrosFi
         await CrearRecuerdo(client);
         await SembrarPuntos(new[] { votante.UsuarioId }, publicacionId);
         await using var scope = factory.Services.CreateAsyncScope();
-        var cierre = scope.ServiceProvider.GetRequiredService<ICierreRankingMusicaServicio>();
         var ranking = scope.ServiceProvider.GetRequiredService<IRankingMusicaRepositorio>();
         var musica = scope.ServiceProvider.GetRequiredService<IRankingMusicaServicio>();
-        Assert.True(await cierre.ProcesarRonda());
+        Assert.NotNull(await musica.ProcesarRonda());
         var ronda = (await ranking.ObtenerRondaAbierta())!;
         var cancion = await ranking.AgregarCandidatura(ronda.Id, autor.UsuarioId, new Decada(1980), "Canción", "Banda");
 
@@ -331,7 +330,7 @@ public class LogrosReglasIntegracionTests(PostgisFixture postgres, Neo4jLogrosFi
         var ranking = scope.ServiceProvider.GetRequiredService<IRankingMusicaRepositorio>();
         var musica = scope.ServiceProvider.GetRequiredService<IRankingMusicaServicio>();
         var consumo = scope.ServiceProvider.GetRequiredService<IConsumoDiarioPuntosNostalgiaRepositorio>();
-        await scope.ServiceProvider.GetRequiredService<ICierreRankingMusicaServicio>().ProcesarRonda();
+        await musica.ProcesarRonda();
         var ronda = (await ranking.ObtenerRondaAbierta())!;
         var cancion = await ranking.AgregarCandidatura(ronda.Id, autor.UsuarioId, new Decada(1980), "Canción", "Banda");
 
