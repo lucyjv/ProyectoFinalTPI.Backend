@@ -615,13 +615,14 @@ namespace ProyectoFinalTPI.Backend.Controllers
         [HttpPut("{publicacionId:int}/puntuacion")]
         [SwaggerOperation(
             Summary = "Puntúa una publicación (1 a 5).",
-            Description = "Requiere autenticación y categoría Nostálgico. Si se envía la misma puntuación previa, se desmarca/elimina (toggle)."
+            Description = "Disponible desde Nostálgico. La primera puntuación consume su valor y los aumentos consumen la diferencia del cupo diario. Bajarla o quitarla no devuelve puntos. Repetir la puntuación vigente la quita."
         )]
         [SwaggerResponse(StatusCodes.Status200OK, "Puntuación registrada o actualizada.", typeof(PuntuacionPublicacionDto))]
         [SwaggerResponse(StatusCodes.Status400BadRequest, "Puntuación o publicación no válida.", typeof(ProblemDetails))]
         [SwaggerResponse(StatusCodes.Status401Unauthorized, "No autenticado.")]
         [SwaggerResponse(StatusCodes.Status403Forbidden, "Nivel insuficiente para puntuar (debe ser Nostálgico o superior).", typeof(ProblemDetails))]
         [SwaggerResponse(StatusCodes.Status404NotFound, "Publicación no encontrada.", typeof(ProblemDetails))]
+        [SwaggerResponse(StatusCodes.Status429TooManyRequests, "Puntos diarios insuficientes.", typeof(ProblemDetails))]
         public async Task<ActionResult<PuntuacionPublicacionDto>> Puntuar(
             int publicacionId,
             [FromBody] PuntuarPublicacionDto dto,

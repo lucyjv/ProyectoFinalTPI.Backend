@@ -6,7 +6,8 @@ using ProyectoFinalTPI.Backend.Repositorio.Data;
 
 namespace ProyectoFinalTPI.Backend.Repositorio;
 
-public class AdminEstadisticaRepositorio(ApplicationDbContext context, IDriver? neo4jDriver = null)
+public class AdminEstadisticaRepositorio(ApplicationDbContext context, IDriver? neo4jDriver = null,
+    PuntuacionPublicacionRepositorio? puntuaciones = null)
     : IAdminEstadisticaRepositorio
 {
     public async Task<EstadisticasAdminDto> Obtener(int limiteRanking, CancellationToken cancellationToken = default)
@@ -21,6 +22,8 @@ public class AdminEstadisticaRepositorio(ApplicationDbContext context, IDriver? 
                 .Select(g => new CategoriaEstadisticaDto { Categoria = g.Key.ToString(), Cantidad = g.Count() })
                 .OrderByDescending(x => x.Cantidad).ToListAsync(cancellationToken)
         };
+        if (puntuaciones is not null)
+            await puntuaciones.ReintentarProyeccion(cancellationToken);
         resultado.MasGustadas = await ObtenerRanking("LE_GUSTA", limiteRanking, cancellationToken);
         resultado.MasPuntuadas = await ObtenerRanking("PUNTUO", limiteRanking, cancellationToken);
         return resultado;
