@@ -32,6 +32,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
         private readonly OpcionesPublicacion _opcionesPublicacion;
         private readonly IResumenPublicacionConsulta? _resumenConsulta;
         private readonly ICategoriaServicio? _categoriaServicio;
+        private readonly ICupoPuntosNostalgiaServicio? _cupoPuntosNostalgia;
 
         public PublicacionServicio(
             IPublicacionRepositorio publicacionRepositorio,
@@ -45,7 +46,8 @@ namespace ProyectoFinalTPI.Backend.Servicio
             IOptions<OpcionesPublicacion>? opcionesPublicacion = null, 
             IResumenPublicacionConsulta? resumenConsulta = null, 
             IProveedorRankingFeed? proveedorRanking = null, 
-            ICategoriaServicio? categoriaServicio = null)
+            ICategoriaServicio? categoriaServicio = null,
+            ICupoPuntosNostalgiaServicio? cupoPuntosNostalgia = null)
         {
             _publicacionRepositorio = publicacionRepositorio;
             _resumenConsulta = resumenConsulta;
@@ -59,6 +61,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
             _logroServicio = logroServicio;
             _opcionesPublicacion = opcionesPublicacion?.Value ?? new OpcionesPublicacion();
             _categoriaServicio = categoriaServicio;
+            _cupoPuntosNostalgia = cupoPuntosNostalgia;
         }
 
         #region Interacciones (Likes y Puntuaciones)
@@ -164,25 +167,33 @@ namespace ProyectoFinalTPI.Backend.Servicio
         public async Task<PuntuacionPublicacionDto> Puntuar(
             int publicacionId, int usuarioId, int puntaje, CancellationToken cancellationToken = default)
         {
-            if (_categoriaServicio is not null) await _categoriaServicio.ExigirPermiso(usuarioId, global::ProyectoFinalTPI.Backend.Entidades.PermisoCuenta.PuntuarPublicacion, cancellationToken);
+            int? cupoDiario = null;
+            if (_cupoPuntosNostalgia is not null)
+                cupoDiario = await _cupoPuntosNostalgia.ObtenerCupoParaPuntuar(usuarioId, PermisoCuenta.PuntuarPublicacion, cancellationToken);
+            else if (_categoriaServicio is not null)
+                await _categoriaServicio.ExigirPermiso(usuarioId, PermisoCuenta.PuntuarPublicacion, cancellationToken);
+
             ValidarPuntaje(puntaje);
             await ValidarInteraccionConPublicacion(publicacionId, usuarioId, cancellationToken);
 
             var publicacion = await _publicacionRepositorio.ObtenerPorId(publicacionId, cancellationToken);
             VerificarNoEsPublicacionPropia(usuarioId, publicacion);
 
-            await ActualizarPuntuacion(publicacionId, usuarioId, puntaje, publicacion, cancellationToken);
+            var cambio = cupoDiario.HasValue
+                ? await ActualizarPuntuacionConCupo(publicacionId, usuarioId, puntaje, cupoDiario.Value, publicacion, cancellationToken)
+                : await ActualizarPuntuacion(publicacionId, usuarioId, puntaje, publicacion, cancellationToken);
+            await VerificacionLogrosPuntuacion(usuarioId, publicacion, cambio);
+            await ActualizarCategoriaPorRecuerdo(publicacion, cambio.Estado.PuntosTotales, cancellationToken);
 
-            var estadoNuevo = await _publicacionRepositorio.ObtenerEstadoPuntuacion(publicacionId, usuarioId, cancellationToken);
-            await VerificacionLogrosPuntuacion(usuarioId, publicacion, estadoNuevo, cancellationToken);
-            await ActualizarCategoriaPorRecuerdo(publicacion, estadoNuevo.PuntosTotales, cancellationToken);
-
-            return estadoNuevo;
+            return cambio.Estado;
         }
         public async Task<PuntuacionPublicacionDto> QuitarPuntuacion(
             int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
         {
             await ValidarInteraccionConPublicacion(publicacionId, usuarioId, cancellationToken);
+            if (_cupoPuntosNostalgia is not null)
+                return (await _publicacionRepositorio.ActualizarPuntuacionConCupo(publicacionId, usuarioId, null, 0, cancellationToken)).Estado;
+
             await _publicacionRepositorio.QuitarPuntuacion(publicacionId, usuarioId, cancellationToken);
             return await _publicacionRepositorio.ObtenerEstadoPuntuacion(publicacionId, usuarioId, cancellationToken);
         }
@@ -898,7 +909,20 @@ namespace ProyectoFinalTPI.Backend.Servicio
                 SiguienteCursor = null
             };
         }
-        private async Task ActualizarPuntuacion(
+        private async Task<CambioPuntuacionPublicacion> ActualizarPuntuacionConCupo(
+            int publicacionId, int usuarioId, int puntaje, int cupoDiario, Publicacion? publicacion,
+            CancellationToken cancellationToken)
+        {
+            var cambio = await _publicacionRepositorio.ActualizarPuntuacionConCupo(
+                publicacionId, usuarioId, puntaje, cupoDiario, cancellationToken);
+            if (cambio.Estado.MiPuntuacion.HasValue && publicacion is not null)
+                await _notificacionServicio.NotificarPuntuacionEnPublicacionAsync(
+                    publicacion.UsuarioId, publicacionId, usuarioId, puntaje, cancellationToken);
+
+            return cambio;
+        }
+
+        private async Task<CambioPuntuacionPublicacion> ActualizarPuntuacion(
             int publicacionId, int usuarioId, int puntaje, Publicacion? publicacion,
             CancellationToken cancellationToken)
         {
@@ -907,17 +931,18 @@ namespace ProyectoFinalTPI.Backend.Servicio
             {
                 // Toggle: si vuelve a presionar el mismo puntaje, se quita la puntuación
                 await _publicacionRepositorio.QuitarPuntuacion(publicacionId, usuarioId, cancellationToken);
-                return;
             }
-
-            await _publicacionRepositorio.PuntuarPublicacion(
-                publicacionId, usuarioId, puntaje, cancellationToken);
-
-            if (publicacion != null && publicacion.UsuarioId != usuarioId)
+            else
             {
-                await _notificacionServicio.NotificarPuntuacionEnPublicacionAsync(
-                    publicacion.UsuarioId, publicacionId, usuarioId, puntaje, cancellationToken);
+                await _publicacionRepositorio.PuntuarPublicacion(publicacionId, usuarioId, puntaje, cancellationToken);
+                if (publicacion is not null && publicacion.UsuarioId != usuarioId)
+                    await _notificacionServicio.NotificarPuntuacionEnPublicacionAsync(
+                        publicacion.UsuarioId, publicacionId, usuarioId, puntaje, cancellationToken);
             }
+
+            var estado = await _publicacionRepositorio.ObtenerEstadoPuntuacion(publicacionId, usuarioId, cancellationToken);
+            var puntosOtorgados = await _publicacionRepositorio.SumarPuntosOtorgadosPorUsuario(usuarioId, cancellationToken);
+            return new CambioPuntuacionPublicacion(estado, puntosOtorgados);
         }
         private Task ActualizarCategoriaPorRecuerdo(
         Publicacion? publicacion,
@@ -1152,9 +1177,9 @@ namespace ProyectoFinalTPI.Backend.Servicio
             }
         }
 
-        private async Task VerificacionLogrosPuntuacion(int usuarioId, Publicacion? publicacion, PuntuacionPublicacionDto estadoNuevo, CancellationToken cancellationToken)
+        private async Task VerificacionLogrosPuntuacion(int usuarioId, Publicacion? publicacion, CambioPuntuacionPublicacion cambio)
         {
-            int totalPuntosOtorgados = await _publicacionRepositorio.SumarPuntosOtorgadosPorUsuario(usuarioId, cancellationToken);
+            int totalPuntosOtorgados = cambio.PuntosOtorgadosPorUsuario;
             if (totalPuntosOtorgados >= 1)
             {
                 await _logroServicio.VerificarYDarLogro(usuarioId, LogroEnum.Curioso);
@@ -1167,7 +1192,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
             if (publicacion != null)
             {
                 int autorId = publicacion.UsuarioId;
-                int puntosTotalesEnPost = estadoNuevo.PuntosTotales;
+                int puntosTotalesEnPost = cambio.Estado.PuntosTotales;
 
                 if (puntosTotalesEnPost >= 20)
                 {

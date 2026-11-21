@@ -11,6 +11,8 @@ public interface ICategoriaServicio
     bool TienePermiso(CategoriaCuenta categoria, PermisoCuenta permiso);
     Task ActualizarPorRecuerdo(Publicacion? publicacion, int puntosRecibidos, CancellationToken ct = default);
     Task<EstadoCategoriaDto> ObtenerEstado(int usuarioId, CancellationToken ct = default);
+    Task<CategoriaCuenta> ObtenerCategoriaEfectiva(int usuarioId, CancellationToken ct = default);
+    Task<CategoriaCuenta> ObtenerCategoriaConPermiso(int usuarioId, PermisoCuenta permiso, CancellationToken ct = default);
     Task ExigirPermiso(int usuarioId, PermisoCuenta permiso, CancellationToken ct = default);
     Task ValidarCreacion(int usuarioId, int cantidadAdjuntos, bool tieneMusica, CancellationToken ct = default);
     Task<int> CrearRecuerdo(Publicacion publicacion, CancellationToken ct = default);

@@ -8,9 +8,6 @@ namespace ProyectoFinalTPI.Backend.Repositorio;
 public sealed class ConsumoDiarioPuntosNostalgiaRepositorio(ApplicationDbContext contexto)
     : IConsumoDiarioPuntosNostalgiaRepositorio
 {
-    private static readonly TimeZoneInfo ZonaBuenosAires =
-        TimeZoneInfo.FindSystemTimeZoneById("America/Argentina/Buenos_Aires");
-
     public Task<int> ObtenerPuntosGastados(int usuarioId, DateOnly fecha, CancellationToken ct = default) =>
         contexto.Set<ConsumoDiarioPuntosNostalgia>()
             .Where(consumo => consumo.UsuarioId == usuarioId && consumo.Fecha == fecha)
@@ -35,7 +32,7 @@ public sealed class ConsumoDiarioPuntosNostalgiaRepositorio(ApplicationDbContext
         ExigirTransaccion();
         ArgumentOutOfRangeException.ThrowIfNegative(puntos);
         ArgumentOutOfRangeException.ThrowIfNegative(cupoDiario);
-        var fecha = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(instante, ZonaBuenosAires).DateTime);
+        var fecha = CalendarioNostalgia.FechaLocal(instante);
         var gastados = await ObtenerPuntosGastados(usuarioId, fecha, ct);
         var restantes = Math.Max(0, cupoDiario - gastados);
         if (puntos > restantes)

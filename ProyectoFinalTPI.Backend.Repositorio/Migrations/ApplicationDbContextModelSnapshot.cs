@@ -812,6 +812,45 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                         });
                 });
 
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.PuntuacionPublicacionPersistida", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("FechaActualizacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("PendienteDeProyectar")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("PublicacionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Puntaje")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UsuarioId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PendienteDeProyectar")
+                        .HasFilter(" \"PendienteDeProyectar\" ");
+
+                    b.HasIndex("PublicacionId");
+
+                    b.HasIndex("UsuarioId", "PublicacionId")
+                        .IsUnique();
+
+                    b.ToTable("puntuaciones_publicacion", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_puntuaciones_publicacion_puntaje", " \"Puntaje\" BETWEEN 1 AND 5 ");
+                        });
+                });
+
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.RankingMusica", b =>
                 {
                     b.Property<int>("Id")
@@ -1513,6 +1552,21 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Navigation("Momento");
 
                     b.Navigation("Publicacion");
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.PuntuacionPublicacionPersistida", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Publicacion", null)
+                        .WithMany()
+                        .HasForeignKey("PublicacionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.ReaccionComentario", b =>
