@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Options;
 using ProyectoFinalTPI.Backend.Dtos.RankingMusica;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Entidades.ValueObjects;
@@ -8,7 +9,7 @@ namespace ProyectoFinalTPI.Backend.Servicio;
 
 public sealed class RankingMusicaServicio(
     IRankingMusicaRepositorio repositorio, ICategoriaServicio categorias, ICupoPuntosNostalgiaServicio puntosNostalgia,
-    TimeProvider reloj) : IRankingMusicaServicio
+    TimeProvider reloj, IOptions<RankingMusicaOptions> opciones) : IRankingMusicaServicio
 {
     private const int CantidadGanadorasPorDecada = 3;
 
@@ -71,6 +72,32 @@ public sealed class RankingMusicaServicio(
         var voto = await repositorio.RegistrarVoto(candidaturaId, usuarioId, puntos, cupo, ct);
         return new(voto.VotoId, voto.PuntosTotales, voto.PuntosDiariosRestantes);
     }
+
+    public async Task<DateTimeOffset?> ProcesarRonda(CancellationToken ct = default)
+    {
+        var ronda = await repositorio.ObtenerRondaAbierta(ct);
+        var ahora = reloj.GetUtcNow();
+        if (ronda is null)
+            return await CrearPrimeraRonda(ahora, ct);
+
+        if (ahora < ronda.Cierre)
+            return ronda.Cierre;
+
+        var cierreSiguiente = CalcularCierre(CalendarioNostalgia.FechaLocal(ronda.Cierre));
+        var cerrada = await repositorio.CerrarRonda(ronda.Id, cierreSiguiente, ct);
+        return cerrada ? cierreSiguiente : null;
+    }
+
+    private async Task<DateTimeOffset?> CrearPrimeraRonda(DateTimeOffset ahora, CancellationToken ct)
+    {
+        var inicio = opciones.Value.FechaInicio ?? CalendarioNostalgia.FechaLocal(ahora);
+        var cierre = CalcularCierre(inicio);
+        var creada = await repositorio.CrearRondaInicial(CalendarioNostalgia.InicioDelDia(inicio), cierre, ct);
+        return creada ? cierre : null;
+    }
+
+    private DateTimeOffset CalcularCierre(DateOnly inicio) =>
+        CalendarioNostalgia.InicioDelDia(inicio.AddDays(opciones.Value.DuracionDias));
 
     private async Task<CandidaturaRankingMusicaDto> AgregarCandidatura(
         int usuarioId, int decada, string titulo, string artista, CancellationToken ct)
