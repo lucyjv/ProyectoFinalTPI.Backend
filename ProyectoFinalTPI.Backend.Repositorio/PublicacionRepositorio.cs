@@ -282,13 +282,16 @@ namespace ProyectoFinalTPI.Backend.Repositorio
         private readonly IDriver? _neo4jDriver;
         private readonly ICacheLecturasPublicas? _cacheMapa;
         private readonly TimeSpan _tiempoMaximoConsultaFeed;
+        private readonly PuntuacionPublicacionRepositorio? _puntuaciones;
 
         public PublicacionRepositorio(ApplicationDbContext context, IDriver? neo4jDriver = null,
-            ICacheLecturasPublicas? cacheMapa = null, IOptions<OpcionesNeo4j>? opcionesNeo4j = null)
+            ICacheLecturasPublicas? cacheMapa = null, IOptions<OpcionesNeo4j>? opcionesNeo4j = null,
+            PuntuacionPublicacionRepositorio? puntuaciones = null)
         {
             _context = context;
             _neo4jDriver = neo4jDriver;
             _cacheMapa = cacheMapa;
+            _puntuaciones = puntuaciones;
             _tiempoMaximoConsultaFeed = TimeSpan.FromSeconds(
                 (opcionesNeo4j?.Value ?? new OpcionesNeo4j()).TiempoMaximoConsultaFeedSegundos);
         }
@@ -622,6 +625,11 @@ namespace ProyectoFinalTPI.Backend.Repositorio
             });
         }
 
+        public Task<CambioPuntuacionPublicacion> ActualizarPuntuacionConCupo(
+            int publicacionId, int usuarioId, int? puntaje, int cupoDiario, CancellationToken cancellationToken = default) =>
+            (_puntuaciones ?? throw new InvalidOperationException("El guardado de puntuaciones con cupo no está configurado."))
+                .Actualizar(publicacionId, usuarioId, puntaje, cupoDiario, cancellationToken);
+
         public async Task<PuntuacionPublicacionDto> ObtenerEstadoPuntuacion(int publicacionId, int? usuarioId, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -660,6 +668,8 @@ namespace ProyectoFinalTPI.Backend.Repositorio
         {
             if (publicacionesIds.Count == 0)
                 return new Dictionary<int, (int PuntosTotales, int? MiPuntuacion)>();
+            if (_puntuaciones is not null && _context.Database.IsNpgsql())
+                return await _puntuaciones.ObtenerResumen(publicacionesIds, usuarioId, cancellationToken);
 
             cancellationToken.ThrowIfCancellationRequested();
             await using var session = ObtenerNeo4jDriver().AsyncSession();
@@ -694,7 +704,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio
         {
             if (semillasIds.Count == 0) return Array.Empty<RecomendacionPublicacionDto>();
             cancellationToken.ThrowIfCancellationRequested();
-            await using var session = ObtenerNeo4jDriver().AsyncSession();
+            await using var session = await AbrirSesionConPuntuaciones(cancellationToken);
             return await session.ExecuteReadAsync(async transaction =>
             {
                 var cursor = await transaction.RunAsync(RecomendacionesFeedQuery,
@@ -744,7 +754,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio
             string query, object parametros, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await using var session = ObtenerNeo4jDriver().AsyncSession();
+            await using var session = await AbrirSesionConPuntuaciones(cancellationToken);
             return await session.ExecuteReadAsync(async transaction =>
             {
                 var cursor = await transaction.RunAsync(query, parametros);
@@ -771,7 +781,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio
         {
             if (publicacionesIds.Count == 0) return new Dictionary<int, ResumenInteraccionesFeedDto>();
             cancellationToken.ThrowIfCancellationRequested();
-            await using var session = ObtenerNeo4jDriver().AsyncSession();
+            await using var session = await AbrirSesionConPuntuaciones(cancellationToken);
             return await session.ExecuteReadAsync(async transaction =>
             {
                 var cursor = await transaction.RunAsync(ObtenerResumenInteraccionesFeedQuery,
@@ -848,6 +858,14 @@ namespace ProyectoFinalTPI.Backend.Repositorio
 
         private void ConfigurarLecturaFeed(TransactionConfigBuilder configuracion)
             => configuracion.WithTimeout(_tiempoMaximoConsultaFeed);
+
+        private async Task<IAsyncSession> AbrirSesionConPuntuaciones(CancellationToken cancellationToken)
+        {
+            if (_puntuaciones is not null)
+                await _puntuaciones.ReintentarProyeccion(cancellationToken);
+
+            return ObtenerNeo4jDriver().AsyncSession();
+        }
 
         private IDriver ObtenerNeo4jDriver() => _neo4jDriver ??
             throw new InvalidOperationException("El driver de Neo4j no esta configurado");

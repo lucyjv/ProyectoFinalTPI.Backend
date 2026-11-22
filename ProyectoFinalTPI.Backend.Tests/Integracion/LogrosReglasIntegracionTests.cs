@@ -10,6 +10,7 @@ using ProyectoFinalTPI.Backend.Dtos.Auth;
 using ProyectoFinalTPI.Backend.Dtos.Publicacion;
 using ProyectoFinalTPI.Backend.Dtos.Usuario;
 using ProyectoFinalTPI.Backend.Entidades;
+using ProyectoFinalTPI.Backend.Entidades.ValueObjects;
 using ProyectoFinalTPI.Backend.Repositorio.Data;
 using ProyectoFinalTPI.Backend.Servicio;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
@@ -183,7 +184,9 @@ public class LogrosReglasIntegracionTests(PostgisFixture postgres, Neo4jLogrosFi
     [Fact]
     public async Task QuePuntuacionesPersistanYDesbloqueenPopularLeyendaYGenerosoEnSusUmbrales()
     {
-        await using var factory = new PublicacionesApiFactory(postgres, neo4j.Driver);
+        await LimpiarGrafo();
+        var reloj = new Reloj { Ahora = DateTimeOffset.UtcNow };
+        await using var factory = new PublicacionesApiFactory(postgres, neo4j.Driver, reloj);
         using var client = factory.CreateClient();
         var author = await CrearUsuario(client, "autor");
         var target = await CrearRecuerdo(client);
@@ -213,13 +216,20 @@ public class LogrosReglasIntegracionTests(PostgisFixture postgres, Neo4jLogrosFi
         Assert.Equal(20, (await Puntuar(client, target, 5)).PuntosTotales);
         Assert.True((await Perfil(client, author.UsuarioId)).Logros.Single(logro => logro.Id == 10).Desbloqueado);
         Assert.Null((await Puntuar(client, target, 5)).MiPuntuacion);
+        reloj.Ahora = reloj.Ahora.AddDays(1);
         await Puntuar(client, target, 5);
         await SembrarPuntos(others.Skip(3), target);
         Assert.Equal(99, (await Puntuar(client, target, 4)).PuntosTotales);
         Assert.False((await Perfil(client, author.UsuarioId)).Logros.Single(logro => logro.Id == 16).Desbloqueado);
+        reloj.Ahora = reloj.Ahora.AddDays(1);
         Assert.Equal(100, (await Puntuar(client, target, 5)).PuntosTotales);
         Assert.True((await Perfil(client, author.UsuarioId)).Logros.Single(logro => logro.Id == 16).Desbloqueado);
-        foreach (var post in posts.Take(8)) await Puntuar(client, post, 5);
+        foreach (var post in posts.Take(8))
+        {
+            reloj.Ahora = reloj.Ahora.AddDays(1);
+            await Puntuar(client, post, 5);
+        }
+        reloj.Ahora = reloj.Ahora.AddDays(1);
         await Puntuar(client, posts.Last(), 4);
         Assert.False((await Perfil(client, voter.UsuarioId)).Logros.Single(logro => logro.Id == 11).Desbloqueado);
         await Puntuar(client, posts.Last(), 5);
@@ -230,6 +240,123 @@ public class LogrosReglasIntegracionTests(PostgisFixture postgres, Neo4jLogrosFi
         Assert.Equal(HttpStatusCode.BadRequest, (await client.PutAsJsonAsync($"/api/publicaciones/{target}/puntuacion", new { puntaje = 6 })).StatusCode);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", author.Token);
         Assert.Equal(HttpStatusCode.BadRequest, (await client.PutAsJsonAsync($"/api/publicaciones/{target}/puntuacion", new { puntaje = 5 })).StatusCode);
+    }
+
+    [Fact]
+    public async Task QuePublicacionesYMusicaCompartanCupoYCobrenSoloElAumentoSinReembolsos()
+    {
+        // Arrange
+        await LimpiarGrafo();
+        var reloj = new Reloj { Ahora = DateTimeOffset.UtcNow };
+        await using var factory = new PublicacionesApiFactory(postgres, neo4j.Driver, reloj);
+        using var client = factory.CreateClient();
+        var autor = await CrearUsuario(client, "autor");
+        var publicacionId = await CrearRecuerdo(client);
+        var votante = await CrearUsuario(client, "votante");
+        await CrearRecuerdo(client);
+        await SembrarPuntos(new[] { votante.UsuarioId }, publicacionId);
+        await using var scope = factory.Services.CreateAsyncScope();
+        var ranking = scope.ServiceProvider.GetRequiredService<IRankingMusicaRepositorio>();
+        var musica = scope.ServiceProvider.GetRequiredService<IRankingMusicaServicio>();
+        Assert.NotNull(await musica.ProcesarRonda());
+        var ronda = (await ranking.ObtenerRondaAbierta())!;
+        var cancion = await ranking.AgregarCandidatura(ronda.Id, autor.UsuarioId, new Decada(1980), "Canción", "Banda");
+
+        // Act
+        var primera = await Puntuar(client, publicacionId, 3);
+        var voto = await musica.PuntuarMusica(cancion.Id, votante.UsuarioId, 4);
+        using var sinSaldo = await client.PutAsJsonAsync($"/api/publicaciones/{publicacionId}/puntuacion", new { puntaje = 5 });
+        var aumento = await Puntuar(client, publicacionId, 4);
+        using var retiro = await client.DeleteAsync($"/api/publicaciones/{publicacionId}/puntuacion");
+        using var sinReembolso = await client.PutAsJsonAsync($"/api/publicaciones/{publicacionId}/puntuacion", new { puntaje = 1 });
+        reloj.Ahora = CalendarioNostalgia.InicioDelDia(CalendarioNostalgia.FechaLocal(reloj.Ahora).AddDays(1));
+        var alDiaSiguiente = await Puntuar(client, publicacionId, 5);
+
+        // Assert
+        Assert.Equal(3, primera.MiPuntuacion);
+        Assert.Equal(1, voto.PuntosDiariosRestantes);
+        Assert.Equal(HttpStatusCode.TooManyRequests, sinSaldo.StatusCode);
+        Assert.Equal(4, aumento.PuntosTotales);
+        Assert.Equal(HttpStatusCode.OK, retiro.StatusCode);
+        Assert.Null((await retiro.Content.ReadFromJsonAsync<PuntuacionPublicacionDto>())!.MiPuntuacion);
+        Assert.Equal(HttpStatusCode.TooManyRequests, sinReembolso.StatusCode);
+        Assert.Equal(5, alDiaSiguiente.PuntosTotales);
+        Assert.Equal(5, await LeerPuntajeDelGrafo(votante.UsuarioId, publicacionId));
+    }
+
+    [Fact]
+    public async Task QueUnaPuntuacionPendienteSeReproyecteAlConsultarElRecuerdo()
+    {
+        // Arrange
+        await LimpiarGrafo();
+        var reloj = new Reloj { Ahora = DateTimeOffset.UtcNow };
+        await using var factory = new PublicacionesApiFactory(postgres, neo4j.Driver, reloj);
+        using var client = factory.CreateClient();
+        await CrearUsuario(client, "autor");
+        var publicacionId = await CrearRecuerdo(client);
+        var votante = await CrearUsuario(client, "votante");
+        await CrearRecuerdo(client);
+        await Puntuar(client, publicacionId, 3);
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var puntuaciones = db.Set<PuntuacionPublicacionPersistida>()
+            .Where(fila => fila.PublicacionId == publicacionId && fila.UsuarioId == votante.UsuarioId);
+        await puntuaciones.ExecuteUpdateAsync(cambios => cambios.SetProperty(fila => fila.PendienteDeProyectar, true));
+        await SembrarPuntos(new[] { votante.UsuarioId }, publicacionId);
+
+        // Act
+        var detalle = await client.GetFromJsonAsync<PublicacionDetalleDto>($"/api/publicaciones/{publicacionId}");
+
+        // Assert
+        Assert.Equal(3, detalle!.MiPuntuacion);
+        Assert.Equal(3, detalle.PuntosTotales);
+        Assert.Equal(3, await LeerPuntajeDelGrafo(votante.UsuarioId, publicacionId));
+        Assert.False(await puntuaciones.Select(fila => fila.PendienteDeProyectar).SingleAsync());
+    }
+
+    [Fact]
+    public async Task QueUnaPuntuacionYUnVotoSimultaneosNoPuedanGastarElMismoSaldo()
+    {
+        // Arrange
+        await LimpiarGrafo();
+        var reloj = new Reloj { Ahora = DateTimeOffset.UtcNow };
+        await using var factory = new PublicacionesApiFactory(postgres, neo4j.Driver, reloj);
+        using var client = factory.CreateClient();
+        var autor = await CrearUsuario(client, "autor");
+        var publicacionId = await CrearRecuerdo(client);
+        var votante = await CrearUsuario(client, "votante");
+        await CrearRecuerdo(client);
+        await using var scope = factory.Services.CreateAsyncScope();
+        var ranking = scope.ServiceProvider.GetRequiredService<IRankingMusicaRepositorio>();
+        var musica = scope.ServiceProvider.GetRequiredService<IRankingMusicaServicio>();
+        var consumo = scope.ServiceProvider.GetRequiredService<IConsumoDiarioPuntosNostalgiaRepositorio>();
+        await musica.ProcesarRonda();
+        var ronda = (await ranking.ObtenerRondaAbierta())!;
+        var cancion = await ranking.AgregarCandidatura(ronda.Id, autor.UsuarioId, new Decada(1980), "Canción", "Banda");
+
+        // Act
+        var puntuacionPendiente = client.PutAsJsonAsync($"/api/publicaciones/{publicacionId}/puntuacion", new { puntaje = 4 });
+        var votoRegistrado = await IntentarVoto();
+        using var puntuacion = await puntuacionPendiente;
+
+        // Assert
+        Assert.Equal(votoRegistrado ? HttpStatusCode.TooManyRequests : HttpStatusCode.OK, puntuacion.StatusCode);
+        Assert.Equal(4, await consumo.ObtenerPuntosGastados(votante.UsuarioId, CalendarioNostalgia.FechaLocal(reloj.Ahora)));
+        Assert.Equal(votoRegistrado ? 4L : 0L, (await ranking.ListarCandidaturas(ronda.Id)).Single().Puntos);
+
+        async Task<bool> IntentarVoto()
+        {
+            try
+            {
+                await musica.PuntuarMusica(cancion.Id, votante.UsuarioId, 4);
+                return true;
+            }
+            catch (CupoDiarioPuntosNostalgiaAgotadoException ex)
+            {
+                Assert.Equal(1, ex.PuntosRestantes);
+                return false;
+            }
+        }
     }
 
     [Theory]
@@ -296,6 +423,12 @@ public class LogrosReglasIntegracionTests(PostgisFixture postgres, Neo4jLogrosFi
         Assert.Equal(1, await contexto.Logros_Usuarios.CountAsync(logro => logro.UsuarioId == user.UsuarioId && logro.LogroId == 20));
     }
 
+    private async Task LimpiarGrafo()
+    {
+        await using var session = neo4j.Driver.AsyncSession();
+        await (await session.RunAsync("MATCH (n) DETACH DELETE n")).ConsumeAsync();
+    }
+
     private async Task SembrarPuntos(IEnumerable<int> users, int post)
     {
         await using var session = neo4j.Driver.AsyncSession();
@@ -305,6 +438,16 @@ public class LogrosReglasIntegracionTests(PostgisFixture postgres, Neo4jLogrosFi
             MERGE (p:Publicacion {postgresId: $post})
             MERGE (u)-[r:PUNTUO]->(p) SET r.puntaje = 5
             """, new { users = users.ToArray(), post })).ConsumeAsync();
+    }
+
+    private async Task<int?> LeerPuntajeDelGrafo(int usuarioId, int publicacionId)
+    {
+        await using var sesion = neo4j.Driver.AsyncSession();
+        var cursor = await sesion.RunAsync("""
+            MATCH (:Usuario {postgresId: $usuarioId})-[r:PUNTUO]->(:Publicacion {postgresId: $publicacionId})
+            RETURN r.puntaje AS puntaje
+            """, new { usuarioId, publicacionId });
+        return await cursor.FetchAsync() ? cursor.Current["puntaje"].As<int>() : null;
     }
     private static async Task<AuthRespuestaDto> CrearUsuario(HttpClient client, string name)
     {

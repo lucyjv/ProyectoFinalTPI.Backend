@@ -97,7 +97,8 @@ var cacheMapaHabilitada = builder.Configuration.GetValue<bool>("Redis:CacheMapaH
 builder.Services.AddScoped<IPublicacionRepositorio>(provider => new PublicacionRepositorio(
     provider.GetRequiredService<ApplicationDbContext>(), provider.GetService<IDriver>(),
     cacheMapa: cacheMapaHabilitada ? provider.GetService<ICacheLecturasPublicas>() : null,
-    opcionesNeo4j: provider.GetRequiredService<IOptions<OpcionesNeo4j>>()));
+    opcionesNeo4j: provider.GetRequiredService<IOptions<OpcionesNeo4j>>(),
+    puntuaciones: provider.GetRequiredService<PuntuacionPublicacionRepositorio>()));
 builder.Services.AddScoped<IJuegoDecadasRepositorio, JuegoDecadasRepositorio>();
 builder.Services.AddScoped<IJuegoDecadasServicio, JuegoDecadasServicio>();
 builder.Services.AddOptions<OpcionesNeo4j>()
@@ -168,7 +169,20 @@ builder.Services.AddScoped<IInteresServicio, InteresServicio>();
 builder.Services.AddScoped<ILogroServicio, LogroServicio>();
 builder.Services.AddScoped<ILogrosUsuariosRepositorio, LogrosUsuariosRepositorio>();
 builder.Services.AddScoped<ICategoriaRepositorio,CategoriaRepositorio>();
+builder.Services.AddScoped<ConsumoDiarioPuntosNostalgiaRepositorio>();
+builder.Services.AddScoped<PuntuacionPublicacionRepositorio>();
+builder.Services.AddScoped<IConsumoDiarioPuntosNostalgiaRepositorio>(
+    provider => provider.GetRequiredService<ConsumoDiarioPuntosNostalgiaRepositorio>());
+builder.Services.AddScoped<IRankingMusicaRepositorio, RankingMusicaRepositorio>();
 builder.Services.AddScoped<ICategoriaServicio, CategoriaServicio>();
+builder.Services.AddScoped<ICupoPuntosNostalgiaServicio, CupoPuntosNostalgiaServicio>();
+builder.Services.AddScoped<IRankingMusicaServicio, RankingMusicaServicio>();
+builder.Services.AddOptions<RankingMusicaOptions>()
+    .Bind(builder.Configuration.GetSection(RankingMusicaOptions.Seccion))
+    .Validate(opciones => opciones.DuracionDias > 0, "La duración del ranking de música debe ser mayor a cero.")
+    .ValidateOnStart();
+if (!builder.Environment.IsEnvironment("Testing"))
+    builder.Services.AddHostedService<RankingMusicaWorker>();
 
 builder.Services.AddScoped<IAdminPublicacionRepositorio, AdminPublicacionRepositorio>();
 builder.Services.AddScoped<IAdminUsuarioRepositorio, AdminUsuarioRepositorio>();

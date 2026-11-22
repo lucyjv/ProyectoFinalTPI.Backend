@@ -65,11 +65,16 @@ public sealed class CategoriaServicio(
         return ConstruirEstado(codigo, semana, consumo);
     }
 
-    public async Task ExigirPermiso(int usuarioId, PermisoCuenta permiso, CancellationToken ct = default)
+    public async Task ExigirPermiso(int usuarioId, PermisoCuenta permiso, CancellationToken ct = default) =>
+        await ObtenerCategoriaConPermiso(usuarioId, permiso, ct);
+
+    public async Task<CategoriaCuenta> ObtenerCategoriaConPermiso(int usuarioId, PermisoCuenta permiso, CancellationToken ct = default)
     {
-        var estado = await ObtenerEstado(usuarioId, ct);
-        if (!estado.Categoria.Permisos.Contains(permiso.ToString()))
-            throw new UnauthorizedAccessException($"La categoría {estado.Categoria.Nombre} no permite esta acción.");
+        var categoria = BuscarDefinicion(await ObtenerCategoriaEfectiva(usuarioId, ct));
+        if (!categoria.Permisos.Contains(permiso))
+            throw new UnauthorizedAccessException($"La categoría {categoria.Nombre} no permite esta acción.");
+
+        return categoria.Codigo;
     }
 
     public async Task ValidarCreacion(int usuarioId, int cantidadAdjuntos, bool tieneMusica, CancellationToken ct = default)
@@ -261,7 +266,7 @@ public sealed class CategoriaServicio(
                 .Select(permiso => permiso.ToString())
                 .ToArray());
 
-    private async Task<CategoriaCuenta> ObtenerCategoriaEfectiva(int usuarioId, CancellationToken ct)
+    public async Task<CategoriaCuenta> ObtenerCategoriaEfectiva(int usuarioId, CancellationToken ct = default)
     {
         var usuario = await progreso.ObtenerUsuario(usuarioId, ct)
             ?? throw new KeyNotFoundException("El usuario no existe.");

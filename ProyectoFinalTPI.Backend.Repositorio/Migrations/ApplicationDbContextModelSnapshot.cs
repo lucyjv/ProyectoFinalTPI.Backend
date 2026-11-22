@@ -53,6 +53,63 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.ToTable("adjuntos_publicacion", (string)null);
                 });
 
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.CandidaturaRankingMusica", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Artista")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("ArtistaNormalizado")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("CreadorId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Decada")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("FechaIngreso")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("FechaRetiro")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("RankingMusicaId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Titulo")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("TituloNormalizado")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreadorId");
+
+                    b.HasIndex("RankingMusicaId", "Decada", "TituloNormalizado", "ArtistaNormalizado")
+                        .IsUnique()
+                        .HasFilter(" \"FechaRetiro\" IS NULL ");
+
+                    b.ToTable("candidaturas_ranking_musica", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_candidaturas_musica_retiro", " \"FechaRetiro\" IS NULL OR \"FechaRetiro\" >= \"FechaIngreso\" ");
+
+                            t.HasCheckConstraint("CK_candidaturas_musica_textos", "length(btrim(\"Titulo\")) > 0 AND length(btrim(\"Artista\")) > 0\nAND length(btrim(\"TituloNormalizado\")) > 0 AND length(btrim(\"ArtistaNormalizado\")) > 0");
+                        });
+                });
+
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Capsula", b =>
                 {
                     b.Property<int>("Id")
@@ -125,7 +182,6 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
 
                     b.ToTable("capsulas_publicaciones", (string)null);
                 });
-
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Comentario", b =>
                 {
                     b.Property<int>("Id")
@@ -168,6 +224,25 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.HasIndex("PublicacionId", "ComentarioPadreId", "FechaCreacion", "Id");
 
                     b.ToTable("Comentario", (string)null);
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.ConsumoDiarioPuntosNostalgia", b =>
+                {
+                    b.Property<int>("UsuarioId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly>("Fecha")
+                        .HasColumnType("date");
+
+                    b.Property<int>("PuntosGastados")
+                        .HasColumnType("integer");
+
+                    b.HasKey("UsuarioId", "Fecha");
+
+                    b.ToTable("consumos_diarios_puntos_nostalgia", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_consumos_diarios_puntos_gastados", " \"PuntosGastados\" >= 0 ");
+                        });
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.ConsumoPublicaciones", b =>
@@ -809,6 +884,79 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                         });
                 });
 
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.PuntuacionPublicacionPersistida", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("FechaActualizacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("PendienteDeProyectar")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("PublicacionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Puntaje")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UsuarioId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PendienteDeProyectar")
+                        .HasFilter(" \"PendienteDeProyectar\" ");
+
+                    b.HasIndex("PublicacionId");
+
+                    b.HasIndex("UsuarioId", "PublicacionId")
+                        .IsUnique();
+
+                    b.ToTable("puntuaciones_publicacion", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_puntuaciones_publicacion_puntaje", " \"Puntaje\" BETWEEN 1 AND 5 ");
+                        });
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.RankingMusica", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTimeOffset>("Apertura")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("Cierre")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Estado")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Apertura")
+                        .IsUnique();
+
+                    b.HasIndex("Estado")
+                        .IsUnique()
+                        .HasFilter(" \"Estado\" = 0 ");
+
+                    b.ToTable("rankings_musica", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_rankings_musica_estado", " \"Estado\" IN (0, 1) ");
+
+                            t.HasCheckConstraint("CK_rankings_musica_fechas", " \"Apertura\" < \"Cierre\" ");
+                        });
+                });
+
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.ReaccionComentario", b =>
                 {
                     b.Property<int>("ComentarioId")
@@ -941,6 +1089,39 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                         .HasFilter("\"Estado\" IN (0, 1)");
 
                     b.ToTable("reportes", (string)null);
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.ResultadoRankingMusica", b =>
+                {
+                    b.Property<int>("CandidaturaId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Decada")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Posicion")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("Puntos")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("RankingMusicaId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("CandidaturaId");
+
+                    b.HasIndex("RankingMusicaId", "Decada", "CandidaturaId")
+                        .IsUnique();
+
+                    b.HasIndex("RankingMusicaId", "Decada", "Posicion")
+                        .IsUnique();
+
+                    b.ToTable("resultados_ranking_musica", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_resultados_musica_posicion", " \"Posicion\" BETWEEN 1 AND 6 ");
+
+                            t.HasCheckConstraint("CK_resultados_musica_puntos", " \"Puntos\" > 0 ");
+                        });
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.SesionUsuario", b =>
@@ -1107,6 +1288,38 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.UseTphMappingStrategy();
                 });
 
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.VotoRankingMusica", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("CandidaturaId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("FechaVoto")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Puntos")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UsuarioId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CandidaturaId");
+
+                    b.HasIndex("UsuarioId");
+
+                    b.ToTable("votos_ranking_musica", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_votos_musica_puntos", " \"Puntos\" > 0 ");
+                        });
+                });
+
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Usuario_Interactivo", b =>
                 {
                     b.HasBaseType("ProyectoFinalTPI.Backend.Entidades.Usuario");
@@ -1188,6 +1401,21 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.CandidaturaRankingMusica", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("CreadorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.RankingMusica", null)
+                        .WithMany("Candidaturas")
+                        .HasForeignKey("RankingMusicaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Capsula", b =>
                 {
                     b.HasOne("ProyectoFinalTPI.Backend.Entidades.AdjuntoPublicacion", "PortadaAdjunto")
@@ -1256,6 +1484,15 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Navigation("Publicacion");
 
                     b.Navigation("Usuario");
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.ConsumoDiarioPuntosNostalgia", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.ConsumoPublicaciones", b =>
@@ -1433,6 +1670,21 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Navigation("Publicacion");
                 });
 
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.PuntuacionPublicacionPersistida", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Publicacion", null)
+                        .WithMany()
+                        .HasForeignKey("PublicacionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.ReaccionComentario", b =>
                 {
                     b.HasOne("ProyectoFinalTPI.Backend.Entidades.Comentario", "Comentario")
@@ -1489,6 +1741,16 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Navigation("UsuarioReportado");
                 });
 
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.ResultadoRankingMusica", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.CandidaturaRankingMusica", null)
+                        .WithOne()
+                        .HasForeignKey("ProyectoFinalTPI.Backend.Entidades.ResultadoRankingMusica", "RankingMusicaId", "Decada", "CandidaturaId")
+                        .HasPrincipalKey("ProyectoFinalTPI.Backend.Entidades.CandidaturaRankingMusica", "RankingMusicaId", "Decada", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.SesionUsuario", b =>
                 {
                     b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario", "Usuario")
@@ -1514,6 +1776,21 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Capsula", b =>
                 {
                     b.Navigation("Recuerdos");
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.VotoRankingMusica", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.CandidaturaRankingMusica", null)
+                        .WithMany()
+                        .HasForeignKey("CandidaturaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Comentario", b =>
@@ -1555,6 +1832,11 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Navigation("Momentos");
 
                     b.Navigation("TrabajosAnalisis");
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.RankingMusica", b =>
+                {
+                    b.Navigation("Candidaturas");
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Usuario_Interactivo", b =>

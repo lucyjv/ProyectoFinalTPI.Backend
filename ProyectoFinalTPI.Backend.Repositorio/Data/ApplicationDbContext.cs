@@ -121,6 +121,12 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
             modelBuilder.ApplyConfiguration(new ConfiguracionMomento());
             modelBuilder.ApplyConfiguration(new ConfiguracionMomentoAlias());
             modelBuilder.ApplyConfiguration(new ConfiguracionPublicacionMomento());
+            modelBuilder.ApplyConfiguration(new ConfiguracionRankingMusica());
+            modelBuilder.ApplyConfiguration(new ConfiguracionCandidaturaRankingMusica());
+            modelBuilder.ApplyConfiguration(new ConfiguracionVotoRankingMusica());
+            modelBuilder.ApplyConfiguration(new ConfiguracionResultadoRankingMusica());
+            modelBuilder.ApplyConfiguration(new ConfiguracionConsumoDiarioPuntosNostalgia());
+            modelBuilder.ApplyConfiguration(new ConfiguracionPuntuacionPublicacionPersistida());
 
             modelBuilder.Entity<Usuario>()
                 .ToTable("Usuario")
