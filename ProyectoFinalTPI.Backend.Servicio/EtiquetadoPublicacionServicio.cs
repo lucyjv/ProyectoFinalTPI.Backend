@@ -122,9 +122,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
             if (usuariosIds.Count == 0)
                 throw new ArgumentException(
                     "Debe indicar al menos un usuario para etiquetar", nameof(usuariosIds));
-            if (usuariosIds.Any(id => id <= 0))
-                throw new ArgumentException(
-                    "Los IDs de usuarios deben ser mayores que cero.", nameof(usuariosIds));
+            usuariosIds.ValidarIds("usuarios");
         }
 
         private async Task ValidarPublicacionExistente(int publicacionId, IReadOnlyCollection<int>? usuariosIds, CancellationToken cancellationToken)

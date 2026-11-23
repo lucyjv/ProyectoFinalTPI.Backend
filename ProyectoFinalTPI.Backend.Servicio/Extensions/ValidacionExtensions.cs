@@ -36,4 +36,13 @@ public static class ValidacionExtensions
             throw new ArgumentException(
                 $"El campo {campo} debe estar entre {minimo} y {maximo}.");
     }
+    public static void ValidarIds(
+    this IReadOnlyCollection<int> ids, string recurso)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+
+        if (ids.Any(id => id <= 0))
+            throw new ArgumentException(
+                $"Los IDs de {recurso} deben ser mayores que cero.");
+    }
 }

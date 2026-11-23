@@ -596,10 +596,8 @@ namespace ProyectoFinalTPI.Backend.Servicio
             CancellationToken cancellationToken = default)
         {
             usuarioId.ValidarId("usuario");
-            if (publicacionesIds.Count is < 1 or > 50)
-                throw new ArgumentException("Se deben enviar entre 1 y 50 publicaciones.");
-            if (publicacionesIds.Any(id => id <= 0))
-                throw new ArgumentException("Los IDs de publicaciones deben ser mayores que cero.");
+            publicacionesIds.Count.ValidarRango(1, 50, "publicaciones enviadas");
+            publicacionesIds.ValidarIds("publicaciones");
             if (!await _usuarioRepositorio.ExisteUsuario(usuarioId, cancellationToken))
                 throw new KeyNotFoundException("El usuario autenticado no existe.");
 
