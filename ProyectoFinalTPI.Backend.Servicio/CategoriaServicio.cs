@@ -13,6 +13,7 @@ public sealed class CategoriaServicio(
 {
     private readonly TimeProvider reloj = reloj ?? TimeProvider.System;
     private const int PuntosParaAedo = 30;
+    private const int PuntosParaMnemosine = 200;
 
     private static readonly IReadOnlyList<CategoriaDefinicion> Categorias =
         CrearCatalogo();
@@ -123,6 +124,9 @@ public sealed class CategoriaServicio(
         if (puntosRecibidos < 0)
             throw new ArgumentOutOfRangeException(
                 nameof(puntosRecibidos));
+
+        if (puntosRecibidos >= PuntosParaMnemosine)
+            return ReputacionEnum.Mnnemónide;
 
         return puntosRecibidos >= PuntosParaAedo
             ? ReputacionEnum.Aedo
