@@ -86,7 +86,7 @@ public class MomentoServicio(IMomentoRepositorio momentos, IPublicacionRepositor
     private static void NormalizarDatos(Momento momento)
     {
         momento.Nombre = momento.Nombre.ValidarTexto(200, "nombre");
-        momento.Descripcion = momento.Descripcion.ValidarTexto(2000, "descripción");
+        momento.Descripcion = momento.Descripcion.ValidarTexto(2000, "descripción", minimo:0);
     }
     private static void ValidarFechas(Momento momento)
     {

@@ -25,7 +25,7 @@ public class InteresServicioTests
         var ex = await Assert.ThrowsAsync<ArgumentException>(() =>
             servicio.ObtenerIntereses(usuarioIdInvalido, CancellationToken.None));
 
-        Assert.Equal("El ID del usuario debe ser mayor que cero.", ex.Message);
+        Assert.Equal("El ID de usuario debe ser mayor que cero.", ex.Message);
         _publicacionRepositorioMock.Verify(r =>
             r.ObtenerCantidadPorCategoriaDelUsuario(It.IsAny<int>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()),
             Times.Never);

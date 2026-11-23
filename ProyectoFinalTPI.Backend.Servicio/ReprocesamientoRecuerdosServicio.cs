@@ -17,8 +17,7 @@ public class ReprocesamientoRecuerdosServicio(IReprocesamientoRecuerdosRepositor
 
     public async Task<VistaPreviaReprocesamientoDto> Previsualizar(int limite, int despuesDeId, bool incluirFallidos, CancellationToken ct)
     {
-        despuesDeId.ValidarId("cursor");
-        limite.ValidarLimite(25);
+        ValidarPaginacion(limite, despuesDeId);
         var pagina = await repositorio.Previsualizar(limite, despuesDeId, incluirFallidos, ct);
         return pagina with { AnalisisDisponible = analizador.Disponible && opciones.Value.Habilitado };
     }
@@ -61,6 +60,10 @@ public class ReprocesamientoRecuerdosServicio(IReprocesamientoRecuerdosRepositor
     private static void ValidarAdministrador(int administradorId)
     {
         if (administradorId <= 0) throw new UnauthorizedAccessException("Se requiere un administrador identificado.");
+    }
+    private static void ValidarPaginacion(int limite, int despuesDeId)
+    {
+        if (limite is < 1 or > 25 || despuesDeId < 0) throw new ArgumentException("El límite debe estar entre 1 y 25 y el cursor debe ser no negativo.");
     }
 
     #endregion

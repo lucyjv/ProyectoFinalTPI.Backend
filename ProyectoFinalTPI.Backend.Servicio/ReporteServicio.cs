@@ -29,7 +29,7 @@ public class ReporteServicio(IReporteRepositorio repositorio) : IReporteServicio
         dto.ContenidoId.ValidarId("contenido");
         dto.TipoContenido.ValidarEnum("tipo de contenido");
         dto.Motivo.ValidarEnum("motivo");
-        dto.Detalle.ValidarTexto(1000, "detalle");
+        dto.Detalle.ValidarTexto(1000, "detalle", minimo: 0);
     }
 
     private static Reporte CrearEntidad(

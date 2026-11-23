@@ -117,6 +117,6 @@ public class AdminReporteServicio(
         dto.Accion.ValidarEnum("acción");
         if (dto.Accion == AccionReporte.SuspenderUsuario && dto.DiasSuspension is < 1 or > 365)
             throw new ArgumentException("La suspensión debe durar entre 1 y 365 días.");
-        dto.Observacion?.ValidarTexto(1000, "observación");
+        dto.Observacion.ValidarTexto(1000, "observación", minimo: 0);
     }
 }

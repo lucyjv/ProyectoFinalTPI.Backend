@@ -83,7 +83,7 @@ public class SesionFypRepositorioTests : IDisposable
 
         //Act & Assert
         var excepcion = await Assert.ThrowsAsync<ArgumentException>(() => _repositorio.CrearAsync(usuarioIdInvalido, publicacionesIds));
-        Assert.Contains("El ID del usuario debe ser mayor que cero", excepcion.Message);
+        Assert.Contains("El ID de usuario debe ser mayor que cero", excepcion.Message);
     }
 
     [Fact]

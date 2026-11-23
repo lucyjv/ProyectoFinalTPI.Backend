@@ -153,8 +153,8 @@ public class GrupoServicio(
 
     private static void ValidarDatos(Grupo grupo)
     {
-        grupo.Nombre?.ValidarTexto(100, "nombre", minimo: 3);
-        grupo.Descripcion.ValidarTexto(500, "descripción");
+        grupo.Nombre.ValidarTexto(100, "nombre", minimo: 3);
+        grupo.Descripcion.ValidarTexto(500, "descripción", minimo: 0);
         _ = new Decada(grupo.Decada);
     }
     private static void ValidarGrupoYUsuario(int grupoId, int usuarioId)
@@ -164,7 +164,7 @@ public class GrupoServicio(
     }
     private static string ValidarBusqueda(string texto, int limite)
     {
-        var textoNormalizado = texto.ValidarTexto(100, "texto de búsqueda");
+        var textoNormalizado = texto.ValidarTexto(100, "texto de búsqueda", minimo: 2);
         limite.ValidarLimite(50);
         return textoNormalizado;
     }

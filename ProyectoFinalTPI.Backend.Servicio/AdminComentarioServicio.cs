@@ -1,5 +1,6 @@
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
+using ProyectoFinalTPI.Backend.Servicio.Extensions;
 
 namespace ProyectoFinalTPI.Backend.Servicio;
 
@@ -9,7 +10,7 @@ public class AdminComentarioServicio(
 {
     public async Task Eliminar(int id, CancellationToken cancellationToken = default)
     {
-        if (id <= 0) throw new ArgumentException("El ID de comentario debe ser mayor que cero.");
+        id.ValidarId("comentario");
         var comentario = await repositorio.Obtener(id, cancellationToken)
             ?? throw new KeyNotFoundException("El comentario no existe.");
         if (comentario.EstaEliminado) return;

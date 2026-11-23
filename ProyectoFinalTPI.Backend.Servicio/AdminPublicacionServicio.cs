@@ -71,7 +71,7 @@ public class AdminPublicacionServicio(
     {
         dto.Titulo.ValidarTexto(200, "titulo");
         dto.Descripcion.ValidarTexto(5000, "descripción");
-        if (!Enum.IsDefined(dto.Categoria)) throw new ArgumentException("La categoría no es válida.");
+        dto.Categoria.ValidarEnum("categoría");
     }
 
     private static void AplicarEdicion(Publicacion publicacion, ActualizarPublicacionAdminDto dto)
