@@ -53,6 +53,25 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.ToTable("adjuntos_publicacion", (string)null);
                 });
 
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.BilleteraPuntosNostalgia", b =>
+                {
+                    b.Property<int>("UsuarioId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("FechaActualizacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("PuntosExtra")
+                        .HasColumnType("integer");
+
+                    b.HasKey("UsuarioId");
+
+                    b.ToTable("billeteras_puntos_nostalgia", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_billeteras_puntos_extra", " \"PuntosExtra\" >= 0 ");
+                        });
+                });
+
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.CandidaturaRankingMusica", b =>
                 {
                     b.Property<int>("Id")
@@ -110,6 +129,79 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                         });
                 });
 
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Capsula", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Descripcion")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("FechaActualizacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Nombre")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int?>("PortadaAdjuntoId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("PortadaPublicacionId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PortadaRecursoId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("PropietarioId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Visibilidad")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PortadaAdjuntoId");
+
+                    b.HasIndex("PortadaPublicacionId");
+
+                    b.HasIndex("PropietarioId", "Id");
+
+                    b.ToTable("capsulas", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_capsulas_PortadaUnica", "\"PortadaRecursoId\" IS NULL OR (\"PortadaPublicacionId\" IS NULL AND \"PortadaAdjuntoId\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_capsulas_Visibilidad", "\"Visibilidad\" IN (0, 1)");
+                        });
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.CapsulaRecuerdo", b =>
+                {
+                    b.Property<int>("CapsulaId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PublicacionId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("FechaIncorporacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("CapsulaId", "PublicacionId");
+
+                    b.HasIndex("PublicacionId");
+
+                    b.ToTable("capsulas_publicaciones", (string)null);
+                });
+
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Comentario", b =>
                 {
                     b.Property<int>("Id")
@@ -152,6 +244,60 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.HasIndex("PublicacionId", "ComentarioPadreId", "FechaCreacion", "Id");
 
                     b.ToTable("Comentario", (string)null);
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.CompraPuntosNostalgia", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("CotizacionDolar")
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTimeOffset?>("FechaAcreditacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("FechaCreacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PackId")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("PaymentId")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<decimal>("PrecioArs")
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<decimal>("PrecioUsd")
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<string>("PreferenceId")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<int>("Puntos")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UsuarioId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UsuarioId");
+
+                    b.ToTable("compras_puntos_nostalgia", (string)null);
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.ConsumoDiarioPuntosNostalgia", b =>
@@ -520,7 +666,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Moderaciones");
+                    b.ToTable("Moderaciones", (string)null);
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Momento", b =>
@@ -768,7 +914,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
 
                     b.HasIndex("Categoria", "EstaOculto", "FechaCreación");
 
-                    b.ToTable("Publicaciones");
+                    b.ToTable("Publicaciones", (string)null);
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.PublicacionMomento", b =>
@@ -1329,6 +1475,15 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.BilleteraPuntosNostalgia", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.CandidaturaRankingMusica", b =>
                 {
                     b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario", null)
@@ -1342,6 +1497,50 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                         .HasForeignKey("RankingMusicaId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Capsula", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.AdjuntoPublicacion", "PortadaAdjunto")
+                        .WithMany()
+                        .HasForeignKey("PortadaAdjuntoId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Publicacion", "PortadaPublicacion")
+                        .WithMany()
+                        .HasForeignKey("PortadaPublicacionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario", "Propietario")
+                        .WithMany()
+                        .HasForeignKey("PropietarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("PortadaAdjunto");
+
+                    b.Navigation("PortadaPublicacion");
+
+                    b.Navigation("Propietario");
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.CapsulaRecuerdo", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Capsula", "Capsula")
+                        .WithMany("Recuerdos")
+                        .HasForeignKey("CapsulaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Publicacion", "Publicacion")
+                        .WithMany("Capsulas")
+                        .HasForeignKey("PublicacionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Capsula");
+
+                    b.Navigation("Publicacion");
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Comentario", b =>
@@ -1368,6 +1567,15 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Navigation("Publicacion");
 
                     b.Navigation("Usuario");
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.CompraPuntosNostalgia", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.ConsumoDiarioPuntosNostalgia", b =>
@@ -1672,6 +1880,11 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Capsula", b =>
+                {
+                    b.Navigation("Recuerdos");
+                });
+
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Comentario", b =>
                 {
                     b.Navigation("Reacciones");
@@ -1703,6 +1916,8 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Publicacion", b =>
                 {
                     b.Navigation("Adjuntos");
+
+                    b.Navigation("Capsulas");
 
                     b.Navigation("Comentarios");
 

@@ -26,10 +26,7 @@ internal sealed class ConfiguracionCandidaturaRankingMusica : IEntityTypeConfigu
         entidad.ToTable("candidaturas_ranking_musica", tabla =>
         {
             tabla.HasCheckConstraint("CK_candidaturas_musica_retiro", """ "FechaRetiro" IS NULL OR "FechaRetiro" >= "FechaIngreso" """);
-            tabla.HasCheckConstraint("CK_candidaturas_musica_textos", """
-                length(btrim("Titulo")) > 0 AND length(btrim("Artista")) > 0
-                AND length(btrim("TituloNormalizado")) > 0 AND length(btrim("ArtistaNormalizado")) > 0
-                """);
+            tabla.HasCheckConstraint("CK_candidaturas_musica_textos", "length(btrim(\"Titulo\")) > 0 AND length(btrim(\"Artista\")) > 0\nAND length(btrim(\"TituloNormalizado\")) > 0 AND length(btrim(\"ArtistaNormalizado\")) > 0");
         });
         entidad.Property(candidatura => candidatura.Decada)
             .HasConversion(decada => decada.Valor, valor => new Decada(valor));

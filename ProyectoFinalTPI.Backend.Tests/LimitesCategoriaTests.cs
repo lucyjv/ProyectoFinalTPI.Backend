@@ -2,6 +2,7 @@ using Moq;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Entidades.Categorias;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
+using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Servicio;
 using Xunit;
 
@@ -71,6 +72,27 @@ public class LimitesCategoriaTests
         var servicio = new CategoriaServicio(repo.Object);
         await Assert.ThrowsAsync<CupoPublicacionesAgotadoException>(() => servicio.CrearRecuerdo(new Publicacion { UsuarioId = 1 }));
         repo.Verify(r => r.CrearConCupo(It.IsAny<Publicacion>(), It.IsAny<DateOnly>(), It.IsAny<int?>(), default), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(0, ReputacionEnum.Nostalgico)]
+    [InlineData(29, ReputacionEnum.Nostalgico)]
+    [InlineData(30, ReputacionEnum.Aedo)]
+    [InlineData(199, ReputacionEnum.Aedo)]
+    [InlineData(200, ReputacionEnum.Mnnemónide)]
+    [InlineData(350, ReputacionEnum.Mnnemónide)]
+    public async Task QueElAscensoPorRecuerdoPromuevaSegunLosPuntos(int puntos, ReputacionEnum esperado)
+    {
+        var repo = new Mock<ICategoriaRepositorio>();
+        var notif = new Mock<INotificacionServicio>();
+        repo.Setup(r => r.PromoverHasta(1, esperado, default)).ReturnsAsync(true);
+        var servicio = new CategoriaServicio(repo.Object, null, notif.Object);
+
+        var publicacion = new Publicacion { UsuarioId = 1, EstaOculto = false };
+        await servicio.ActualizarPorRecuerdo(publicacion, puntos);
+
+        repo.Verify(r => r.PromoverHasta(1, esperado, default), Times.Once);
+        notif.Verify(n => n.NotificarAscensoCategoriaAsync(1, default), Times.Once);
     }
 
     private static Mock<ICategoriaRepositorio> Preparar(ReputacionEnum reputacion)
