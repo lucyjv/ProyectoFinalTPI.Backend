@@ -60,7 +60,7 @@ public class AdminUsuarioServicio(
     private static void ValidarPagina(int pagina, int tamanio)
     {
         pagina.ValidarId("página");
-        if (tamanio is < 1 or > 100) throw new ArgumentException("El tamaño debe estar entre 1 y 100.");
+        tamanio.ValidarRango(1, 100, "tamaño");
     }
     private static void ValidarDuracionSuspension(CambiarSuspensionUsuarioDto dto)
     {

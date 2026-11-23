@@ -29,4 +29,11 @@ public static class ValidacionExtensions
         if (!Enum.IsDefined(valor))
             throw new ArgumentException($"El campo {campo} no es válido.");
     }
+    public static void ValidarRango(
+    this int valor, int minimo, int maximo, string campo)
+    {
+        if (valor < minimo || valor > maximo)
+            throw new ArgumentException(
+                $"El campo {campo} debe estar entre {minimo} y {maximo}.");
+    }
 }

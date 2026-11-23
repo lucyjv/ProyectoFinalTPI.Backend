@@ -174,7 +174,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
             else if (_categoriaServicio is not null)
                 await _categoriaServicio.ExigirPermiso(usuarioId, PermisoCuenta.PuntuarPublicacion, cancellationToken);
 
-            ValidarPuntaje(puntaje);
+            puntaje.ValidarRango(1, 5, "puntuación");
             await ValidarInteraccionConPublicacion(publicacionId, usuarioId, cancellationToken);
 
             var publicacion = await _publicacionRepositorio.ObtenerPorId(publicacionId, cancellationToken);
@@ -643,11 +643,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
             publicacion.EstaOculto = false;
             publicacion.MotivoOculto = null;
         }
-        private static void ValidarPuntaje(int puntaje)
-        {
-            if (puntaje < 1 || puntaje > 5)
-                throw new ArgumentOutOfRangeException(nameof(puntaje), "La puntuación debe estar entre 1 y 5.");
-        }
+
         private static void VerificarEliminar(bool eliminado)
         {
             if (!eliminado)

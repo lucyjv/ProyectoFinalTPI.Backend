@@ -102,7 +102,7 @@ public class AdminReporteServicio(
     private static void ValidarPagina(FiltroReportesAdminDto filtro)
     {
         filtro.Pagina.ValidarId("página");
-        if (filtro.Tamanio is < 1 or > 100) throw new ArgumentException("El tamaño debe estar entre 1 y 100.");
+        filtro.Tamanio.ValidarRango(1, 100, "tamaño");
         if (filtro.TipoContenido.HasValue)
             filtro.TipoContenido.Value.ValidarEnum("tipo de contenido");
         if (filtro.Motivo.HasValue)
