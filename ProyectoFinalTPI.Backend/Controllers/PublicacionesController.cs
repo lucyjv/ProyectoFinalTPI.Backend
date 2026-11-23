@@ -225,7 +225,9 @@ namespace ProyectoFinalTPI.Backend.Controllers
             using var adjuntos = new ProyectoFinalTPI.Backend.Requests.Publicaciones.AdjuntosFormulario(request.Adjuntos);
             var publicacion = request.ToPublicacion(autorIdFinal);
             var gps = request.ToUbicacionGps();
-            var id = adjuntos.Elementos is null
+            var id = request.CapsulasIds.Count > 0
+                ? await _publicacionServicio.Crear(publicacion, stream, request.Archivo?.FileName, gps, adjuntos.Elementos, request.CapsulasIds)
+                : adjuntos.Elementos is null
                 ? await _publicacionServicio.Crear(publicacion, stream, request.Archivo?.FileName, gps)
                 : await _publicacionServicio.Crear(publicacion, stream, request.Archivo?.FileName, gps, adjuntos.Elementos);
 

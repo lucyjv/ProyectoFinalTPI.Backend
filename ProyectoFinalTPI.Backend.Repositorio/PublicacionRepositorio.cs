@@ -872,8 +872,17 @@ namespace ProyectoFinalTPI.Backend.Repositorio
 
         public async Task<int> Crear(Publicacion publicacion)
         {
+            // El alta y sus asociaciones se confirman juntas, incluso sin el servicio de cupos.
+            await using var transaccion = publicacion.Capsulas.Count > 0 && _context.Database.IsRelational()
+                ? await _context.Database.BeginTransactionAsync() : null;
+            if (publicacion.Capsulas.Count > 0)
+            {
+                await PersistenciaCapsulas.BloquearPropietario(_context, publicacion.UsuarioId, CancellationToken.None);
+                await PersistenciaCapsulas.PrepararAsociaciones(_context, publicacion, CancellationToken.None);
+            }
             await _context.Publicaciones.AddAsync(publicacion);
             await _context.SaveChangesAsync();
+            if (transaccion is not null) await transaccion.CommitAsync();
             return publicacion.Id;
         }
 

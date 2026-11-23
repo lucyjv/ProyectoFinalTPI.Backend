@@ -14,6 +14,26 @@ public sealed class ConsumoDiarioPuntosNostalgiaRepositorio(ApplicationDbContext
             .Select(consumo => consumo.PuntosGastados)
             .SingleOrDefaultAsync(ct);
 
+    public Task<int> ObtenerPuntosExtra(int usuarioId, CancellationToken ct = default) =>
+        contexto.Set<BilleteraPuntosNostalgia>()
+            .Where(b => b.UsuarioId == usuarioId)
+            .Select(b => b.PuntosExtra)
+            .SingleOrDefaultAsync(ct);
+
+    public async Task AcreditarPuntosExtra(int usuarioId, int puntos, CancellationToken ct = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(puntos);
+        var ahora = DateTimeOffset.UtcNow;
+        var actual = await ObtenerPuntosExtra(usuarioId, ct);
+        var nuevo = actual + puntos;
+
+        await contexto.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO billeteras_puntos_nostalgia ("UsuarioId", "PuntosExtra", "FechaActualizacion")
+            VALUES ({usuarioId}, {nuevo}, {ahora})
+            ON CONFLICT ("UsuarioId") DO UPDATE SET "PuntosExtra" = {nuevo}, "FechaActualizacion" = {ahora}
+            """, ct);
+    }
+
     // Las operaciones que gastan puntos toman este bloqueo antes de leer o escribir el saldo.
     internal async Task BloquearUsuario(int usuarioId, CancellationToken ct)
     {
@@ -34,18 +54,41 @@ public sealed class ConsumoDiarioPuntosNostalgiaRepositorio(ApplicationDbContext
         ArgumentOutOfRangeException.ThrowIfNegative(cupoDiario);
         var fecha = CalendarioNostalgia.FechaLocal(instante);
         var gastados = await ObtenerPuntosGastados(usuarioId, fecha, ct);
-        var restantes = Math.Max(0, cupoDiario - gastados);
-        if (puntos > restantes)
-            throw new CupoDiarioPuntosNostalgiaAgotadoException(restantes);
-        if (puntos == 0)
-            return restantes;
+        var restantesDiarios = Math.Max(0, cupoDiario - gastados);
+        var puntosExtra = await ObtenerPuntosExtra(usuarioId, ct);
+        var totalDisponible = restantesDiarios + puntosExtra;
 
-        await contexto.Database.ExecuteSqlInterpolatedAsync($"""
-            INSERT INTO consumos_diarios_puntos_nostalgia ("UsuarioId", "Fecha", "PuntosGastados")
-            VALUES ({usuarioId}, {fecha}, {gastados + puntos})
-            ON CONFLICT ("UsuarioId", "Fecha") DO UPDATE SET "PuntosGastados" = EXCLUDED."PuntosGastados"
-            """, ct);
-        return restantes - puntos;
+        if (puntos > totalDisponible)
+            throw new CupoDiarioPuntosNostalgiaAgotadoException(totalDisponible);
+        if (puntos == 0)
+            return totalDisponible;
+
+        if (puntos <= restantesDiarios)
+        {
+            await contexto.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO consumos_diarios_puntos_nostalgia ("UsuarioId", "Fecha", "PuntosGastados")
+                VALUES ({usuarioId}, {fecha}, {gastados + puntos})
+                ON CONFLICT ("UsuarioId", "Fecha") DO UPDATE SET "PuntosGastados" = EXCLUDED."PuntosGastados"
+                """, ct);
+        }
+        else
+        {
+            var excedente = puntos - restantesDiarios;
+            await contexto.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO consumos_diarios_puntos_nostalgia ("UsuarioId", "Fecha", "PuntosGastados")
+                VALUES ({usuarioId}, {fecha}, {cupoDiario})
+                ON CONFLICT ("UsuarioId", "Fecha") DO UPDATE SET "PuntosGastados" = EXCLUDED."PuntosGastados"
+                """, ct);
+
+            var nuevoExtra = puntosExtra - excedente;
+            await contexto.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO billeteras_puntos_nostalgia ("UsuarioId", "PuntosExtra", "FechaActualizacion")
+                VALUES ({usuarioId}, {nuevoExtra}, {instante})
+                ON CONFLICT ("UsuarioId") DO UPDATE SET "PuntosExtra" = {nuevoExtra}, "FechaActualizacion" = {instante}
+                """, ct);
+        }
+
+        return totalDisponible - puntos;
     }
 
     private void ExigirTransaccion()

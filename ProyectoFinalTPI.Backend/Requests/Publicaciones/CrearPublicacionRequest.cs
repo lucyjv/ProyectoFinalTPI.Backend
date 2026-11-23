@@ -42,6 +42,8 @@ namespace ProyectoFinalTPI.Backend.Requests.Publicaciones
         public MultimediaEnum TipoMultimedia { get; set; }
 
         public List<AdjuntoPublicacionRequest> Adjuntos { get; set; } = new();
+        [Required, MaxLength(100)]
+        public List<int> CapsulasIds { get; set; } = new();
         public MusicaPublicacionDto? Musica { get; set; }
         public IFormFile? Archivo { get; set; }
 
@@ -54,6 +56,8 @@ namespace ProyectoFinalTPI.Backend.Requests.Publicaciones
         public IEnumerable<ValidationResult> Validate(
             ValidationContext validationContext)
         {
+            if (CapsulasIds is null || CapsulasIds.Any(id => id <= 0))
+                yield return new ValidationResult("Las cápsulas deben tener identificadores positivos.", new[] { nameof(CapsulasIds) });
             if (GpsLatitud.HasValue != GpsLongitud.HasValue)
                 yield return new ValidationResult("La ubicación actual requiere latitud y longitud.", new[] { nameof(GpsLatitud), nameof(GpsLongitud) });
             if (Adjuntos.Count > 4)

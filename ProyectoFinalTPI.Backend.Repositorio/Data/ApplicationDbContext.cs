@@ -32,6 +32,16 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
         public DbSet<TrabajoAnalisisRecuerdo> TrabajosAnalisisRecuerdos { get; set; }
         public DbSet<Notificacion> Notificaciones { get; set; }
         public DbSet<Reporte> Reportes { get; set; }
+        public DbSet<Capsula> Capsulas { get; set; }
+        public DbSet<CapsulaRecuerdo> CapsulasPublicaciones { get; set; }
+        public DbSet<BilleteraPuntosNostalgia> BilleterasPuntosNostalgia { get; set; }
+        public DbSet<CompraPuntosNostalgia> ComprasPuntosNostalgia { get; set; }
+
+        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        {
+            base.OnConfiguring(optionsBuilder);
+            optionsBuilder.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
+        }
 
         public override int SaveChanges(bool acceptAllChangesOnSuccess)
         {
@@ -92,6 +102,8 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
             base.OnModelCreating(modelBuilder);
 
             modelBuilder.HasPostgresExtension("postgis");
+            modelBuilder.ApplyConfiguration(new ConfiguracionCapsula());
+            modelBuilder.ApplyConfiguration(new ConfiguracionCapsulaRecuerdo());
             modelBuilder.Entity<ConsumoPublicaciones>(e =>
             {
                 e.ToTable("consumos_publicaciones");
@@ -123,6 +135,8 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
             modelBuilder.ApplyConfiguration(new ConfiguracionResultadoRankingMusica());
             modelBuilder.ApplyConfiguration(new ConfiguracionConsumoDiarioPuntosNostalgia());
             modelBuilder.ApplyConfiguration(new ConfiguracionPuntuacionPublicacionPersistida());
+            modelBuilder.ApplyConfiguration(new ConfiguracionBilleteraPuntosNostalgia());
+            modelBuilder.ApplyConfiguration(new ConfiguracionCompraPuntosNostalgia());
 
             modelBuilder.Entity<Usuario>()
                 .ToTable("Usuario")

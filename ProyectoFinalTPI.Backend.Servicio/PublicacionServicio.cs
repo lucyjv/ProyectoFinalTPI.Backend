@@ -32,6 +32,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
         private readonly OpcionesPublicacion _opcionesPublicacion;
         private readonly IResumenPublicacionConsulta? _resumenConsulta;
         private readonly ICategoriaServicio? _categoriaServicio;
+        private readonly ICapsulaRepositorio? _capsulaRepositorio;
         private readonly ICupoPuntosNostalgiaServicio? _cupoPuntosNostalgia;
 
         public PublicacionServicio(
@@ -47,6 +48,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
             IResumenPublicacionConsulta? resumenConsulta = null, 
             IProveedorRankingFeed? proveedorRanking = null, 
             ICategoriaServicio? categoriaServicio = null,
+            ICapsulaRepositorio? capsulaRepositorio = null,
             ICupoPuntosNostalgiaServicio? cupoPuntosNostalgia = null)
         {
             _publicacionRepositorio = publicacionRepositorio;
@@ -61,6 +63,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
             _logroServicio = logroServicio;
             _opcionesPublicacion = opcionesPublicacion?.Value ?? new OpcionesPublicacion();
             _categoriaServicio = categoriaServicio;
+            _capsulaRepositorio = capsulaRepositorio;
             _cupoPuntosNostalgia = cupoPuntosNostalgia;
         }
 
@@ -484,13 +487,41 @@ namespace ProyectoFinalTPI.Backend.Servicio
         public Task<int> Crear(Publicacion publicacion, Stream? archivo = null, string? nombreArchivo = null, Point? gpsUsuario = null) =>
             Crear(publicacion, archivo, nombreArchivo, gpsUsuario, null);
 
+        public Task<int> Crear(Publicacion publicacion, Stream? archivo, string? nombreArchivo, Point? gpsUsuario,
+            IReadOnlyList<AdjuntoEntradaDto>? adjuntos) =>
+            Crear(publicacion, archivo, nombreArchivo, gpsUsuario, adjuntos, Array.Empty<int>());
+
         public async Task<int> Crear(Publicacion publicacion, Stream? archivo, string? nombreArchivo, Point? gpsUsuario,
-            IReadOnlyList<AdjuntoEntradaDto>? adjuntos)
+            IReadOnlyList<AdjuntoEntradaDto>? adjuntos, IReadOnlyCollection<int> capsulasIds)
         {
+            ArgumentNullException.ThrowIfNull(publicacion);
+            var ids = ReglasCapsulas.NormalizarIds(capsulasIds);
+            if (ids.Length > 0)
+            {
+                if (publicacion.PublicacionOriginalId.HasValue)
+                    throw new ArgumentException("Solo podés agregar recuerdos originales a tus cápsulas.");
+                if (_capsulaRepositorio is null) throw new InvalidOperationException("El repositorio de cápsulas no está configurado.");
+                // Comprobamos los permisos antes de subir archivos y los revalidamos al guardar dentro de la transacción.
+                await _capsulaRepositorio.ValidarParaPublicar(publicacion.UsuarioId, ids, CancellationToken.None);
+            }
+            publicacion.Capsulas = ids.Select(id => new CapsulaRecuerdo { CapsulaId = id }).ToList();
             await PrepararPublicacionNueva(publicacion, archivo, nombreArchivo, adjuntos);
             var id = await GuardarRecuerdo(publicacion);
             await VerificacionLogrosCrearPublicacion(publicacion, gpsUsuario);
             return id;
+        }
+
+        public async Task<List<PublicacionDetalleDto>> ObtenerDetallesPorIds(IReadOnlyCollection<int> ids, int? lectorId,
+            CancellationToken cancellationToken = default)
+        {
+            if (ids.Count > 50 || ids.Any(id => id <= 0))
+                throw new ArgumentException("La página admite hasta 50 identificadores positivos.");
+            if (ids.Count == 0) return new();
+            var publicaciones = await _publicacionRepositorio.ObtenerPublicacionesPorIds(ids.Distinct().ToArray(), cancellationToken);
+            var porId = publicaciones.ToDictionary(p => p.Id);
+            var ordenadas = ids.Distinct().Where(porId.ContainsKey).Select(id => porId[id]).ToList();
+            await CompletarInteraccionesPaginaFeed(ordenadas, lectorId ?? 0, cancellationToken);
+            return ordenadas;
         }
         public async Task Eliminar(int id, int? autorId = null, CancellationToken cancellationToken = default)
         {
