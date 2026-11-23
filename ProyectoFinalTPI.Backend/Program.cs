@@ -177,6 +177,11 @@ builder.Services.AddScoped<IRankingMusicaRepositorio, RankingMusicaRepositorio>(
 builder.Services.AddScoped<ICategoriaServicio, CategoriaServicio>();
 builder.Services.AddScoped<ICupoPuntosNostalgiaServicio, CupoPuntosNostalgiaServicio>();
 builder.Services.AddScoped<IRankingMusicaServicio, RankingMusicaServicio>();
+builder.Services.AddHttpClient();
+builder.Services.Configure<EconomiaOptions>(builder.Configuration.GetSection(EconomiaOptions.Seccion));
+builder.Services.Configure<MercadoPagoOptions>(builder.Configuration.GetSection(MercadoPagoOptions.Seccion));
+builder.Services.AddScoped<ICotizacionDolarServicio, CotizacionDolarServicio>();
+builder.Services.AddScoped<IMercadoPagoPuntosServicio, MercadoPagoPuntosServicio>();
 builder.Services.AddOptions<RankingMusicaOptions>()
     .Bind(builder.Configuration.GetSection(RankingMusicaOptions.Seccion))
     .Validate(opciones => opciones.DuracionDias > 0, "La duración del ranking de música debe ser mayor a cero.")

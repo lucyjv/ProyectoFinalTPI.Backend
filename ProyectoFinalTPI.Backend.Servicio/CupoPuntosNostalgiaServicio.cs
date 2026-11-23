@@ -17,7 +17,8 @@ public sealed class CupoPuntosNostalgiaServicio(
         var cupo = CupoPara(await categorias.ObtenerCategoriaEfectiva(usuarioId, ct));
         var fecha = CalendarioNostalgia.FechaLocal(reloj.GetUtcNow());
         var gastados = await consumos.ObtenerPuntosGastados(usuarioId, fecha, ct);
-        return new(cupo, Math.Max(0, cupo - gastados), CalendarioNostalgia.InicioDelDia(fecha.AddDays(1)));
+        var puntosExtra = await consumos.ObtenerPuntosExtra(usuarioId, ct);
+        return new(cupo, Math.Max(0, cupo - gastados), CalendarioNostalgia.InicioDelDia(fecha.AddDays(1)), puntosExtra);
     }
 
     private static int CupoPara(CategoriaCuenta categoria) => categoria switch

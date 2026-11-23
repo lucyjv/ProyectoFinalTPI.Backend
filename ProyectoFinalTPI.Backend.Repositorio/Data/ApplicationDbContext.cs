@@ -34,6 +34,8 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
         public DbSet<Reporte> Reportes { get; set; }
         public DbSet<Capsula> Capsulas { get; set; }
         public DbSet<CapsulaRecuerdo> CapsulasPublicaciones { get; set; }
+        public DbSet<BilleteraPuntosNostalgia> BilleterasPuntosNostalgia { get; set; }
+        public DbSet<CompraPuntosNostalgia> ComprasPuntosNostalgia { get; set; }
 
         public override int SaveChanges(bool acceptAllChangesOnSuccess)
         {
@@ -127,6 +129,8 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
             modelBuilder.ApplyConfiguration(new ConfiguracionResultadoRankingMusica());
             modelBuilder.ApplyConfiguration(new ConfiguracionConsumoDiarioPuntosNostalgia());
             modelBuilder.ApplyConfiguration(new ConfiguracionPuntuacionPublicacionPersistida());
+            modelBuilder.ApplyConfiguration(new ConfiguracionBilleteraPuntosNostalgia());
+            modelBuilder.ApplyConfiguration(new ConfiguracionCompraPuntosNostalgia());
 
             modelBuilder.Entity<Usuario>()
                 .ToTable("Usuario")
