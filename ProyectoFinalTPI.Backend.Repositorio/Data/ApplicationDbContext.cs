@@ -37,6 +37,12 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
         public DbSet<BilleteraPuntosNostalgia> BilleterasPuntosNostalgia { get; set; }
         public DbSet<CompraPuntosNostalgia> ComprasPuntosNostalgia { get; set; }
 
+        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        {
+            base.OnConfiguring(optionsBuilder);
+            optionsBuilder.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
+        }
+
         public override int SaveChanges(bool acceptAllChangesOnSuccess)
         {
             PrepararIdentidadesMomentos();

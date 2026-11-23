@@ -128,7 +128,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                         {
                             t.HasCheckConstraint("CK_candidaturas_musica_retiro", " \"FechaRetiro\" IS NULL OR \"FechaRetiro\" >= \"FechaIngreso\" ");
 
-                            t.HasCheckConstraint("CK_candidaturas_musica_textos", "length(btrim(\"Titulo\")) > 0 AND length(btrim(\"Artista\")) > 0\r\nAND length(btrim(\"TituloNormalizado\")) > 0 AND length(btrim(\"ArtistaNormalizado\")) > 0");
+                            t.HasCheckConstraint("CK_candidaturas_musica_textos", "length(btrim(\"Titulo\")) > 0 AND length(btrim(\"Artista\")) > 0\nAND length(btrim(\"TituloNormalizado\")) > 0 AND length(btrim(\"ArtistaNormalizado\")) > 0");
                         });
                 });
 

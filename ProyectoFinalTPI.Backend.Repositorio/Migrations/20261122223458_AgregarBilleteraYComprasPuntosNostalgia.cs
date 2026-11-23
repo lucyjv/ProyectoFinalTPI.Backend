@@ -12,10 +12,6 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropCheckConstraint(
-                name: "CK_candidaturas_musica_textos",
-                table: "candidaturas_ranking_musica");
-
             migrationBuilder.CreateTable(
                 name: "billeteras_puntos_nostalgia",
                 columns: table => new
@@ -65,11 +61,6 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                         onDelete: ReferentialAction.Cascade);
                 });
 
-            migrationBuilder.AddCheckConstraint(
-                name: "CK_candidaturas_musica_textos",
-                table: "candidaturas_ranking_musica",
-                sql: "length(btrim(\"Titulo\")) > 0 AND length(btrim(\"Artista\")) > 0\r\nAND length(btrim(\"TituloNormalizado\")) > 0 AND length(btrim(\"ArtistaNormalizado\")) > 0");
-
             migrationBuilder.CreateIndex(
                 name: "IX_compras_puntos_nostalgia_UsuarioId",
                 table: "compras_puntos_nostalgia",
@@ -84,15 +75,6 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
 
             migrationBuilder.DropTable(
                 name: "compras_puntos_nostalgia");
-
-            migrationBuilder.DropCheckConstraint(
-                name: "CK_candidaturas_musica_textos",
-                table: "candidaturas_ranking_musica");
-
-            migrationBuilder.AddCheckConstraint(
-                name: "CK_candidaturas_musica_textos",
-                table: "candidaturas_ranking_musica",
-                sql: "length(btrim(\"Titulo\")) > 0 AND length(btrim(\"Artista\")) > 0\nAND length(btrim(\"TituloNormalizado\")) > 0 AND length(btrim(\"ArtistaNormalizado\")) > 0");
         }
     }
 }
