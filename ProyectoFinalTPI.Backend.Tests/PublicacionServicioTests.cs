@@ -1283,8 +1283,9 @@ namespace ProyectoFinalTPI.Backend.Tests
             ConfigurarPublicacionVisible(1);
 
             //Act & Assert
-            await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
-                _servicio.Puntuar(1, 10, puntajeInvalido));
+            await Assert.ThrowsAsync<ArgumentException>(() =>
+             _servicio.Puntuar(1, 10, puntajeInvalido));
+
         }
 
         [Fact]
