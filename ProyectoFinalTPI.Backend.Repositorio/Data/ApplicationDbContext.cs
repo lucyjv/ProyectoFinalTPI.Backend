@@ -36,6 +36,8 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
         public DbSet<CapsulaRecuerdo> CapsulasPublicaciones { get; set; }
         public DbSet<BilleteraPuntosNostalgia> BilleterasPuntosNostalgia { get; set; }
         public DbSet<CompraPuntosNostalgia> ComprasPuntosNostalgia { get; set; }
+        public DbSet<RetoTesoro> RetosTesoro { get; set; }
+        public DbSet<HallazgoTesoro> HallazgosTesoro { get; set; }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
@@ -102,6 +104,8 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
             base.OnModelCreating(modelBuilder);
 
             modelBuilder.HasPostgresExtension("postgis");
+            modelBuilder.ApplyConfiguration(new ConfiguracionRetoTesoro());
+            modelBuilder.ApplyConfiguration(new ConfiguracionHallazgoTesoro());
             modelBuilder.ApplyConfiguration(new ConfiguracionCapsula());
             modelBuilder.ApplyConfiguration(new ConfiguracionCapsulaRecuerdo());
             modelBuilder.Entity<ConsumoPublicaciones>(e =>

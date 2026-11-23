@@ -387,6 +387,24 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.ToTable("grupos_integrantes", (string)null);
                 });
 
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.HallazgoTesoro", b =>
+                {
+                    b.Property<int>("RetoId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UsuarioId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("FechaHallazgoUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("RetoId", "UsuarioId");
+
+                    b.HasIndex("UsuarioId");
+
+                    b.ToTable("hallazgos_tesoro", (string)null);
+                });
+
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Logro", b =>
                 {
                     b.Property<int>("Id")
@@ -666,7 +684,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Moderaciones", (string)null);
+                    b.ToTable("Moderaciones");
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Momento", b =>
@@ -914,7 +932,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
 
                     b.HasIndex("Categoria", "EstaOculto", "FechaCreación");
 
-                    b.ToTable("Publicaciones", (string)null);
+                    b.ToTable("Publicaciones");
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.PublicacionMomento", b =>
@@ -1196,6 +1214,49 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
 
                             t.HasCheckConstraint("CK_resultados_musica_puntos", " \"Puntos\" > 0 ");
                         });
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.RetoTesoro", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ClaveUbicacion")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<double>("Latitud")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("Longitud")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("NombreHallazgo")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Pista")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateOnly>("SemanaInicio")
+                        .HasColumnType("date");
+
+                    b.Property<double>("ZoomMinimo")
+                        .HasColumnType("double precision");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SemanaInicio")
+                        .IsUnique();
+
+                    b.ToTable("retos_tesoro", (string)null);
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.SesionUsuario", b =>
@@ -1624,6 +1685,21 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Navigation("Grupo");
 
                     b.Navigation("Usuario");
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.HallazgoTesoro", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.RetoTesoro", null)
+                        .WithMany()
+                        .HasForeignKey("RetoId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Logros_Usuarios", b =>

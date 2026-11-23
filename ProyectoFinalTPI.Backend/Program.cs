@@ -101,6 +101,9 @@ builder.Services.AddScoped<IPublicacionRepositorio>(provider => new PublicacionR
     puntuaciones: provider.GetRequiredService<PuntuacionPublicacionRepositorio>()));
 builder.Services.AddScoped<IJuegoDecadasRepositorio, JuegoDecadasRepositorio>();
 builder.Services.AddScoped<IJuegoDecadasServicio, JuegoDecadasServicio>();
+builder.Services.AddScoped<IJuegoTesoroRepositorio, JuegoTesoroRepositorio>();
+builder.Services.AddScoped<IJuegoTesoroServicio, JuegoTesoroServicio>();
+builder.Services.Configure<JuegoTesoroOpciones>(builder.Configuration.GetSection(JuegoTesoroOpciones.Seccion));
 builder.Services.AddOptions<OpcionesNeo4j>()
     .Bind(builder.Configuration.GetSection(OpcionesNeo4j.Seccion))
     .Validate(opciones => opciones.TiempoMaximoConsultaFeedSegundos is > 0 and <= 120,
