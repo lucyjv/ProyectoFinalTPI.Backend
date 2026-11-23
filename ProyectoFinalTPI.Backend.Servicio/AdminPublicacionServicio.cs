@@ -2,6 +2,7 @@ using ProyectoFinalTPI.Backend.Dtos.Admin;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
+using ProyectoFinalTPI.Backend.Servicio.Extensions;
 
 namespace ProyectoFinalTPI.Backend.Servicio;
 
@@ -55,23 +56,21 @@ public class AdminPublicacionServicio(
     #region Métodos privados y validaciones
     private async Task<Publicacion> Obtener(int id, CancellationToken cancellationToken)
     {
-        if (id <= 0) throw new ArgumentException("El ID de publicación debe ser mayor que cero.");
+        id.ValidarId("publicación");
         return await repositorio.Obtener(id, cancellationToken)
             ?? throw new KeyNotFoundException("La publicación no existe.");
     }
 
     private static void ValidarPagina(int pagina, int tamanio)
     {
-        if (pagina < 1) throw new ArgumentException("La página debe ser mayor que cero.");
+        pagina.ValidarId("pagina");
         if (tamanio is < 1 or > 100) throw new ArgumentException("El tamaño debe estar entre 1 y 100.");
     }
 
     private static void ValidarEdicion(ActualizarPublicacionAdminDto dto)
     {
-        if (string.IsNullOrWhiteSpace(dto.Titulo) || dto.Titulo.Trim().Length > 200)
-            throw new ArgumentException("El título es obligatorio y no puede superar 200 caracteres.");
-        if (string.IsNullOrWhiteSpace(dto.Descripcion) || dto.Descripcion.Trim().Length > 5000)
-            throw new ArgumentException("La descripción es obligatoria y no puede superar 5000 caracteres.");
+        dto.Titulo.ValidarTexto(200, "titulo");
+        dto.Descripcion.ValidarTexto(5000, "descripción");
         if (!Enum.IsDefined(dto.Categoria)) throw new ArgumentException("La categoría no es válida.");
     }
 

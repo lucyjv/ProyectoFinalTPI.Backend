@@ -1,6 +1,7 @@
 using ProyectoFinalTPI.Backend.Dtos;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
+using ProyectoFinalTPI.Backend.Servicio.Extensions;
 
 namespace ProyectoFinalTPI.Backend.Servicio;
 
@@ -12,7 +13,7 @@ public class InteresServicio(IPublicacionRepositorio publicacionRepositorio) : I
     public async Task<IReadOnlyList<InteresCategoriaDto>> ObtenerIntereses(
         int usuarioId, CancellationToken cancellationToken = default)
     {
-        ValidarId(usuarioId);
+        usuarioId.ValidarId("usuario");
 
         var cantidades = await publicacionRepositorio.ObtenerCantidadPorCategoriaDelUsuario(
             usuarioId, DateTime.UtcNow.AddDays(-90), cancellationToken);
@@ -22,12 +23,6 @@ public class InteresServicio(IPublicacionRepositorio publicacionRepositorio) : I
     #endregion
 
     #region Métodos privados y validaciones
-
-    private static void ValidarId(int usuarioId)
-    {
-        if (usuarioId <= 0)
-            throw new ArgumentException("El ID del usuario debe ser mayor que cero.");
-    }
 
     private static IReadOnlyList<InteresCategoriaDto> CalcularAfinidades(Dictionary<Entidades.CategoriaEnum, int> cantidades)
     {

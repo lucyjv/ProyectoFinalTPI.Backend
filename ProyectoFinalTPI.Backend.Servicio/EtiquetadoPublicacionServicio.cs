@@ -3,6 +3,7 @@ using ProyectoFinalTPI.Backend.Dtos.Publicacion;
 using ProyectoFinalTPI.Backend.Dtos.Usuario;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
+using ProyectoFinalTPI.Backend.Servicio.Extensions;
 
 namespace ProyectoFinalTPI.Backend.Servicio
 {
@@ -66,7 +67,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
             int publicacionId,
             CancellationToken cancellationToken = default)
         {
-            ValidarPublicacionId(publicacionId);
+            publicacionId.ValidarId("publicación");
             await ValidarPublicacionExistente(publicacionId, null, cancellationToken);
             var ids = await LeerIdsNeo4j(ObtenerEtiquetasQuery, new { publicacionId }, "idUsuario");
             return ids.Count == 0 ? Array.Empty<AutorResumenDto>()
@@ -75,9 +76,8 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
         public Task<bool> DesetiquetarUsuario(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
         {
-            ValidarPublicacionId(publicacionId);
-            if (usuarioId <= 0)
-                throw new ArgumentException("El ID del usuario debe ser mayor que cero", nameof(usuarioId));
+            publicacionId.ValidarId("publicación");
+            usuarioId.ValidarId("usuario");
             return EliminarEtiquetaEnNeo4j(publicacionId, usuarioId);
         }
 
@@ -97,7 +97,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
             int usuarioId,
             CancellationToken cancellationToken = default)
         {
-            ValidarUsuarioId(usuarioId);
+            usuarioId.ValidarId("usuario");
             var ids = await LeerIdsNeo4j(
                 ObtenerPublicacionesPorEtiquetadoQuery, new { usuarioId }, "publicacionId");
             return ids.Count == 0 ? new List<PublicacionDetalleDto>()
@@ -111,17 +111,10 @@ namespace ProyectoFinalTPI.Backend.Servicio
         private static int[] ValidarIds(int publicacionId, IReadOnlyCollection<int> usuariosIds)
         {
             ArgumentNullException.ThrowIfNull(usuariosIds);
-            ValidarPublicacionId(publicacionId);
+            publicacionId.ValidarId("publicación");
             var ids = usuariosIds.Distinct().ToArray();
             ValidarUsuariosIds(ids);
             return ids;
-        }
-
-        private static void ValidarPublicacionId(int publicacionId)
-        {
-            if (publicacionId <= 0)
-                throw new ArgumentException(
-                    "El ID de la publicación debe ser mayor que cero", nameof(publicacionId));
         }
 
         private static void ValidarUsuariosIds(IReadOnlyCollection<int> usuariosIds)
@@ -188,11 +181,6 @@ namespace ProyectoFinalTPI.Backend.Servicio
             });
         }
 
-        private static void ValidarUsuarioId(int usuarioId)
-        {
-            if (usuarioId <= 0)
-                throw new ArgumentException("El ID del usuario debe ser mayor que cero", nameof(usuarioId));
-        }
 
         private async Task<List<int>> LeerIdsNeo4j(string consulta, object parametros, string campo)
         {

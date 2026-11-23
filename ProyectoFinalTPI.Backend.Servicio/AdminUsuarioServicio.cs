@@ -2,6 +2,7 @@ using ProyectoFinalTPI.Backend.Dtos.Admin;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
+using ProyectoFinalTPI.Backend.Servicio.Extensions;
 
 namespace ProyectoFinalTPI.Backend.Servicio;
 
@@ -52,13 +53,13 @@ public class AdminUsuarioServicio(
 
     private static void ValidarObjetivo(int id, int adminId)
     {
-        if (id <= 0) throw new ArgumentException("El ID de usuario debe ser mayor que cero.");
+        id.ValidarId("usuario");
         if (id == adminId) throw new UnauthorizedAccessException("No podés aplicar esta acción sobre tu propia cuenta.");
     }
 
     private static void ValidarPagina(int pagina, int tamanio)
     {
-        if (pagina < 1) throw new ArgumentException("La página debe ser mayor que cero.");
+        pagina.ValidarId("página");
         if (tamanio is < 1 or > 100) throw new ArgumentException("El tamaño debe estar entre 1 y 100.");
     }
     private static void ValidarDuracionSuspension(CambiarSuspensionUsuarioDto dto)

@@ -2,6 +2,7 @@ using ProyectoFinalTPI.Backend.Dtos.Reportes;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
+using ProyectoFinalTPI.Backend.Servicio.Extensions;
 
 namespace ProyectoFinalTPI.Backend.Servicio;
 
@@ -25,10 +26,10 @@ public class ReporteServicio(IReporteRepositorio repositorio) : IReporteServicio
 
     private static void Validar(CrearReporteDto dto)
     {
-        if (dto.ContenidoId <= 0) throw new ArgumentException("El ID del contenido debe ser mayor que cero.");
-        if (!Enum.IsDefined(dto.TipoContenido)) throw new ArgumentException("El tipo de contenido no es válido.");
-        if (!Enum.IsDefined(dto.Motivo)) throw new ArgumentException("El motivo del reporte no es válido.");
-        if (dto.Detalle?.Trim().Length > 1000) throw new ArgumentException("El detalle no puede superar 1000 caracteres.");
+        dto.ContenidoId.ValidarId("contenido");
+        dto.TipoContenido.ValidarEnum("tipo de contenido");
+        dto.Motivo.ValidarEnum("motivo");
+        dto.Detalle.ValidarTexto(1000, "detalle");
     }
 
     private static Reporte CrearEntidad(

@@ -7,6 +7,7 @@ using ProyectoFinalTPI.Backend.Dtos.Momento;
 using ProyectoFinalTPI.Backend.Dtos.Publicacion;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
+using ProyectoFinalTPI.Backend.Servicio.Extensions;
 
 namespace ProyectoFinalTPI.Backend.Servicio;
 
@@ -16,7 +17,7 @@ public class ExploracionMomentosServicio(IExploracionMomentosRepositorio reposit
 
     public async Task<ResultadoPaginadoDto<MomentoResumenDto>> Buscar(string? busqueda, string? cursor, int limite, CancellationToken ct)
     {
-        ValidarLimite(limite);
+        limite.ValidarLimite(50);
         var (texto, normalizado) = PrepararBusqueda(busqueda);
         var posicion = LeerCursor(cursor, "buscar", 0, texto, false);
         var items = await repositorio.Buscar(
@@ -27,12 +28,12 @@ public class ExploracionMomentosServicio(IExploracionMomentosRepositorio reposit
     }
     public async Task<MomentoDetalleDto> ObtenerDetalle(int id, CancellationToken ct)
     {
-        ValidarId(id);
+        id.ValidarId("detalle");
         return await repositorio.ObtenerDetalle(id, ct) ?? throw new KeyNotFoundException("El momento no existe.");
     }
     public async Task<ResultadoPaginadoDto<PublicacionResumenDto>> ObtenerPublicaciones(int id, bool descendientes, string? cursor, int limite, CancellationToken ct)
     {
-        ValidarLimite(limite);
+        limite.ValidarLimite(50);
         await ObtenerDetalle(id, ct);
         var posicion = LeerCursor(cursor, "publicaciones", id, "", descendientes);
         var items = await repositorio.ObtenerPublicaciones(id, descendientes, posicion, limite + 1, ct);
@@ -114,14 +115,6 @@ public class ExploracionMomentosServicio(IExploracionMomentosRepositorio reposit
                 posicion.Fecha.Value.Kind == DateTimeKind.Utc,
             _ => true
         };
-    private static void ValidarId(int id)
-    {
-        if (id <= 0) throw new ArgumentException("El identificador debe ser positivo.");
-    }
-    private static void ValidarLimite(int limite)
-    {
-        if (limite < 1 || limite > 50) throw new ArgumentException("El límite debe estar entre 1 y 50.");
-    }
     private static (string Texto, string Normalizado)
         PrepararBusqueda(string? busqueda)
     {
@@ -150,7 +143,7 @@ public class ExploracionMomentosServicio(IExploracionMomentosRepositorio reposit
     private async Task<int> ObtenerOriginalVisible(
         int id, CancellationToken ct)
     {
-        ValidarId(id);
+        id.ValidarId("publicación");
         return await relaciones.ObtenerOriginalVisible(id, ct)
             ?? throw new KeyNotFoundException(
                 "La publicación no existe o no está disponible.");
@@ -159,8 +152,8 @@ public class ExploracionMomentosServicio(IExploracionMomentosRepositorio reposit
         int id, int usuarioId,
         IReadOnlyCollection<int> momentoIds, long version)
     {
-        ValidarId(id);
-        ValidarId(usuarioId);
+        id.ValidarId("publicación");
+        usuarioId.ValidarId("usuario");
         ValidarSeleccionMomentos(momentoIds);
         if (version < 0)
             throw new ArgumentException(

@@ -4,6 +4,7 @@ using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Repositorio;
 using ProyectoFinalTPI.Backend.Repositorio.Cache;
+using ProyectoFinalTPI.Backend.Servicio.Extensions;
 
 namespace ProyectoFinalTPI.Backend.Servicio
 {
@@ -116,7 +117,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
         public async Task<UsuarioPerfilDto> CambiarUsernamePropioAsync(
             int usuarioId, string username, CancellationToken cancellationToken = default)
         {
-            var nuevoUsername = ValidarNuevoUsername(username);
+            var nuevoUsername = username.ValidarTexto(50, "username", minimo: 3);
             var usuario = await ObtenerUsuarioPropio(usuarioId);
             await ActualizarUsernameSiCambio(usuario, usuarioId, nuevoUsername, cancellationToken);
             return await ConstruirPerfilDto(usuario, usuarioId, cancellationToken);
@@ -164,11 +165,8 @@ namespace ProyectoFinalTPI.Backend.Servicio
         }
         private static string ValidarBusqueda(string texto, int limite)
         {
-            var busqueda = texto?.Trim() ?? string.Empty;
-            if (busqueda.Length < 2 || busqueda.Length > 50)
-                throw new ArgumentException("El texto de búsqueda debe tener entre 2 y 50 caracteres.", nameof(texto));
-            if (limite < 1 || limite > 20)
-                throw new ArgumentOutOfRangeException(nameof(limite), "El límite debe estar entre 1 y 20.");
+            var busqueda = texto.ValidarTexto(50, "texto de búsqueda", minimo: 2);
+            limite.ValidarLimite(20);
             return busqueda;
         }
 
@@ -192,14 +190,6 @@ namespace ProyectoFinalTPI.Backend.Servicio
         }
         private async Task<Usuario> ObtenerUsuarioPropio(int usuarioId) => await _repositorio.ObtenerPorIdAsync(usuarioId)
         ?? throw new KeyNotFoundException("El usuario no existe.");
-
-        private static string ValidarNuevoUsername(string username)
-        {
-            var nuevo = username?.Trim() ?? string.Empty;
-            if (nuevo.Length is < 3 or > 50)
-                throw new ArgumentException("El username debe tener entre 3 y 50 caracteres.", nameof(username));
-            return nuevo;
-        }
 
         private async Task ActualizarUsernameSiCambio(
             Usuario usuario, int usuarioId, string nuevo, CancellationToken cancellationToken)

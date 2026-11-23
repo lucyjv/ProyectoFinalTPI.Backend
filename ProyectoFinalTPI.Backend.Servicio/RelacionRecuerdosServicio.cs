@@ -4,6 +4,7 @@ using ProyectoFinalTPI.Backend.Dtos;
 using ProyectoFinalTPI.Backend.Dtos.Publicacion;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
+using ProyectoFinalTPI.Backend.Servicio.Extensions;
 
 namespace ProyectoFinalTPI.Backend.Servicio;
 
@@ -41,7 +42,7 @@ public class RelacionRecuerdosServicio(IRelacionRecuerdosRepositorio repositorio
     private static void ValidarConsulta(string tipo, int limite)
     {
         if (tipo != "dia" && tipo != "lugar") throw new ArgumentException("El tipo debe ser dia o lugar.");
-        if (limite < 1 || limite > 50) throw new ArgumentException("El límite debe estar entre 1 y 50.");
+        limite.ValidarLimite(50);
     }
 
     private async Task<int> ValidarOrigen(int id, CancellationToken ct)

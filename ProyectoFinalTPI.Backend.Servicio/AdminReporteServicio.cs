@@ -2,6 +2,7 @@ using ProyectoFinalTPI.Backend.Dtos.Admin;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
+using ProyectoFinalTPI.Backend.Servicio.Extensions;
 
 namespace ProyectoFinalTPI.Backend.Servicio;
 
@@ -100,23 +101,22 @@ public class AdminReporteServicio(
 
     private static void ValidarPagina(FiltroReportesAdminDto filtro)
     {
-        if (filtro.Pagina < 1) throw new ArgumentException("La página debe ser mayor que cero.");
+        filtro.Pagina.ValidarId("página");
         if (filtro.Tamanio is < 1 or > 100) throw new ArgumentException("El tamaño debe estar entre 1 y 100.");
-        if (filtro.TipoContenido.HasValue && !Enum.IsDefined(filtro.TipoContenido.Value))
-            throw new ArgumentException("El tipo de contenido no es válido.");
-        if (filtro.Motivo.HasValue && !Enum.IsDefined(filtro.Motivo.Value))
-            throw new ArgumentException("El motivo no es válido.");
-        if (filtro.Estado.HasValue && !Enum.IsDefined(filtro.Estado.Value))
-            throw new ArgumentException("El estado no es válido.");
+        if (filtro.TipoContenido.HasValue)
+            filtro.TipoContenido.Value.ValidarEnum("tipo de contenido");
+        if (filtro.Motivo.HasValue)
+            filtro.Motivo.Value.ValidarEnum("motivo");
+        if (filtro.Estado.HasValue)
+            filtro.Estado.Value.ValidarEnum("estado");
     }
 
     private static void ValidarResolucion(ResolverReporteAdminDto dto)
     {
-        if (dto.ReporteId <= 0) throw new ArgumentException("El ID del reporte debe ser mayor que cero.");
-        if (!Enum.IsDefined(dto.Accion)) throw new ArgumentException("La acción no es válida.");
+        dto.ReporteId.ValidarId("reporte");
+        dto.Accion.ValidarEnum("acción");
         if (dto.Accion == AccionReporte.SuspenderUsuario && dto.DiasSuspension is < 1 or > 365)
             throw new ArgumentException("La suspensión debe durar entre 1 y 365 días.");
-        if (dto.Observacion?.Trim().Length > 1000)
-            throw new ArgumentException("La observación no puede superar 1000 caracteres.");
+        dto.Observacion?.ValidarTexto(1000, "observación");
     }
 }

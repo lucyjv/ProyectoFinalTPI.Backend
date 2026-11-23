@@ -1,10 +1,11 @@
-using ProyectoFinalTPI.Backend.Interfaces.Configuracion;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ProyectoFinalTPI.Backend.Dtos.Momento;
 using ProyectoFinalTPI.Backend.Entidades;
+using ProyectoFinalTPI.Backend.Interfaces.Configuracion;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
+using ProyectoFinalTPI.Backend.Servicio.Extensions;
 
 namespace ProyectoFinalTPI.Backend.Servicio;
 
@@ -16,7 +17,8 @@ public class ReprocesamientoRecuerdosServicio(IReprocesamientoRecuerdosRepositor
 
     public async Task<VistaPreviaReprocesamientoDto> Previsualizar(int limite, int despuesDeId, bool incluirFallidos, CancellationToken ct)
     {
-        ValidarPaginacion(limite, despuesDeId);
+        despuesDeId.ValidarId("cursor");
+        limite.ValidarLimite(25);
         var pagina = await repositorio.Previsualizar(limite, despuesDeId, incluirFallidos, ct);
         return pagina with { AnalisisDisponible = analizador.Disponible && opciones.Value.Habilitado };
     }
@@ -36,10 +38,6 @@ public class ReprocesamientoRecuerdosServicio(IReprocesamientoRecuerdosRepositor
 
     #region Métodos privados y validaciones
 
-    private static void ValidarPaginacion(int limite, int despuesDeId)
-    {
-        if (limite is < 1 or > 25 || despuesDeId < 0) throw new ArgumentException("El límite debe estar entre 1 y 25 y el cursor debe ser no negativo.");
-    }
     private void RegistrarReprocesamiento(int administradorId, ResultadoReprocesamientoDto resultado)
     {
         logger.LogInformation("Administrador {AdministradorId}: reprocesamiento con {Programados} programados y {Omitidos} omitidos",

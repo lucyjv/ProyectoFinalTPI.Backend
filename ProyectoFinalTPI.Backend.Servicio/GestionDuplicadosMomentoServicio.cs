@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using ProyectoFinalTPI.Backend.Dtos.Momento;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
+using ProyectoFinalTPI.Backend.Servicio.Extensions;
 
 namespace ProyectoFinalTPI.Backend.Servicio;
 
@@ -14,7 +15,9 @@ public class GestionDuplicadosMomentoServicio(IGestionDuplicadosMomentoRepositor
 
     public Task<IReadOnlyList<CandidatoDuplicadoMomentoDto>> BuscarCandidatos(int id, int limite, CancellationToken ct)
     {
-        ValidarBusqueda(id, limite);
+        id.ValidarId("momento");
+        limite.ValidarLimite(50);
+
         return repositorio.BuscarCandidatos(id, limite, ct);
     }
 
@@ -41,10 +44,6 @@ public class GestionDuplicadosMomentoServicio(IGestionDuplicadosMomentoRepositor
         if (origenId <= 0 || destinoId <= 0 || origenId == destinoId) throw new ArgumentException("Elegir dos momentos distintos con identificadores positivos.");
     }
 
-    private static void ValidarBusqueda(int id, int limite)
-    {
-        if (id <= 0 || limite is < 1 or > 50) throw new ArgumentException("El Id debe ser positivo y el límite debe estar entre 1 y 50.");
-    }
     private void RegistrarFusion(int origenId, int administradorId, ResultadoFusionMomentoDto resultado)
     {
         logger.LogInformation("Administrador {AdministradorId}: fusión de momento {OrigenId} en {DestinoId}, {Publicaciones} publicaciones afectadas",

@@ -3,6 +3,7 @@ using System.Text;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
+using ProyectoFinalTPI.Backend.Servicio.Extensions;
 
 namespace ProyectoFinalTPI.Backend.Servicio;
 
@@ -24,13 +25,13 @@ public class MomentoServicio(IMomentoRepositorio momentos, IPublicacionRepositor
     }
     public Task AgregarAlias(int id, string texto, CancellationToken ct = default)
     {
-        ValidarId(id);
+        id.ValidarId("alias");
         return momentos.AgregarAlias(CrearAlias(id, texto), ct);
     }
     public async Task<bool> AsociarAutomaticamente(int publicacionId, int momentoId, double confianza, string versionAnalisis, CancellationToken ct = default)
     {
         ValidarConfianza(confianza);
-        versionAnalisis = ValidarTexto(versionAnalisis, 100, "versión del análisis");
+        versionAnalisis = versionAnalisis.ValidarTexto(100, "versión del análisis");
         await ValidarAsociacion(publicacionId, momentoId, ct);
         return await momentos.GuardarAsociacion(CrearAsociacion(
             publicacionId, momentoId,
@@ -40,7 +41,7 @@ public class MomentoServicio(IMomentoRepositorio momentos, IPublicacionRepositor
     }
     public async Task AsociarPorAutor(int publicacionId, int momentoId, int usuarioId, CancellationToken ct = default)
     {
-        ValidarId(usuarioId);
+        usuarioId.ValidarId("usuario");
         var publicacion = await ValidarAsociacion(publicacionId, momentoId, ct);
         ValidarAutor(publicacion, usuarioId); 
         await momentos.GuardarAsociacion(
@@ -65,7 +66,7 @@ public class MomentoServicio(IMomentoRepositorio momentos, IPublicacionRepositor
         NormalizarDatos(momento);
         ValidarFechas(momento);
         if (momento.MomentoPadreId.HasValue)
-            ValidarId(momento.MomentoPadreId.Value);
+            momento.MomentoPadreId.Value.ValidarId("momento");
         momento.FechaCreacion = DateTime.UtcNow;
     }
     private static void ValidarEstadoInicial(Momento momento)
@@ -84,11 +85,8 @@ public class MomentoServicio(IMomentoRepositorio momentos, IPublicacionRepositor
     }
     private static void NormalizarDatos(Momento momento)
     {
-        momento.Nombre = ValidarTexto(momento.Nombre, 200, "nombre");
-        momento.Descripcion = (momento.Descripcion ?? "").Trim();
-        if (momento.Descripcion.Length > 2000)
-            throw new ArgumentException(
-                "La descripción admite hasta 2000 caracteres.");
+        momento.Nombre = momento.Nombre.ValidarTexto(200, "nombre");
+        momento.Descripcion = momento.Descripcion.ValidarTexto(2000, "descripción");
     }
     private static void ValidarFechas(Momento momento)
     {
@@ -100,15 +98,15 @@ public class MomentoServicio(IMomentoRepositorio momentos, IPublicacionRepositor
     }
     private static void ValidarCambioDePadre(int id, int? padreId)
     {
-        ValidarId(id);
-        if (padreId.HasValue) ValidarId(padreId.Value);
+        id.ValidarId("momento");
+        if (padreId.HasValue) padreId.Value.ValidarId("momento padre");
         if (id == padreId)
             throw new ArgumentException(
                 "Un momento no puede ser su propio padre.");
     }
     private static MomentoAlias CrearAlias(int id, string texto)
     {
-        var validado = ValidarTexto(texto, 200, "alias");
+        var validado = texto.ValidarTexto(200, "alias");
         return new MomentoAlias
         {
             MomentoId = id,
@@ -138,28 +136,18 @@ public class MomentoServicio(IMomentoRepositorio momentos, IPublicacionRepositor
     }
     private async Task<Publicacion> ValidarAsociacion(int publicacionId, int momentoId, CancellationToken ct)
     {
-        ValidarId(momentoId);
+        momentoId.ValidarId("momento");
         var publicacion = await ObtenerRecuerdo(publicacionId, ct);
         if (await momentos.ObtenerPorId(momentoId, ct) == null) throw new KeyNotFoundException("El momento no existe.");
         return publicacion;
     }
     private async Task<Publicacion> ObtenerRecuerdo(int id, CancellationToken ct)
     {
-        ValidarId(id);
+        id.ValidarId("publicación");
         var publicacion = await publicaciones.ObtenerPorId(id, ct);
         if (publicacion == null || publicacion.EstaOculto) throw new KeyNotFoundException("La publicación no existe o no está disponible.");
         if (publicacion.PublicacionOriginalId.HasValue) throw new ArgumentException("Las asociaciones se realizan sobre el recuerdo original, no sobre un repost.");
         return publicacion;
-    }
-    private static void ValidarId(int id)
-    {
-        if (id <= 0) throw new ArgumentException("El identificador debe ser positivo.");
-    }
-    private static string ValidarTexto(string? texto, int maximo, string nombre)
-    {
-        if (string.IsNullOrWhiteSpace(texto) || texto.Trim().Length > maximo)
-            throw new ArgumentException($"El {nombre} es obligatorio y admite hasta {maximo} caracteres.");
-        return texto.Trim();
     }
     private static PublicacionMomento CrearAsociacion(
         int publicacionId,

@@ -4,6 +4,7 @@ using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Servicio.Mappings;
+using ProyectoFinalTPI.Backend.Servicio.Extensions;
 
 namespace ProyectoFinalTPI.Backend.Servicio;
 
@@ -22,7 +23,7 @@ public class ComentarioServicio(
         CancellationToken cancellationToken = default)
     {
         await ValidarPublicacion(publicacionId, cancellationToken);
-        ValidarLimite(limite, 50);
+        limite.ValidarLimite(50);
 
         var comentarios = await _comentarioRepositorio.ObtenerRaices(
             publicacionId, CursorCronologicoCodec.Leer(cursor), limite, cancellationToken);
@@ -38,8 +39,8 @@ public class ComentarioServicio(
         CancellationToken cancellationToken = default)
     {
         await ValidarPublicacion(publicacionId, cancellationToken);
-        ValidarId(comentarioId, "comentario");
-        ValidarLimite(limite, 20);
+        comentarioId.ValidarId("comentario");
+        limite.ValidarLimite(20);
 
         _ = await _comentarioRepositorio.Obtener(publicacionId, comentarioId, cancellationToken)
             ?? throw new KeyNotFoundException("El comentario no existe o no está disponible.");
@@ -68,7 +69,7 @@ public class ComentarioServicio(
     public async Task Eliminar(
         int publicacionId, int comentarioId, int usuarioId, CancellationToken cancellationToken = default)
     {
-        ValidarId(usuarioId, "usuario");
+        usuarioId.ValidarId("usuario");
         var comentario = await ObtenerComentarioExistente(publicacionId, comentarioId, cancellationToken);
         if (comentario.UsuarioId != usuarioId)
             throw new UnauthorizedAccessException("No podés eliminar un comentario de otra persona.");
@@ -111,18 +112,9 @@ public class ComentarioServicio(
     }
     private async Task ValidarPublicacion(int publicacionId, CancellationToken cancellationToken)
     {
-        ValidarId(publicacionId, "publicación");
+        publicacionId.ValidarId("publicación");
         if (!await _comentarioRepositorio.ExistePublicacionVisible(publicacionId, cancellationToken))
             throw new KeyNotFoundException("La publicación no existe o no está disponible.");
-    }
-    private static void ValidarId(int id, string recurso)
-    {
-        if (id <= 0) throw new ArgumentException($"El ID de {recurso} debe ser mayor que cero.");
-    }
-    private static void ValidarLimite(int limite, int maximo)
-    {
-        if (limite < 1 || limite > maximo)
-            throw new ArgumentException($"El límite debe estar entre 1 y {maximo}.");
     }
     private static int Cantidad(IReadOnlyDictionary<int, int> cantidades, int comentarioId) =>
         cantidades.GetValueOrDefault(comentarioId);
@@ -237,13 +229,6 @@ public class ComentarioServicio(
 
         return padre;
     }
-    private static string ValidarContenido(Comentario comentario)
-    {
-        var contenido = comentario.Contenido?.Trim() ?? string.Empty;
-        if (contenido.Length == 0) throw new ArgumentException("Debe indicar el contenido del comentario.");
-        if (contenido.Length > 1000) throw new ArgumentException("El comentario no puede superar los 1000 caracteres.");
-        return contenido;
-    }
     private async Task<Comentario> ObtenerComentarioExistente(int publicacionId, int comentarioId, CancellationToken cancellationToken)
     {
         return await _comentarioRepositorio.Obtener(publicacionId, comentarioId, cancellationToken)
@@ -273,8 +258,8 @@ public class ComentarioServicio(
         if (categoriaServicio is not null)
             await categoriaServicio.ExigirPermiso(comentario.UsuarioId, PermisoCuenta.Comentar, cancellationToken);
         await ValidarPublicacion(comentario.PublicacionId, cancellationToken);
-        ValidarId(comentario.UsuarioId, "usuario");
-        return ValidarContenido(comentario);
+        comentario.UsuarioId.ValidarId("usuario");
+        return comentario.Contenido = comentario.Contenido.ValidarTexto(1000, "comentario");
     }
 
     #endregion

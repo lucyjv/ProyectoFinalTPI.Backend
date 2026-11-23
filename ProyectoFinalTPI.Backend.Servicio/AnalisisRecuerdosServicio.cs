@@ -8,6 +8,7 @@ using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Interfaces.Configuracion;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
+using ProyectoFinalTPI.Backend.Servicio.Extensions;
 
 namespace ProyectoFinalTPI.Backend.Servicio;
 
@@ -193,16 +194,10 @@ public class AnalisisRecuerdosServicio(ITrabajoAnalisisRepositorio repositorio, 
     private async Task<int> ObtenerOriginalVisible(
         int id, CancellationToken ct)
     {
-        ValidarId(id);
+        id.ValidarId("publicación");
         return await relaciones.ObtenerOriginalVisible(id, ct)
             ?? throw new KeyNotFoundException(
                 "La publicación no existe o no está disponible.");
-    }
-    private static void ValidarId(int id)
-    {
-        if (id <= 0)
-            throw new ArgumentException(
-                "El identificador debe ser positivo.");
     }
     private DateTime Ahora() => reloj.GetUtcNow().UtcDateTime;
 

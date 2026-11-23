@@ -4,6 +4,7 @@ using ProyectoFinalTPI.Backend.Dtos.Usuario;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
+using ProyectoFinalTPI.Backend.Servicio.Extensions;
 
 namespace ProyectoFinalTPI.Backend.Servicio
 {
@@ -223,8 +224,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
         }
         private async Task ValidarUsuarioParaConsulta(int usuarioId, CancellationToken cancellationToken)
         {
-            if (usuarioId <= 0)
-                throw new ArgumentException("El ID del usuario debe ser mayor que cero.");
+            usuarioId.ValidarId("usuario");
             if (!await _usuarioRepositorio.ExisteUsuario(usuarioId, cancellationToken))
                 throw new KeyNotFoundException("El usuario indicado no existe.");
         }

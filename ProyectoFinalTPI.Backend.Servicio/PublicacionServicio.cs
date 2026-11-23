@@ -6,6 +6,7 @@ using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Servicio.ProyectoFinalTPI.Backend.Servicio;
+using ProyectoFinalTPI.Backend.Servicio.Extensions;
 using NetTopologySuite.Geometries;
 using System.Globalization;
 using System.Text;
@@ -224,8 +225,8 @@ namespace ProyectoFinalTPI.Backend.Servicio
         public async Task<RepostPublicacionDto> Repostear(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
         {
             if (_categoriaServicio is not null) await _categoriaServicio.ExigirPermiso(usuarioId, global::ProyectoFinalTPI.Backend.Entidades.PermisoCuenta.Compartir, cancellationToken);
-            ValidarIdPublicacion(publicacionId);
-            ValidarIdUsuario(usuarioId);
+            publicacionId.ValidarId("publicación");
+            usuarioId.ValidarId("usuario");
             await VerificarAutorExistente(usuarioId);
             Publicacion original = await ObtenerPublicacionOriginalParaCompartir(publicacionId, cancellationToken);
 
@@ -241,8 +242,9 @@ namespace ProyectoFinalTPI.Backend.Servicio
         }
         public async Task<RepostPublicacionDto> QuitarRepost(int publicacionId, int usuarioId, CancellationToken cancellationToken = default)
         {
-            ValidarIdPublicacion(publicacionId);
-            ValidarIdUsuario(usuarioId);
+            publicacionId.ValidarId("publicación");
+            usuarioId.ValidarId("usuario");
+
 
             await _publicacionRepositorio.QuitarRepost(publicacionId, usuarioId, cancellationToken);
             return await _publicacionRepositorio.ObtenerEstadoRepost(publicacionId, usuarioId, cancellationToken);
@@ -250,8 +252,8 @@ namespace ProyectoFinalTPI.Backend.Servicio
         public async Task<int> Citar(int publicacionId, int usuarioId, string descripcion, CancellationToken cancellationToken = default)
         {
             if (_categoriaServicio is not null) await _categoriaServicio.ExigirPermiso(usuarioId, global::ProyectoFinalTPI.Backend.Entidades.PermisoCuenta.Compartir, cancellationToken);
-            ValidarIdPublicacion(publicacionId);
-            ValidarIdUsuario(usuarioId);
+            publicacionId.ValidarId("publicación");
+            usuarioId.ValidarId("usuario");
             ValidarDescripcion(descripcion);
             await VerificarAutorExistente(usuarioId);
 
@@ -288,21 +290,21 @@ namespace ProyectoFinalTPI.Backend.Servicio
         }
         public async Task<PublicacionResumenDto> ObtenerResumenPorId(int id, CancellationToken cancellationToken = default)
         {
-            ValidarIdPublicacion(id);
+            id.ValidarId("publicación");
 
             return await (_resumenConsulta is null ? _publicacionRepositorio.ObtenerResumenPorId(id, cancellationToken) : _resumenConsulta.Obtener(id, cancellationToken))
            ?? throw new KeyNotFoundException("La publicación no existe o no está disponible.");
         }
         public async Task<PublicacionDetalleDto> ObtenerDetallePorId(int id, CancellationToken cancellationToken = default)
         {
-            ValidarIdPublicacion(id);
+            id.ValidarId("publicación");
 
             return await _publicacionRepositorio.ObtenerDetallePorId(id, cancellationToken)
            ?? throw new KeyNotFoundException("La publicación no existe o no está disponible.");
         }
         public async Task<List<PublicacionDetalleDto>> ObtenerPorUsuarioId(int usuarioId, int? usuarioAutenticadoId, CancellationToken cancellationToken = default)
         {
-            ValidarIdUsuario(usuarioId);
+            usuarioId.ValidarId("usuario");
 
             var publicaciones = await _publicacionRepositorio.ObtenerPorUsuarioId(usuarioId, cancellationToken);
 
@@ -315,7 +317,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
         public async Task<List<PublicacionDetalleDto>> ObtenerGuardadasPorUsuarioId(
             int usuarioId, int? usuarioAutenticadoId, CancellationToken cancellationToken = default)
         {
-            ValidarIdUsuario(usuarioId);
+            usuarioId.ValidarId("usuario");
 
             var idsGuardadas = await _publicacionRepositorio.ObtenerIdsPublicacionesGuardadas(usuarioId, cancellationToken);
             if (idsGuardadas.Count == 0) return new List<PublicacionDetalleDto>();
@@ -332,8 +334,8 @@ namespace ProyectoFinalTPI.Backend.Servicio
         public async Task<ResultadoPaginadoDto<PublicacionDetalleDto>> ObtenerFeedSeguidos(
             int usuarioId, string? cursor, int limite, CancellationToken cancellationToken = default)
         {
-            ValidarIdUsuario(usuarioId);
-            ValidarLimite(limite);
+            usuarioId.ValidarId("usuario");
+            limite.ValidarLimite(50);
             var avance = CursorCronologicoCodec.Leer(cursor);
             var autores = await _seguimientoServicio.ObtenerSeguidosIdsAsync(usuarioId, cancellationToken);
             if (autores.Count == 0) return new();
@@ -358,8 +360,8 @@ namespace ProyectoFinalTPI.Backend.Servicio
         int limite,
         CancellationToken cancellationToken = default)
         {
-            ValidarIdUsuario(usuarioId);
-            ValidarLimite(limite);
+            usuarioId.ValidarId("usuario");
+            limite.ValidarLimite(50);
             // los .completar()  para tiempos de las etapas de Application insights
 
             using var total = new TelemetriaFeed("para-vos");
@@ -394,7 +396,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
             string hashtag, string? cursor, int limite, int? usuarioId, CancellationToken cancellationToken = default)
         {
             var nombre = NormalizarHashtag(hashtag);
-            ValidarLimite(limite);
+            limite.ValidarLimite(50);
             var cursorDecodificado = CursorCronologicoCodec.Leer(cursor);
             var ids = await _publicacionRepositorio.ObtenerIdsPorHashtag(
                 nombre, cursorDecodificado, limite, cancellationToken);
@@ -416,7 +418,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
         public async Task<List<TendenciaHashtagDto>> ObtenerTendenciasHashtags(
             int limite, CancellationToken cancellationToken = default)
         {
-            ValidarLimite(limite);
+            limite.ValidarLimite(50);
             var desde = DateTime.UtcNow.AddDays(-7);
             var publicaciones = await _publicacionRepositorio.ObtenerDescripcionesParaHashtags(desde, cancellationToken);
             return AgruparHashtags(publicaciones).Take(limite).ToList();
@@ -425,7 +427,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
         public async Task<List<TendenciaHashtagDto>> BuscarHashtags(
             string consulta, int limite, CancellationToken cancellationToken = default)
         {
-            ValidarLimite(limite);
+            limite.ValidarLimite(50);
             if (string.IsNullOrWhiteSpace(consulta)) return new List<TendenciaHashtagDto>();
             var prefijo = NormalizarHashtag(consulta);
             var publicaciones = await _publicacionRepositorio.ObtenerDescripcionesParaHashtags(null, cancellationToken);
@@ -494,7 +496,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
         }
         public async Task Eliminar(int id, int? autorId = null, CancellationToken cancellationToken = default)
         {
-            ValidarIdPublicacion(id);
+            id.ValidarId("publicación");
 
             var eliminado = await _publicacionRepositorio.Eliminar(id, autorId, cancellationToken);
             VerificarEliminar(eliminado);
@@ -503,13 +505,11 @@ namespace ProyectoFinalTPI.Backend.Servicio
         public async Task<PublicacionDetalleDto> Editar(
             int id, int autorId, EditarPublicacionDto dto, CancellationToken cancellationToken = default)
         {
-            ValidarIdPublicacion(id);
-            ValidarIdUsuario(autorId);
+            id.ValidarId("publicación");
+            autorId.ValidarId("usuario");
             ArgumentNullException.ThrowIfNull(dto);
-            if (string.IsNullOrWhiteSpace(dto.Titulo) || dto.Titulo.Trim().Length > 200)
-                throw new ArgumentException("El título es obligatorio y no puede superar 200 caracteres.");
-            if (string.IsNullOrWhiteSpace(dto.Descripcion) || dto.Descripcion.Trim().Length > 5000)
-                throw new ArgumentException("La descripción es obligatoria y no puede superar 5000 caracteres.");
+            dto.Titulo.ValidarTexto(200, "título");
+            dto.Descripcion.ValidarTexto(5000, "descripción");
 
             var publicacion = await _publicacionRepositorio.ObtenerPorId(id, cancellationToken);
             if (publicacion is null)
@@ -541,10 +541,9 @@ namespace ProyectoFinalTPI.Backend.Servicio
         }
         private void ValidarFechasYCategorias(PublicacionFiltroDto filtro)
         {
-            if (filtro.Categoria.HasValue &&
-                            !Enum.IsDefined(typeof(CategoriaEnum), filtro.Categoria.Value))
+            if (filtro.Categoria.HasValue)
             {
-                throw new ArgumentException("La categoría indicada no es válida.");
+                filtro.Categoria.Value.ValidarEnum("categoría");
             }
 
             if (filtro.FechaDesde.HasValue &&
@@ -596,7 +595,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
         public async Task RegistrarImpresionesFeed(int usuarioId, IReadOnlyCollection<int> publicacionesIds,
             CancellationToken cancellationToken = default)
         {
-            if (usuarioId <= 0) throw new ArgumentException("El ID del usuario debe ser mayor que cero.");
+            usuarioId.ValidarId("usuario");
             if (publicacionesIds.Count is < 1 or > 50)
                 throw new ArgumentException("Se deben enviar entre 1 y 50 publicaciones.");
             if (publicacionesIds.Any(id => id <= 0))
@@ -609,37 +608,11 @@ namespace ProyectoFinalTPI.Backend.Servicio
             if (idsVisibles.Count > 0)
                 await _publicacionRepositorio.RegistrarImpresionesFeed(usuarioId, idsVisibles, cancellationToken);
         }
-        private void ValidarIdPublicacion(int idPublicacion)
-        {
-            if (idPublicacion <= 0)
-            {
-                throw new ArgumentException(
-                    "El ID de la publicación debe ser mayor que cero.");
-            }
-        }
-        private void ValidarLimite(int limite)
-        {
-            if (limite < 1 || limite > 50)
-            {
-                throw new ArgumentException(
-                    "El límite debe estar entre 1 y 50.");
-            }
-        }
-        private void ValidarIdUsuario(int usuarioId)
-        {
-            if (usuarioId <= 0)
-            {
-                throw new ArgumentException(
-                    "El ID del usuario debe ser mayor que cero.");
-            }
-        }
         private async Task ValidarInteraccionConPublicacion(
                     int publicacionId, int usuarioId, CancellationToken cancellationToken)
                 {
-            if (publicacionId <= 0)
-                throw new ArgumentException("El ID de publicacion es erroneo");
-            if (usuarioId <= 0)
-                throw new ArgumentException("El ID de usuario es erroneo");
+            publicacionId.ValidarId("publicación");
+            usuarioId.ValidarId("usuario");
             if (!await _usuarioRepositorio.ExisteUsuario(usuarioId, cancellationToken))
                 throw new KeyNotFoundException("El usuario autenticado no existe");
             if (!await _publicacionRepositorio.ExistePublicacionVisible(publicacionId, cancellationToken))
@@ -1009,7 +982,7 @@ namespace ProyectoFinalTPI.Backend.Servicio
 
         private static void ValidarAdjunto(AdjuntoEntradaDto entrada)
         {
-            if (!Enum.IsDefined(entrada.Tipo)) throw new ArgumentException("El tipo de adjunto no es válido.");
+            entrada.Tipo.ValidarEnum("tipo de adjunto");
             if ((entrada.Archivo is null) == string.IsNullOrWhiteSpace(entrada.Url))
                 throw new ArgumentException("Cada adjunto requiere un archivo o una URL, exclusivamente.");
             ValidarArchivoAdjunto(entrada.Archivo);

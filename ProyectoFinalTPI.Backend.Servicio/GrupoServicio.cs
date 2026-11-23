@@ -5,6 +5,7 @@ using ProyectoFinalTPI.Backend.Entidades.ValueObjects;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Servicio.Mappings;
+using ProyectoFinalTPI.Backend.Servicio.Extensions;
 
 namespace ProyectoFinalTPI.Backend.Servicio;
 
@@ -33,7 +34,7 @@ public class GrupoServicio(
     public async Task<GrupoResumenDto> ObtenerPorId(
         int grupoId, int? usuarioActualId, CancellationToken cancellationToken = default)
     {
-        ValidarId(grupoId, "grupo");
+        grupoId.ValidarId("grupo");
         var grupo = await ObtenerGrupo(grupoId, cancellationToken);
         return grupo.ToDto(usuarioActualId);
     }
@@ -42,7 +43,7 @@ public class GrupoServicio(
     {
         ArgumentNullException.ThrowIfNull(grupo);
         ValidarDatos(grupo);
-        ValidarId(grupo.CreadorId, "creador");
+        grupo.CreadorId.ValidarId("creador");
 
         var creador = await ObtenerCreador(grupo);
         PrepararGrupoParaCreacion(grupo, creador);
@@ -93,7 +94,7 @@ public class GrupoServicio(
         CancellationToken cancellationToken = default)
     {
         ValidarGrupoYUsuario(grupoId, usuarioIdCreador);
-        ValidarId(usuarioIdAEliminar, "integrante");
+        usuarioIdAEliminar.ValidarId("integrante");
         var grupo = await ObtenerGrupoDelCreador(grupoId, usuarioIdCreador,cancellationToken);
         ValidarExpulsion(grupo, usuarioIdAEliminar);
         var integrante = await ObtenerIntegrante(
@@ -104,7 +105,7 @@ public class GrupoServicio(
     public async Task<IReadOnlyList<GrupoIntegranteDto>> ObtenerIntegrantes(
         int grupoId, CancellationToken cancellationToken = default)
     {
-        ValidarId(grupoId, "grupo");
+        grupoId.ValidarId("grupo");
         var grupo = await ObtenerGrupo(grupoId, cancellationToken);
         var integrantes = await grupoRepositorio.ObtenerIntegrantes(grupoId, cancellationToken);
         return integrantes.Select(integrante => integrante.ToDto(grupo.CreadorId)).ToList();
@@ -112,7 +113,7 @@ public class GrupoServicio(
     public async Task<IReadOnlyList<PublicacionDetalleDto>> ObtenerRecuerdos(
         int grupoId, CancellationToken cancellationToken = default)
     {
-        ValidarId(grupoId, "grupo");
+        grupoId.ValidarId("grupo");
         await ObtenerGrupo(grupoId, cancellationToken);
         return await grupoRepositorio.ObtenerRecuerdos(grupoId, cancellationToken);
     }
@@ -152,31 +153,19 @@ public class GrupoServicio(
 
     private static void ValidarDatos(Grupo grupo)
     {
-        var nombre = grupo.Nombre?.Trim() ?? string.Empty;
-        var descripcion = grupo.Descripcion?.Trim() ?? string.Empty;
-        if (nombre.Length is < 3 or > 100)
-            throw new ArgumentException("El nombre debe tener entre 3 y 100 caracteres.");
-        if (descripcion.Length > 500)
-            throw new ArgumentException("La descripcion no puede superar los 500 caracteres.");
+        grupo.Nombre?.ValidarTexto(100, "nombre", minimo: 3);
+        grupo.Descripcion.ValidarTexto(500, "descripción");
         _ = new Decada(grupo.Decada);
-    }
-
-    private static void ValidarId(int id, string recurso)
-    {
-        if (id <= 0) throw new ArgumentException($"El ID de {recurso} debe ser mayor que cero.");
     }
     private static void ValidarGrupoYUsuario(int grupoId, int usuarioId)
     {
-        ValidarId(grupoId, "grupo");
-        ValidarId(usuarioId, "usuario");
+        grupoId.ValidarId("grupo");
+        usuarioId.ValidarId("usuario");
     }
     private static string ValidarBusqueda(string texto, int limite)
     {
-        var textoNormalizado = texto?.Trim() ?? string.Empty;
-        if (textoNormalizado.Length is < 2 or > 100)
-            throw new ArgumentException("El texto de busqueda debe tener entre 2 y 100 caracteres.");
-        if (limite is < 1 or > 50)
-            throw new ArgumentException("El limite debe estar entre 1 y 50.");
+        var textoNormalizado = texto.ValidarTexto(100, "texto de búsqueda");
+        limite.ValidarLimite(50);
         return textoNormalizado;
     }
     private async Task<Usuario> ObtenerCreador(Grupo grupo)
