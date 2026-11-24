@@ -1,9 +1,5 @@
-using System.Net.Http.Headers;
-using System.Text;
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using ProyectoFinalTPI.Backend.Dtos.PuntosNostalgia;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
@@ -17,8 +13,7 @@ public sealed class MercadoPagoPuntosServicio(
     ICotizacionDolarServicio cotizacionServicio,
     IConsumoDiarioPuntosNostalgiaRepositorio consumos,
     ICupoPuntosNostalgiaServicio cupos,
-    IHttpClientFactory httpClientFactory,
-    IOptions<MercadoPagoOptions> opcionesMercadoPago,
+    IMercadoPagoCliente mercadoPagoCliente,
     ILogger<MercadoPagoPuntosServicio>? logger = null) : IMercadoPagoPuntosServicio
 {
     private static readonly IReadOnlyList<PackDefinicion> PacksCatalogo =
@@ -66,95 +61,16 @@ public sealed class MercadoPagoPuntosServicio(
         contexto.ComprasPuntosNostalgia.Add(compra);
         await contexto.SaveChangesAsync(ct);
 
-        var mpConfig = opcionesMercadoPago.Value;
-        if (string.IsNullOrWhiteSpace(mpConfig.AccessToken) || mpConfig.AccessToken.StartsWith("REEMPLAZAR", StringComparison.OrdinalIgnoreCase))
-        {
-            logger?.LogError("No se puede iniciar el pago: MercadoPago:AccessToken no está configurado.");
-            throw new InvalidOperationException("El servicio de cobro de Mercado Pago no está configurado en el servidor.");
-        }
+        var preferencia = await mercadoPagoCliente.CrearPreferenciaAsync(
+            new SolicitudPreferenciaMercadoPago(compra.Id, pack.Id, pack.Nombre, pack.Puntos, precioArs), ct);
 
-        var cliente = httpClientFactory.CreateClient();
-        cliente.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", mpConfig.AccessToken);
-
-        var esHttps = mpConfig.BaseUrlRetorno.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
-
-        var payload = new Dictionary<string, object?>
-        {
-            ["items"] = new[]
-            {
-                new
-                {
-                    id = pack.Id,
-                    title = $"Nostalgiar - {pack.Nombre} ({pack.Puntos} Puntos)",
-                    description = $"Recarga de {pack.Puntos} puntos de nostalgia para tu cuenta en Nostalgiar.",
-                    quantity = 1,
-                    currency_id = "ARS",
-                    unit_price = precioArs
-                }
-            },
-            ["back_urls"] = new
-            {
-                success = $"{mpConfig.BaseUrlRetorno.TrimEnd('/')}/perfil?puntos=exito&compraId={compra.Id}",
-                failure = $"{mpConfig.BaseUrlRetorno.TrimEnd('/')}/perfil?puntos=fallo&compraId={compra.Id}",
-                pending = $"{mpConfig.BaseUrlRetorno.TrimEnd('/')}/perfil?puntos=pendiente&compraId={compra.Id}"
-            },
-            ["external_reference"] = compra.Id.ToString()
-        };
-
-        if (esHttps)
-        {
-            payload["auto_return"] = "approved";
-        }
-
-        var jsonContent = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
-        using var respuesta = await cliente.PostAsync("https://api.mercadopago.com/checkout/preferences", jsonContent, ct);
-
-        if (!respuesta.IsSuccessStatusCode)
-        {
-            var err = await respuesta.Content.ReadAsStringAsync(ct);
-            logger?.LogError("Mercado Pago respondió con error al crear preferencia ({StatusCode}): {Body}", (int)respuesta.StatusCode, err);
-            throw new InvalidOperationException("Mercado Pago no pudo generar la preferencia de pago. Verifique las credenciales y la conexión.");
-        }
-
-        await using var stream = await respuesta.Content.ReadAsStreamAsync(ct);
-        using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
-
-        string preferenceId = string.Empty;
-        if (doc.RootElement.TryGetProperty("id", out var idProp))
-        {
-            preferenceId = idProp.GetString() ?? string.Empty;
-        }
-
-        string initPoint = string.Empty;
-        var esLocalhost = mpConfig.BaseUrlRetorno.Contains("localhost", StringComparison.OrdinalIgnoreCase);
-
-        // Si estamos en entorno local de pruebas y Mercado Pago devolvió sandbox_init_point, lo priorizamos
-        if (esLocalhost && doc.RootElement.TryGetProperty("sandbox_init_point", out var sandProp) && !string.IsNullOrWhiteSpace(sandProp.GetString()))
-        {
-            initPoint = sandProp.GetString()!;
-        }
-        else if (doc.RootElement.TryGetProperty("init_point", out var initProp) && !string.IsNullOrWhiteSpace(initProp.GetString()))
-        {
-            initPoint = initProp.GetString()!;
-        }
-        else if (doc.RootElement.TryGetProperty("sandbox_init_point", out var fallbackSandProp) && !string.IsNullOrWhiteSpace(fallbackSandProp.GetString()))
-        {
-            initPoint = fallbackSandProp.GetString()!;
-        }
-
-        if (string.IsNullOrWhiteSpace(initPoint))
-        {
-            logger?.LogError("Mercado Pago no devolvió una URL init_point válida.");
-            throw new InvalidOperationException("Mercado Pago no devolvió un enlace de pago válido.");
-        }
-
-        compra.PreferenceId = preferenceId;
+        compra.PreferenceId = preferencia.Id;
         await contexto.SaveChangesAsync(ct);
 
         return new PreferenciaCompraDto(
             compra.Id,
-            preferenceId,
-            initPoint,
+            preferencia.Id,
+            preferencia.UrlPago,
             pack.Id,
             pack.Nombre,
             pack.Puntos,
@@ -193,31 +109,13 @@ public sealed class MercadoPagoPuntosServicio(
     {
         if (string.IsNullOrWhiteSpace(paymentId)) return null;
 
-        var mpConfig = opcionesMercadoPago.Value;
-        if (string.IsNullOrWhiteSpace(mpConfig.AccessToken) || mpConfig.AccessToken.StartsWith("REEMPLAZAR", StringComparison.OrdinalIgnoreCase))
-        {
-            logger?.LogWarning("No se puede consultar pago {PaymentId} a Mercado Pago porque AccessToken no está configurado.", paymentId);
-            return null;
-        }
-
         try
         {
-            var cliente = httpClientFactory.CreateClient();
-            cliente.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", mpConfig.AccessToken);
+            var pago = await mercadoPagoCliente.ConsultarPagoAsync(paymentId, ct);
+            if (pago is null) return null;
 
-            using var respuesta = await cliente.GetAsync($"https://api.mercadopago.com/v1/payments/{paymentId}", ct);
-            if (!respuesta.IsSuccessStatusCode)
-            {
-                logger?.LogWarning("Mercado Pago respondió {StatusCode} al consultar pago {PaymentId}", (int)respuesta.StatusCode, paymentId);
-                return null;
-            }
-
-            await using var stream = await respuesta.Content.ReadAsStreamAsync(ct);
-            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
-            var root = doc.RootElement;
-
-            var status = root.TryGetProperty("status", out var statusProp) ? statusProp.GetString() : null;
-            var extRef = root.TryGetProperty("external_reference", out var extProp) ? extProp.GetString() : null;
+            var status = pago.Estado;
+            var extRef = pago.ReferenciaExterna;
 
             if (string.Equals(status, "approved", StringComparison.OrdinalIgnoreCase) && int.TryParse(extRef, out var compraId))
             {

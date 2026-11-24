@@ -83,6 +83,37 @@ namespace ProyectoFinalTPI.Backend.Tests
 
 
         [Fact]
+        public async Task QueElPerfilListeSoloPublicacionesVisiblesDelUsuarioConOrdenEstable()
+        {
+            var otroUsuario = new Usuario_Personal { Id = 11, Username = "otro", Email = "otro@example.com" };
+            var fecha = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+            _context.Publicaciones.AddRange(
+                CrearPublicacion(1, usuario, fecha.AddDays(1)),
+                CrearPublicacion(2, usuario, fecha),
+                CrearPublicacion(3, usuario, fecha),
+                CrearPublicacion(4, usuario, fecha.AddDays(2), oculta: true),
+                CrearPublicacion(5, otroUsuario, fecha.AddDays(2)));
+            await _context.SaveChangesAsync();
+            _context.ChangeTracker.Clear();
+
+            var publicaciones = await _repositorio.ObtenerPorUsuarioId(usuario.Id);
+
+            Assert.Equal(new[] { 1, 3, 2 }, publicaciones.Select(p => p.Id));
+
+            Publicacion CrearPublicacion(int id, Usuario_Personal autor, DateTime fechaCreacion, bool oculta = false) => new()
+            {
+                Id = id,
+                Titulo = $"Publicación {id}",
+                Descripcion = "Recuerdo de prueba",
+                Usuario = autor,
+                Lugar = lugar,
+                Fecha = fecha,
+                FechaCreación = fechaCreacion,
+                EstaOculto = oculta
+            };
+        }
+
+        [Fact]
         public async Task QueSePuedaObtenerUnaPublicacionPorSuId()
         {
             //Arrange      

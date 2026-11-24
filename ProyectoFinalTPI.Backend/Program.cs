@@ -180,6 +180,7 @@ builder.Services.AddScoped<IRankingMusicaServicio, RankingMusicaServicio>();
 builder.Services.AddHttpClient();
 builder.Services.Configure<EconomiaOptions>(builder.Configuration.GetSection(EconomiaOptions.Seccion));
 builder.Services.Configure<MercadoPagoOptions>(builder.Configuration.GetSection(MercadoPagoOptions.Seccion));
+builder.Services.AddHttpClient<IMercadoPagoCliente, MercadoPagoCliente>();
 builder.Services.AddScoped<ICotizacionDolarServicio, CotizacionDolarServicio>();
 builder.Services.AddScoped<IMercadoPagoPuntosServicio, MercadoPagoPuntosServicio>();
 builder.Services.AddOptions<RankingMusicaOptions>()

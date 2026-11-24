@@ -1,4 +1,4 @@
-namespace ProyectoFinalTPI.Backend.Servicio;
+namespace ProyectoFinalTPI.Backend.Infraestructura;
 
 public sealed class MercadoPagoOptions
 {

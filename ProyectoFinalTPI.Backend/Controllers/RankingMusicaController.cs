@@ -19,7 +19,7 @@ public sealed class RankingMusicaController(IRankingMusicaServicio servicio) : C
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [SwaggerOperation(
         Summary = "Consulta la ronda de música vigente.",
-        Description = "Incluye las candidaturas ordenadas por década y puntaje. Si hay una sesión válida, incluye el cupo diario y el saldo restante.")]
+        Description = "Incluye las candidaturas ordenadas por década y puntaje. Si hay una sesión válida, incluye el cupo diario y el saldo restante. Saldo es null para visitantes o si su lectura falla por un error de base de datos o tiempo de espera; las canciones siguen disponibles.")]
     [SwaggerResponse(StatusCodes.Status200OK, "Ronda vigente.", typeof(RankingMusicaActualDto))]
     [SwaggerResponse(StatusCodes.Status404NotFound, "No hay una ronda vigente.", typeof(ProblemDetails))]
     public async Task<ActionResult<RankingMusicaActualDto>> ObtenerActual(CancellationToken cancellationToken)
