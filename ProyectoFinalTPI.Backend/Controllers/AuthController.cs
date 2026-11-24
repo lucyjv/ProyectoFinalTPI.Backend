@@ -1,13 +1,18 @@
 using ProyectoFinalTPI.Backend.Mappings;
 using Swashbuckle.AspNetCore.Annotations;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.IdentityModel.Tokens;
 using System.ComponentModel.DataAnnotations;
+using System.Security.Cryptography;
 using ProyectoFinalTPI.Backend.Dtos.Auth;
 using ProyectoFinalTPI.Backend.Interfaces.Servicio;
 using ProyectoFinalTPI.Backend.Interfaces.Repositorio;
 using ProyectoFinalTPI.Backend.Extensions;
+using ProyectoFinalTPI.Backend.Servicio;
+using ProyectoFinalTPI.Backend.Services;
 
 namespace ProyectoFinalTPI.Backend.Controllers;
 
@@ -17,6 +22,8 @@ namespace ProyectoFinalTPI.Backend.Controllers;
 public class AuthController : ControllerBase
 {
     public const string RefreshCookieName = "__Host-Nostalgiar.Refresh";
+    private const string GoogleNonceCookie = "__Host-Nostalgiar.GoogleNonce";
+    private static readonly TimeSpan DuracionGoogleNonce = TimeSpan.FromMinutes(10);
     private readonly IAuthServicio _authServicio;
     private readonly IWebHostEnvironment _environment;
     private readonly IUsuarioRepositorio _usuarioRepositorio;
@@ -81,6 +88,88 @@ public class AuthController : ControllerBase
             return Unauthorized(new { mensaje = ex.Message });
         }
     }
+
+    [HttpPost("google/nonce")]
+    [EnableRateLimiting("auth-intentos")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    [SwaggerOperation(Summary = "Inicia la verificación del acceso con Google.")]
+    public IActionResult GoogleNonce([FromServices] ValidarIdentidadGoogle google,
+        [FromServices] IDataProtectionProvider protector)
+    {
+        if (!TieneEncabezadoFrontend()) return BadRequest(new { mensaje = "Solicitud de autenticación inválida." });
+        if (!google.Habilitado) return GoogleNoDisponible();
+
+        var nonce = Base64UrlEncoder.Encode(RandomNumberGenerator.GetBytes(32));
+        var protegido = ProtectorGoogle(protector).Protect(nonce, DuracionGoogleNonce);
+        Response.Cookies.Append(GoogleNonceCookie, protegido, CookieOptions(DateTime.UtcNow.Add(DuracionGoogleNonce)));
+        return Ok(new { nonce });
+    }
+
+    [HttpPost("google")]
+    [EnableRateLimiting("auth-intentos")]
+    [Consumes("application/json")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    [SwaggerOperation(Summary = "Inicia sesión con una credencial verificada de Google.")]
+    [SwaggerResponse(StatusCodes.Status200OK, "Sesión iniciada.", typeof(AuthRespuestaDto))]
+    [SwaggerResponse(StatusCodes.Status401Unauthorized, "Credencial o cuenta inválida.")]
+    [SwaggerResponse(StatusCodes.Status409Conflict, "El correo necesita vinculación o la vinculación no se pudo completar.")]
+    public async Task<IActionResult> LoginGoogle([FromBody] GoogleLoginDto dto,
+        [FromServices] ValidarIdentidadGoogle google, [FromServices] IDataProtectionProvider protector,
+        CancellationToken cancellationToken)
+    {
+        if (!TieneEncabezadoFrontend()) return BadRequest(new { mensaje = "Solicitud de autenticación inválida." });
+        if (!google.Habilitado) return GoogleNoDisponible();
+        if (!Request.Cookies.TryGetValue(GoogleNonceCookie, out var cookie)) return GoogleCredencialInvalida();
+
+        IdentidadGoogleDto identidad;
+        try
+        {
+            var nonce = ProtectorGoogle(protector).Unprotect(cookie);
+            identidad = await google.ValidarAsync(dto.Credential, nonce, cancellationToken);
+        }
+        catch (Exception ex) when (ex is SecurityTokenException or CryptographicException or ArgumentException)
+        {
+            return GoogleCredencialInvalida();
+        }
+        catch (InvalidOperationException)
+        {
+            return GoogleNoDisponible();
+        }
+
+        try
+        {
+            var resultado = await _authServicio.LoginGoogleAsync(identidad, dto.Contrasena, UserAgent(), cancellationToken);
+            Response.Cookies.Delete(GoogleNonceCookie, CookieOptions(DateTimeOffset.UnixEpoch.UtcDateTime));
+            EscribirRefreshCookie(resultado);
+            return Ok(resultado.Respuesta);
+        }
+        catch (VinculacionGoogleRequeridaException ex)
+        {
+            return Conflict(new { codigo = "GOOGLE_VINCULACION_REQUERIDA", mensaje = ex.Message });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { mensaje = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { mensaje = ex.Message });
+        }
+    }
+
+    private static ITimeLimitedDataProtector ProtectorGoogle(IDataProtectionProvider proveedor) =>
+        proveedor.CreateProtector("Nostalgiar.Auth.GoogleNonce").ToTimeLimitedDataProtector();
+
+    private IActionResult GoogleCredencialInvalida() => Unauthorized(new
+    {
+        codigo = "GOOGLE_CREDENCIAL_INVALIDA",
+        mensaje = "La confirmación de Google no es válida o venció. Volvé a elegir tu cuenta."
+    });
+
+    private IActionResult GoogleNoDisponible() => StatusCode(StatusCodes.Status503ServiceUnavailable,
+        new { mensaje = "El inicio de sesión con Google no está disponible en este momento." });
+
+    private bool TieneEncabezadoFrontend() => Request.Headers["X-Nostalgiar-Request"] == "1";
 
     [AllowAnonymous]
     [HttpPost("recuperar-contrasena")]

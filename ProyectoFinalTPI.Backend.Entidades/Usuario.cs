@@ -7,6 +7,7 @@ namespace ProyectoFinalTPI.Backend.Entidades
         public string? FotoPerfilUrl { get; set; }
         public string Email { get; set; } = string.Empty;
         public string Contraseña { get; set; } = string.Empty;
+        public string? GoogleSubject { get; set; }
         public bool EsAdmin { get; set; }
         public bool EstaEliminado { get; set; }
         public DateTime? FechaEliminacion { get; set; }

@@ -1,6 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Security.Cryptography;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -8,6 +11,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.IdentityModel.Protocols;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
+using Microsoft.IdentityModel.Tokens;
 using Moq;
 using ProyectoFinalTPI.Backend.Dtos.Auth;
 using ProyectoFinalTPI.Backend.Entidades;
@@ -276,6 +282,53 @@ public class AuthServicioTests
     #region Sesiones y Refresh
 
     [Fact]
+    public async Task QueGoogleExijaLaContrasenaAntesDeVincularUnaCuentaExistente()
+    {
+        var identidad = new IdentidadGoogleDto("google-test", "test@example.com");
+        var usuario = new Usuario_Personal { Id = 42, Email = identidad.Email, Contraseña = "contrasena-actual" };
+        _repositorioMock.Setup(r => r.ObtenerPorEmailAsync(identidad.Email, default)).ReturnsAsync(usuario);
+        _repositorioMock.Setup(r => r.VincularGoogleAsync(usuario.Id, identidad.Subject, default)).ReturnsAsync(true);
+        var servicio = CrearServicio();
+
+        await Assert.ThrowsAsync<VinculacionGoogleRequeridaException>(() =>
+            servicio.LoginGoogleAsync(identidad, null, null, default));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            servicio.LoginGoogleAsync(identidad, "contrasena-incorrecta", null, default));
+        _repositorioMock.Verify(r => r.VincularGoogleAsync(usuario.Id, identidad.Subject, default), Times.Never);
+
+        var resultado = await servicio.LoginGoogleAsync(identidad, "contrasena-actual", null, default);
+        Assert.Equal(usuario.Id, resultado.Respuesta.UsuarioId);
+        _repositorioMock.Verify(r => r.VincularGoogleAsync(usuario.Id, identidad.Subject, default), Times.Once);
+    }
+
+    [Fact]
+    public async Task QueGoogleUseLaIdentidadVinculadaAunqueCambieElEmail()
+    {
+        var usuario = new Usuario_Personal { Id = 42, Email = "anterior@example.com", GoogleSubject = "google-test" };
+        _repositorioMock.Setup(r => r.ObtenerPorGoogleAsync(usuario.GoogleSubject, default)).ReturnsAsync(usuario);
+        var identidad = new IdentidadGoogleDto(usuario.GoogleSubject, "nuevo@example.com");
+
+        var resultado = await CrearServicio().LoginGoogleAsync(identidad, null, null, default);
+
+        Assert.Equal(usuario.Id, resultado.Respuesta.UsuarioId);
+        _repositorioMock.Verify(r => r.ObtenerPorEmailAsync(It.IsAny<string>(), default), Times.Never);
+    }
+
+    [Fact]
+    public async Task QueGoogleNoInicieSesionConUnaCuentaSuspendida()
+    {
+        var usuario = new Usuario_Personal
+        {
+            Id = 42, Email = "test@example.com", GoogleSubject = "google-test", SuspendidoHasta = DateTime.UtcNow.AddDays(1)
+        };
+        _repositorioMock.Setup(r => r.ObtenerPorGoogleAsync(usuario.GoogleSubject, default)).ReturnsAsync(usuario);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => CrearServicio()
+            .LoginGoogleAsync(new(usuario.GoogleSubject, usuario.Email), null, null, default));
+        _sesionesMock.Verify(r => r.AgregarAsync(It.IsAny<SesionUsuario>(), default), Times.Never);
+    }
+
+    [Fact]
     public async Task QueElRefreshRoteElTokenEInvalideElAnterior()
     {
         //Arrange
@@ -515,6 +568,59 @@ public class AuthIntegracionTests
     #region Login y Sesiones HTTP
 
     [Fact]
+    public async Task QueGoogleValideLaAudienciaYElDesafioYDevuelvaLaSesionDeNostalgiar()
+    {
+        using var rsa = RSA.Create(2048);
+        var clave = new RsaSecurityKey(rsa) { KeyId = "google-test" };
+        await using var factory = new AuthFactory(clave);
+        using var client = factory.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions
+        {
+            HandleCookies = false
+        });
+        client.DefaultRequestHeaders.Add("X-Nostalgiar-Request", "1");
+
+        using var desafio = await client.PostAsync("/api/auth/google/nonce", null);
+        desafio.EnsureSuccessStatusCode();
+        var nonce = (await desafio.Content.ReadFromJsonAsync<DesafioGoogle>())!.Nonce;
+        var cookie = Assert.Single(desafio.Headers.GetValues("Set-Cookie")).Split(';')[0];
+
+        using var otraAudiencia = await EnviarGoogleAsync(client, cookie, clave, "otro-cliente", nonce);
+        using var otroDesafio = await EnviarGoogleAsync(client, cookie, clave, "google-client", "otro-nonce");
+        Assert.Equal(HttpStatusCode.Unauthorized, otraAudiencia.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, otroDesafio.StatusCode);
+
+        using var login = await EnviarGoogleAsync(client, cookie, clave, "google-client", nonce);
+        login.EnsureSuccessStatusCode();
+        var sesion = (await login.Content.ReadFromJsonAsync<AuthRespuesta>())!;
+        Assert.True(sesion.UsuarioId > 0);
+        Assert.Equal("test@example.com", sesion.Email);
+        Assert.False(sesion.EsAdmin);
+        var cookies = login.Headers.GetValues("Set-Cookie");
+        Assert.Contains(cookies, valor => valor.StartsWith("__Host-Nostalgiar.Refresh=") &&
+            valor.Contains("httponly", StringComparison.OrdinalIgnoreCase));
+
+        var falloPassword = await client.PostAsJsonAsync("/api/auth/login",
+            new { Email = sesion.Email, Contrasena = "no-hay-contrasena-local" });
+        Assert.Equal(HttpStatusCode.Unauthorized, falloPassword.StatusCode);
+    }
+
+    private static async Task<HttpResponseMessage> EnviarGoogleAsync(HttpClient client, string cookie,
+        SecurityKey clave, string audiencia, string nonce)
+    {
+        var token = new JwtSecurityToken("https://accounts.google.com", audiencia,
+            [
+                new Claim("sub", "identidad-estable-de-pruebas"),
+                new Claim("email", "test@example.com"),
+                new Claim("email_verified", "true", ClaimValueTypes.Boolean),
+                new Claim("nonce", nonce)
+            ], expires: DateTime.UtcNow.AddMinutes(5), signingCredentials: new(clave, SecurityAlgorithms.RsaSha256));
+        using var solicitud = new HttpRequestMessage(HttpMethod.Post, "/api/auth/google");
+        solicitud.Headers.Add("Cookie", cookie);
+        solicitud.Content = JsonContent.Create(new { Credential = new JwtSecurityTokenHandler().WriteToken(token) });
+        return await client.SendAsync(solicitud);
+    }
+
+    [Fact]
     public async Task QueElLoginExitosoDevuelva200()
     {
         //Arrange
@@ -646,7 +752,8 @@ public class AuthIntegracionTests
 
     #region Clases Auxiliares
 
-    private sealed class AuthFactory : Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program>
+    private sealed class AuthFactory(SecurityKey? claveGoogle = null)
+        : Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program>
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -657,7 +764,8 @@ public class AuthIntegracionTests
                 {
                     ["Jwt:Clave"]     = "clave-de-testing-no-usar-en-produccion-32ch",
                     ["Jwt:Emisor"]    = "nostalgia-backend",
-                    ["Jwt:Audiencia"] = "nostalgia-frontend"
+                    ["Jwt:Audiencia"] = "nostalgia-frontend",
+                    ["GoogleAuth:ClientId"] = claveGoogle is null ? null : "google-client"
                 });
             });
             builder.ConfigureServices(services =>
@@ -666,11 +774,20 @@ public class AuthIntegracionTests
                 services.RemoveAll<IDbContextOptionsConfiguration<ApplicationDbContext>>();
                 var nombre = Guid.NewGuid().ToString();
                 services.AddDbContext<ApplicationDbContext>(o => o.UseInMemoryDatabase(nombre));
+                services.AddDataProtection().UseEphemeralDataProtectionProvider();
+                if (claveGoogle is not null)
+                {
+                    var metadata = new OpenIdConnectConfiguration();
+                    metadata.SigningKeys.Add(claveGoogle);
+                    services.AddSingleton<IConfigurationManager<OpenIdConnectConfiguration>>(
+                        new StaticConfigurationManager<OpenIdConnectConfiguration>(metadata));
+                }
             });
         }
     }
 
     private record AuthRespuesta(string Token, int UsuarioId, string Username, string Email, bool EsAdmin);
+    private record DesafioGoogle(string Nonce);
 
     #endregion
 }

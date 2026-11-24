@@ -1336,6 +1336,10 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Property<string>("FotoPerfilUrl")
                         .HasColumnType("text");
 
+                    b.Property<string>("GoogleSubject")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
                     b.Property<string>("Username")
                         .IsRequired()
                         .HasColumnType("text");
@@ -1348,6 +1352,9 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("Email")
+                        .IsUnique();
+
+                    b.HasIndex("GoogleSubject")
                         .IsUnique();
 
                     b.HasIndex("Username")

@@ -4,6 +4,7 @@ using System.Text;
 using System.Net.Mail;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -237,6 +238,8 @@ else
 }
 
 // Auth
+builder.Services.AddDataProtection();
+builder.Services.AddSingleton<ValidarIdentidadGoogle>();
 builder.Services.AddScoped<IAuthServicio, AuthServicio>();
 builder.Services.AddScoped<IProcesadorRecuperacionContrasena>(p =>
     (AuthServicio)p.GetRequiredService<IAuthServicio>());

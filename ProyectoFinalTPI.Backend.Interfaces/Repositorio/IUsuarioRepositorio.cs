@@ -19,6 +19,12 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Repositorio
 
         Task<Usuario?> ObtenerPorEmailAsync(string email, CancellationToken cancellationToken = default);
 
+        Task<Usuario?> ObtenerPorGoogleAsync(string subject, CancellationToken cancellationToken);
+
+        Task<bool> AgregarCuentaGoogleAsync(Usuario usuario, CancellationToken cancellationToken);
+
+        Task<bool> VincularGoogleAsync(int usuarioId, string subject, CancellationToken cancellationToken);
+
         Task<bool> ExistePorEmailAsync(string email, CancellationToken cancellationToken = default);
 
         /// <summary>

@@ -67,6 +67,60 @@ public class AuthServicio : IAuthServicio, IProcesadorRecuperacionContrasena
 
         return await CrearSesionAsync(usuario, userAgent, cancellationToken);
     }
+
+    public async Task<ResultadoAutenticacionDto> LoginGoogleAsync(IdentidadGoogleDto identidad, string? contrasena,
+        string? userAgent, CancellationToken cancellationToken)
+    {
+        var usuario = await ResolverUsuarioGoogleAsync(identidad, contrasena, cancellationToken);
+        if (!CuentaHabilitada(usuario, _reloj.GetUtcNow().UtcDateTime))
+            throw new UnauthorizedAccessException("La cuenta no está habilitada.");
+
+        return await CrearSesionAsync(usuario, userAgent, cancellationToken);
+    }
+
+    private async Task<Usuario> ResolverUsuarioGoogleAsync(IdentidadGoogleDto identidad, string? contrasena,
+        CancellationToken cancellationToken)
+    {
+        var vinculada = await _usuarioRepositorio.ObtenerPorGoogleAsync(identidad.Subject, cancellationToken);
+        if (vinculada is not null) return vinculada;
+
+        var email = NormalizarEmail(identidad.Email);
+        var existente = await _usuarioRepositorio.ObtenerPorEmailAsync(email, cancellationToken);
+        if (existente is not null)
+            return existente.GoogleSubject == identidad.Subject
+                ? existente
+                : await VincularCuentaGoogleAsync(existente, identidad.Subject, contrasena, cancellationToken);
+
+        var nueva = new Usuario_Personal
+        {
+            Username = $"nostalgico-{Guid.NewGuid():N}",
+            Email = email,
+            GoogleSubject = identidad.Subject
+        };
+        if (await _usuarioRepositorio.AgregarCuentaGoogleAsync(nueva, cancellationToken)) return nueva;
+
+        return await _usuarioRepositorio.ObtenerPorGoogleAsync(identidad.Subject, cancellationToken)
+            ?? throw new InvalidOperationException("No pudimos crear la cuenta. Volvé a intentar.");
+    }
+
+    private async Task<Usuario> VincularCuentaGoogleAsync(Usuario usuario, string subject, string? contrasena,
+        CancellationToken cancellationToken)
+    {
+        if (!CuentaHabilitada(usuario, _reloj.GetUtcNow().UtcDateTime))
+            throw new UnauthorizedAccessException("La cuenta no está habilitada.");
+        if (usuario.GoogleSubject is not null)
+            throw new InvalidOperationException("Esta cuenta ya está vinculada a otra cuenta de Google.");
+        if (string.IsNullOrEmpty(contrasena))
+            throw new VinculacionGoogleRequeridaException();
+
+        await ValidarCredenciales(usuario, contrasena, cancellationToken);
+        if (!await _usuarioRepositorio.VincularGoogleAsync(usuario.Id, subject, cancellationToken))
+            throw new InvalidOperationException("No pudimos vincular la cuenta de Google. Volvé a intentar.");
+
+        usuario.GoogleSubject = subject;
+        return usuario;
+    }
+
     public async Task<ResultadoAutenticacionDto> RenovarAsync(
         string refreshToken,
         CancellationToken cancellationToken = default)
@@ -284,6 +338,9 @@ public class AuthServicio : IAuthServicio, IProcesadorRecuperacionContrasena
     }
     private async Task ValidarCredenciales(Usuario usuario, string contrasena, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrEmpty(usuario.Contraseña))
+            throw new UnauthorizedAccessException("Email o contraseña incorrectos.");
+
         var contrasenaValida = false;
         try
         {

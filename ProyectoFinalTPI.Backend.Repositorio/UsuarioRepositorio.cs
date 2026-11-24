@@ -73,6 +73,43 @@ namespace ProyectoFinalTPI.Backend.Repositorio
                 .FirstOrDefaultAsync(u => u.Email.ToLower() == emailNormalizado, cancellationToken);
         }
 
+        public Task<Usuario?> ObtenerPorGoogleAsync(string subject, CancellationToken cancellationToken) =>
+            _context.Usuarios.SingleOrDefaultAsync(usuario => usuario.GoogleSubject == subject, cancellationToken);
+
+        public async Task<bool> AgregarCuentaGoogleAsync(Usuario usuario, CancellationToken cancellationToken)
+        {
+            _context.Usuarios.Add(usuario);
+            try
+            {
+                await _context.SaveChangesAsync(cancellationToken);
+                return true;
+            }
+            catch (DbUpdateException ex) when (ex.InnerException is PostgresException pg &&
+                pg.SqlState == PostgresErrorCodes.UniqueViolation &&
+                pg.ConstraintName is "IX_Usuario_Email" or "IX_Usuario_Username" or "IX_Usuario_GoogleSubject")
+            {
+                _context.Entry(usuario).State = EntityState.Detached;
+                return false;
+            }
+        }
+
+        public async Task<bool> VincularGoogleAsync(int usuarioId, string subject, CancellationToken cancellationToken)
+        {
+            try
+            {
+                return await _context.Usuarios
+                    .Where(usuario => usuario.Id == usuarioId && !usuario.EstaEliminado &&
+                        (usuario.GoogleSubject == null || usuario.GoogleSubject == subject))
+                    .ExecuteUpdateAsync(actualizar => actualizar.SetProperty(usuario => usuario.GoogleSubject, subject),
+                        cancellationToken) == 1;
+            }
+            catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation &&
+                ex.ConstraintName == "IX_Usuario_GoogleSubject")
+            {
+                return false;
+            }
+        }
+
         public async Task<bool> ExistePorEmailAsync(string email, CancellationToken cancellationToken = default)
         {
             var emailNormalizado = email.Trim().ToLower();
@@ -97,6 +134,7 @@ namespace ProyectoFinalTPI.Backend.Repositorio
         public async Task ActualizarAsync(Usuario usuario, CancellationToken cancellationToken = default)
         {
             _context.Usuarios.Update(usuario);
+            _context.Entry(usuario).Property(u => u.GoogleSubject).IsModified = false;
             try
             {
                 await _context.SaveChangesAsync(cancellationToken);

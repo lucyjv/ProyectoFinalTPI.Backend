@@ -155,6 +155,13 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Data
                 .IsUnique();
 
             modelBuilder.Entity<Usuario>()
+                .Property(usuario => usuario.GoogleSubject)
+                .HasMaxLength(255);
+            modelBuilder.Entity<Usuario>()
+                .HasIndex(usuario => usuario.GoogleSubject)
+                .IsUnique();
+
+            modelBuilder.Entity<Usuario>()
                 .HasIndex(usuario => new { usuario.EstaEliminado, usuario.FechaCreacion });
 
             modelBuilder.Entity<SesionUsuario>(entity =>
