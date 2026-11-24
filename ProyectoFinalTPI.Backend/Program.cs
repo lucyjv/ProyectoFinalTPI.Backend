@@ -103,6 +103,7 @@ builder.Services.AddScoped<IJuegoDecadasRepositorio, JuegoDecadasRepositorio>();
 builder.Services.AddScoped<IJuegoDecadasServicio, JuegoDecadasServicio>();
 builder.Services.AddScoped<IJuegoTesoroRepositorio, JuegoTesoroRepositorio>();
 builder.Services.AddScoped<IJuegoTesoroServicio, JuegoTesoroServicio>();
+builder.Services.AddScoped<IAdminJuegoTesoroServicio, AdminJuegoTesoroServicio>();
 builder.Services.Configure<JuegoTesoroOpciones>(builder.Configuration.GetSection(JuegoTesoroOpciones.Seccion));
 builder.Services.AddOptions<OpcionesNeo4j>()
     .Bind(builder.Configuration.GetSection(OpcionesNeo4j.Seccion))

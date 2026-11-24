@@ -11,15 +11,13 @@ namespace ProyectoFinalTPI.Backend.Servicio;
 public sealed class JuegoTesoroServicio(IJuegoTesoroRepositorio repositorio, IUsuarioRepositorio usuarios,
     IOptions<JuegoTesoroOpciones> opciones, TimeProvider reloj) : IJuegoTesoroServicio
 {
-    private static readonly TimeZoneInfo Zona = TimeZoneInfo.FindSystemTimeZoneById("America/Argentina/Buenos_Aires");
-
     public async Task<RetoTesoroDto?> ObtenerActual(int usuarioId, CancellationToken ct = default)
     {
         await ExigirUsuario(usuarioId);
         var reto = await ObtenerRetoActual(ct);
         if (reto is null) return null;
         var hallazgo = await repositorio.ObtenerHallazgo(reto.Id, usuarioId, ct);
-        return new(reto.Id, reto.Pista, InicioUtc(reto.SemanaInicio), InicioUtc(reto.SemanaInicio.AddDays(7)),
+        return new(reto.Id, reto.Pista, CalendarioTesoro.InicioUtc(reto.SemanaInicio), CalendarioTesoro.InicioUtc(reto.SemanaInicio.AddDays(7)),
             reto.ZoomMinimo, hallazgo?.FechaHallazgoUtc);
     }
 
@@ -49,17 +47,18 @@ public sealed class JuegoTesoroServicio(IJuegoTesoroRepositorio repositorio, IUs
     private async Task<RetoTesoro?> ObtenerRetoActual(CancellationToken ct)
     {
         var config = opciones.Value;
-        if (!config.Habilitado || config.Ubicaciones.Count == 0) return null;
-        var fecha = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(reloj.GetUtcNow(), Zona).DateTime);
-        var semana = fecha.AddDays(-(int)fecha.DayOfWeek);
-        var semanas = (int)Math.Floor((semana.DayNumber - config.SemanaBase.DayNumber) / 7d);
-        var indice = ((semanas % config.Ubicaciones.Count) + config.Ubicaciones.Count) % config.Ubicaciones.Count;
-        var lugar = config.Ubicaciones[indice];
-        ValidarUbicacion(lugar);
+        if (!config.Habilitado) return null;
+        var semana = CalendarioTesoro.Semana(reloj);
+        var existente = await repositorio.ObtenerSemana(semana, ct);
+        if (existente is not null) return existente;
+        var ubicaciones = await repositorio.ListarUbicaciones(ct);
+        var programacion = (await repositorio.ListarProgramaciones(semana, semana, ct)).SingleOrDefault();
+        var lugar = CalendarioTesoro.Elegir(semana, config.SemanaBase, ubicaciones, programacion);
+        if (lugar is null) return null;
         return await repositorio.ObtenerOCrearSemana(new RetoTesoro
         {
-            SemanaInicio = semana, ClaveUbicacion = lugar.Clave, Pista = lugar.Pista,
-            NombreHallazgo = lugar.NombreHallazgo, Latitud = lugar.Latitud, Longitud = lugar.Longitud, ZoomMinimo = lugar.ZoomMinimo
+            SemanaInicio = semana, ClaveUbicacion = $"ubicacion:{lugar.Id}", Pista = lugar.Pista,
+            NombreHallazgo = lugar.Nombre, Latitud = lugar.Latitud, Longitud = lugar.Longitud, ZoomMinimo = lugar.ZoomMinimo
         }, ct);
     }
 
@@ -71,8 +70,6 @@ public sealed class JuegoTesoroServicio(IJuegoTesoroRepositorio repositorio, IUs
             && hasta > reloj.GetUtcNow().UtcDateTime)
             throw new UnauthorizedAccessException("La cuenta no está habilitada para participar.");
     }
-
-    private static DateTime InicioUtc(DateOnly fecha) => TimeZoneInfo.ConvertTimeToUtc(fecha.ToDateTime(TimeOnly.MinValue), Zona);
 
     private static bool EstaEnVista(RetoTesoro reto, VistaMapaTesoroDto vista) =>
         vista.Zoom >= reto.ZoomMinimo && reto.Latitud >= vista.MinLatitud && reto.Latitud <= vista.MaxLatitud
@@ -87,16 +84,5 @@ public sealed class JuegoTesoroServicio(IJuegoTesoroRepositorio repositorio, IUs
             || vista.MinLatitud < -90 || vista.MaxLatitud > 90 || vista.MinLatitud >= vista.MaxLatitud
             || vista.MinLongitud < -180 || vista.MaxLongitud > 180 || vista.MinLongitud >= vista.MaxLongitud)
             throw new ArgumentException("La vista del mapa no es válida.");
-    }
-
-    private static void ValidarUbicacion(UbicacionTesoroOpciones lugar)
-    {
-        if (string.IsNullOrWhiteSpace(lugar.Clave) || lugar.Clave.Length > 100
-            || string.IsNullOrWhiteSpace(lugar.Pista) || lugar.Pista.Length > 500
-            || string.IsNullOrWhiteSpace(lugar.NombreHallazgo) || lugar.NombreHallazgo.Length > 200
-            || !double.IsFinite(lugar.Latitud) || lugar.Latitud is < -90 or > 90
-            || !double.IsFinite(lugar.Longitud) || lugar.Longitud is < -180 or > 180
-            || !double.IsFinite(lugar.ZoomMinimo) || lugar.ZoomMinimo is < 17 or > 19)
-            throw new InvalidOperationException("Revisá las ubicaciones configuradas en JuegoTesoro.");
     }
 }

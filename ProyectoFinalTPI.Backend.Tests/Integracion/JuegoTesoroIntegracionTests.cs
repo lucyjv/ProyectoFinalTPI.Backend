@@ -24,8 +24,6 @@ public sealed class JuegoTesoroIntegracionTests(PostgisFixture postgres) : IClas
         {
             o.Habilitado = true;
             o.SemanaBase = new(2026, 11, 22);
-            o.Ubicaciones = new() { new() { Clave = "retiro", Pista = "Un Libertador a caballo guarda un secreto.", NombreHallazgo = "Plaza San Martín, Retiro", Latitud = -34.59558, Longitud = -58.3785, ZoomMinimo = 18 },
-                new() { Clave = "otra", Pista = "El próximo secreto.", NombreHallazgo = "Otro lugar", Latitud = -34.6037, Longitud = -58.3816, ZoomMinimo = 18 } };
         })
     };
 
@@ -79,6 +77,13 @@ public sealed class JuegoTesoroIntegracionTests(PostgisFixture postgres) : IClas
         await using var factory = Factory(reloj);
         using var cliente = factory.CreateClient();
         await Registrar(cliente);
+        using (var seedScope = factory.Services.CreateScope())
+        {
+            var seedDb = seedScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            seedDb.UbicacionesTesoro.Add(new() { Nombre = "Otro lugar", Pista = "El próximo secreto.",
+                Latitud = -34.6037, Longitud = -58.3816, ZoomMinimo = 18 });
+            await seedDb.SaveChangesAsync();
+        }
         var primero = (await cliente.GetFromJsonAsync<RetoTesoroDto>("/api/juegos/tesoro/actual"))!;
         var capturado = await cliente.PostAsJsonAsync($"/api/juegos/tesoro/{primero.Id}/hallazgo", Vista());
         Assert.Equal(HttpStatusCode.OK, capturado.StatusCode);

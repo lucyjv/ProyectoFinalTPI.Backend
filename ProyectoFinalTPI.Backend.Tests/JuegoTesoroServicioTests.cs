@@ -14,17 +14,19 @@ public sealed class JuegoTesoroServicioTests
     private readonly Mock<IJuegoTesoroRepositorio> repositorio = new(MockBehavior.Strict);
     private readonly Mock<IUsuarioRepositorio> usuarios = new(MockBehavior.Strict);
     private readonly RelojTesoro reloj = new();
-    private readonly JuegoTesoroOpciones opciones = new()
-    {
-        Ubicaciones = new() { new() { Clave = "retiro", Pista = "Un Libertador a caballo guarda un secreto.",
-            NombreHallazgo = "Plaza San Martín", Latitud = -34.59558, Longitud = -58.3785, ZoomMinimo = 18 } }
-    };
+    private readonly JuegoTesoroOpciones opciones = new();
     private JuegoTesoroServicio Servicio => new(repositorio.Object, usuarios.Object, Options.Create(opciones), reloj);
     private static VistaMapaTesoroDto Vista(double zoom = 18) => new()
     { Zoom = zoom, MinLatitud = -34.596, MaxLatitud = -34.595, MinLongitud = -58.379, MaxLongitud = -58.378 };
 
     public JuegoTesoroServicioTests()
     {
+        repositorio.Setup(r => r.ObtenerSemana(It.IsAny<DateOnly>(), It.IsAny<CancellationToken>())).ReturnsAsync((RetoTesoro?)null);
+        repositorio.Setup(r => r.ListarUbicaciones(It.IsAny<CancellationToken>())).ReturnsAsync(new List<UbicacionTesoro>
+        { new() { Id = 1, Nombre = "Plaza San Martín", Pista = "Un Libertador a caballo guarda un secreto.",
+            Latitud = -34.59558, Longitud = -58.3785, ZoomMinimo = 18 } });
+        repositorio.Setup(r => r.ListarProgramaciones(It.IsAny<DateOnly>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<ProgramacionTesoro>());
         usuarios.Setup(r => r.ObtenerPorIdAsync(7)).ReturnsAsync(new Usuario_Personal { Id = 7 });
         repositorio.Setup(r => r.ObtenerOCrearSemana(It.IsAny<RetoTesoro>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((RetoTesoro candidato, CancellationToken _) => { candidato.Id = 42; return candidato; });

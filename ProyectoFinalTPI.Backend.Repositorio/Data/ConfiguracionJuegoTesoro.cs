@@ -4,6 +4,27 @@ using ProyectoFinalTPI.Backend.Entidades;
 
 namespace ProyectoFinalTPI.Backend.Repositorio.Data;
 
+public sealed class ConfiguracionUbicacionTesoro : IEntityTypeConfiguration<UbicacionTesoro>
+{
+    public void Configure(EntityTypeBuilder<UbicacionTesoro> e)
+    {
+        e.ToTable("ubicaciones_tesoro");
+        e.HasKey(u => u.Id);
+        e.Property(u => u.Nombre).HasMaxLength(200).IsRequired();
+        e.Property(u => u.Pista).HasMaxLength(500).IsRequired();
+    }
+}
+
+public sealed class ConfiguracionProgramacionTesoro : IEntityTypeConfiguration<ProgramacionTesoro>
+{
+    public void Configure(EntityTypeBuilder<ProgramacionTesoro> e)
+    {
+        e.ToTable("programaciones_tesoro");
+        e.HasKey(p => p.SemanaInicio);
+        e.HasOne<UbicacionTesoro>().WithMany().HasForeignKey(p => p.UbicacionId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
 public sealed class ConfiguracionRetoTesoro : IEntityTypeConfiguration<RetoTesoro>
 {
     public void Configure(EntityTypeBuilder<RetoTesoro> e)

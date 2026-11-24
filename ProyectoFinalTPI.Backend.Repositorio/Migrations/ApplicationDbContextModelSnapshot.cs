@@ -842,6 +842,21 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.ToTable("notificaciones", (string)null);
                 });
 
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.ProgramacionTesoro", b =>
+                {
+                    b.Property<DateOnly>("SemanaInicio")
+                        .HasColumnType("date");
+
+                    b.Property<int?>("UbicacionId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("SemanaInicio");
+
+                    b.HasIndex("UbicacionId");
+
+                    b.ToTable("programaciones_tesoro", (string)null);
+                });
+
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Publicacion", b =>
                 {
                     b.Property<int>("Id")
@@ -1366,6 +1381,41 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                         });
                 });
 
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.UbicacionTesoro", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Activa")
+                        .HasColumnType("boolean");
+
+                    b.Property<double>("Latitud")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("Longitud")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("Nombre")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Pista")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<double>("ZoomMinimo")
+                        .HasColumnType("double precision");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ubicaciones_tesoro", (string)null);
+                });
+
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Usuario", b =>
                 {
                     b.Property<int>("Id")
@@ -1784,6 +1834,14 @@ namespace ProyectoFinalTPI.Backend.Repositorio.Migrations
                     b.Navigation("Emisor");
 
                     b.Navigation("UsuarioDestinatario");
+                });
+
+            modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.ProgramacionTesoro", b =>
+                {
+                    b.HasOne("ProyectoFinalTPI.Backend.Entidades.UbicacionTesoro", null)
+                        .WithMany()
+                        .HasForeignKey("UbicacionId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("ProyectoFinalTPI.Backend.Entidades.Publicacion", b =>
