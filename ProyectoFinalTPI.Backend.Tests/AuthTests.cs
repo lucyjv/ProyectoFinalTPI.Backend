@@ -291,12 +291,12 @@ public class AuthServicioTests
         var servicio = CrearServicio();
 
         await Assert.ThrowsAsync<VinculacionGoogleRequeridaException>(() =>
-            servicio.LoginGoogleAsync(identidad, null, null, default));
+            servicio.LoginGoogleAsync(identidad, null, false, null, default));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
-            servicio.LoginGoogleAsync(identidad, "contrasena-incorrecta", null, default));
+            servicio.LoginGoogleAsync(identidad, "contrasena-incorrecta", false, null, default));
         _repositorioMock.Verify(r => r.VincularGoogleAsync(usuario.Id, identidad.Subject, default), Times.Never);
 
-        var resultado = await servicio.LoginGoogleAsync(identidad, "contrasena-actual", null, default);
+        var resultado = await servicio.LoginGoogleAsync(identidad, "contrasena-actual", false, null, default);
         Assert.Equal(usuario.Id, resultado.Respuesta.UsuarioId);
         _repositorioMock.Verify(r => r.VincularGoogleAsync(usuario.Id, identidad.Subject, default), Times.Once);
     }
@@ -308,7 +308,7 @@ public class AuthServicioTests
         _repositorioMock.Setup(r => r.ObtenerPorGoogleAsync(usuario.GoogleSubject, default)).ReturnsAsync(usuario);
         var identidad = new IdentidadGoogleDto(usuario.GoogleSubject, "nuevo@example.com");
 
-        var resultado = await CrearServicio().LoginGoogleAsync(identidad, null, null, default);
+        var resultado = await CrearServicio().LoginGoogleAsync(identidad, null, false, null, default);
 
         Assert.Equal(usuario.Id, resultado.Respuesta.UsuarioId);
         _repositorioMock.Verify(r => r.ObtenerPorEmailAsync(It.IsAny<string>(), default), Times.Never);
@@ -324,7 +324,7 @@ public class AuthServicioTests
         _repositorioMock.Setup(r => r.ObtenerPorGoogleAsync(usuario.GoogleSubject, default)).ReturnsAsync(usuario);
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => CrearServicio()
-            .LoginGoogleAsync(new(usuario.GoogleSubject, usuario.Email), null, null, default));
+            .LoginGoogleAsync(new(usuario.GoogleSubject, usuario.Email), null, false, null, default));
         _sesionesMock.Verify(r => r.AgregarAsync(It.IsAny<SesionUsuario>(), default), Times.Never);
     }
 
@@ -589,7 +589,17 @@ public class AuthIntegracionTests
         Assert.Equal(HttpStatusCode.Unauthorized, otraAudiencia.StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, otroDesafio.StatusCode);
 
-        using var login = await EnviarGoogleAsync(client, cookie, clave, "google-client", nonce);
+        using var sinConfirmar = await EnviarGoogleAsync(client, cookie, clave, "google-client", nonce);
+        Assert.Equal(HttpStatusCode.Conflict, sinConfirmar.StatusCode);
+        Assert.Equal("GOOGLE_CREACION_REQUERIDA",
+            (await sinConfirmar.Content.ReadFromJsonAsync<ErrorGoogle>())?.Codigo);
+        Assert.False(sinConfirmar.Headers.Contains("Set-Cookie"));
+        using (var scope = factory.Services.CreateScope())
+        {
+            Assert.Empty(await scope.ServiceProvider.GetRequiredService<ApplicationDbContext>().Usuarios.ToListAsync());
+        }
+
+        using var login = await EnviarGoogleAsync(client, cookie, clave, "google-client", nonce, confirmarCreacion: true);
         login.EnsureSuccessStatusCode();
         var sesion = (await login.Content.ReadFromJsonAsync<AuthRespuesta>())!;
         Assert.True(sesion.UsuarioId > 0);
@@ -605,7 +615,7 @@ public class AuthIntegracionTests
     }
 
     private static async Task<HttpResponseMessage> EnviarGoogleAsync(HttpClient client, string cookie,
-        SecurityKey clave, string audiencia, string nonce)
+        SecurityKey clave, string audiencia, string nonce, bool confirmarCreacion = false)
     {
         var token = new JwtSecurityToken("https://accounts.google.com", audiencia,
             [
@@ -616,7 +626,11 @@ public class AuthIntegracionTests
             ], expires: DateTime.UtcNow.AddMinutes(5), signingCredentials: new(clave, SecurityAlgorithms.RsaSha256));
         using var solicitud = new HttpRequestMessage(HttpMethod.Post, "/api/auth/google");
         solicitud.Headers.Add("Cookie", cookie);
-        solicitud.Content = JsonContent.Create(new { Credential = new JwtSecurityTokenHandler().WriteToken(token) });
+        solicitud.Content = JsonContent.Create(new
+        {
+            Credential = new JwtSecurityTokenHandler().WriteToken(token),
+            ConfirmarCreacion = confirmarCreacion
+        });
         return await client.SendAsync(solicitud);
     }
 
@@ -788,6 +802,7 @@ public class AuthIntegracionTests
 
     private record AuthRespuesta(string Token, int UsuarioId, string Username, string Email, bool EsAdmin);
     private record DesafioGoogle(string Nonce);
+    private record ErrorGoogle(string Codigo);
 
     #endregion
 }

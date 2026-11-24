@@ -69,9 +69,9 @@ public class AuthServicio : IAuthServicio, IProcesadorRecuperacionContrasena
     }
 
     public async Task<ResultadoAutenticacionDto> LoginGoogleAsync(IdentidadGoogleDto identidad, string? contrasena,
-        string? userAgent, CancellationToken cancellationToken)
+        bool confirmarCreacion, string? userAgent, CancellationToken cancellationToken)
     {
-        var usuario = await ResolverUsuarioGoogleAsync(identidad, contrasena, cancellationToken);
+        var usuario = await ResolverUsuarioGoogleAsync(identidad, contrasena, confirmarCreacion, cancellationToken);
         if (!CuentaHabilitada(usuario, _reloj.GetUtcNow().UtcDateTime))
             throw new UnauthorizedAccessException("La cuenta no está habilitada.");
 
@@ -79,7 +79,7 @@ public class AuthServicio : IAuthServicio, IProcesadorRecuperacionContrasena
     }
 
     private async Task<Usuario> ResolverUsuarioGoogleAsync(IdentidadGoogleDto identidad, string? contrasena,
-        CancellationToken cancellationToken)
+        bool confirmarCreacion, CancellationToken cancellationToken)
     {
         var vinculada = await _usuarioRepositorio.ObtenerPorGoogleAsync(identidad.Subject, cancellationToken);
         if (vinculada is not null) return vinculada;
@@ -90,6 +90,9 @@ public class AuthServicio : IAuthServicio, IProcesadorRecuperacionContrasena
             return existente.GoogleSubject == identidad.Subject
                 ? existente
                 : await VincularCuentaGoogleAsync(existente, identidad.Subject, contrasena, cancellationToken);
+
+        if (!confirmarCreacion)
+            throw new CreacionCuentaGoogleRequeridaException();
 
         var nueva = new Usuario_Personal
         {

@@ -9,6 +9,8 @@ public sealed class GoogleLoginDto
 
     [StringLength(100)]
     public string? Contrasena { get; init; }
+
+    public bool ConfirmarCreacion { get; init; }
 }
 
 public sealed record IdentidadGoogleDto(string Subject, string Email);

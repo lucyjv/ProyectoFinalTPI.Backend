@@ -112,7 +112,7 @@ public class AuthController : ControllerBase
     [SwaggerOperation(Summary = "Inicia sesión con una credencial verificada de Google.")]
     [SwaggerResponse(StatusCodes.Status200OK, "Sesión iniciada.", typeof(AuthRespuestaDto))]
     [SwaggerResponse(StatusCodes.Status401Unauthorized, "Credencial o cuenta inválida.")]
-    [SwaggerResponse(StatusCodes.Status409Conflict, "El correo necesita vinculación o la vinculación no se pudo completar.")]
+    [SwaggerResponse(StatusCodes.Status409Conflict, "La cuenta requiere vinculación o confirmación antes de crearla.")]
     public async Task<IActionResult> LoginGoogle([FromBody] GoogleLoginDto dto,
         [FromServices] ValidarIdentidadGoogle google, [FromServices] IDataProtectionProvider protector,
         CancellationToken cancellationToken)
@@ -138,7 +138,8 @@ public class AuthController : ControllerBase
 
         try
         {
-            var resultado = await _authServicio.LoginGoogleAsync(identidad, dto.Contrasena, UserAgent(), cancellationToken);
+            var resultado = await _authServicio.LoginGoogleAsync(identidad, dto.Contrasena,
+                dto.ConfirmarCreacion, UserAgent(), cancellationToken);
             Response.Cookies.Delete(GoogleNonceCookie, CookieOptions(DateTimeOffset.UnixEpoch.UtcDateTime));
             EscribirRefreshCookie(resultado);
             return Ok(resultado.Respuesta);
@@ -146,6 +147,10 @@ public class AuthController : ControllerBase
         catch (VinculacionGoogleRequeridaException ex)
         {
             return Conflict(new { codigo = "GOOGLE_VINCULACION_REQUERIDA", mensaje = ex.Message });
+        }
+        catch (CreacionCuentaGoogleRequeridaException ex)
+        {
+            return Conflict(new { codigo = "GOOGLE_CREACION_REQUERIDA", mensaje = ex.Message });
         }
         catch (UnauthorizedAccessException ex)
         {
