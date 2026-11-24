@@ -69,9 +69,10 @@ public class AuthServicio : IAuthServicio, IProcesadorRecuperacionContrasena
     }
 
     public async Task<ResultadoAutenticacionDto> LoginGoogleAsync(IdentidadGoogleDto identidad, string? contrasena,
-        bool confirmarCreacion, string? userAgent, CancellationToken cancellationToken)
+        bool confirmarCreacion, string? username, string? userAgent, CancellationToken cancellationToken)
     {
-        var usuario = await ResolverUsuarioGoogleAsync(identidad, contrasena, confirmarCreacion, cancellationToken);
+        var usuario = await ResolverUsuarioGoogleAsync(identidad, contrasena, confirmarCreacion, username,
+            cancellationToken);
         if (!CuentaHabilitada(usuario, _reloj.GetUtcNow().UtcDateTime))
             throw new UnauthorizedAccessException("La cuenta no está habilitada.");
 
@@ -79,7 +80,7 @@ public class AuthServicio : IAuthServicio, IProcesadorRecuperacionContrasena
     }
 
     private async Task<Usuario> ResolverUsuarioGoogleAsync(IdentidadGoogleDto identidad, string? contrasena,
-        bool confirmarCreacion, CancellationToken cancellationToken)
+        bool confirmarCreacion, string? username, CancellationToken cancellationToken)
     {
         var vinculada = await _usuarioRepositorio.ObtenerPorGoogleAsync(identidad.Subject, cancellationToken);
         if (vinculada is not null) return vinculada;
@@ -94,16 +95,30 @@ public class AuthServicio : IAuthServicio, IProcesadorRecuperacionContrasena
         if (!confirmarCreacion)
             throw new CreacionCuentaGoogleRequeridaException();
 
+        return await CrearCuentaGoogleAsync(identidad.Subject, email, username, cancellationToken);
+    }
+
+    private async Task<Usuario> CrearCuentaGoogleAsync(string subject, string email, string? username,
+        CancellationToken cancellationToken)
+    {
+        var nombre = username?.Trim();
+        if (nombre is null || nombre.Length is < 3 or > 50)
+            throw new ArgumentException("El nombre de usuario debe tener entre 3 y 50 caracteres.", nameof(username));
+
+        await VerificarUsernameDisponibleAsync(nombre, cancellationToken);
         var nueva = new Usuario_Personal
         {
-            Username = $"nostalgico-{Guid.NewGuid():N}",
+            Username = nombre,
             Email = email,
-            GoogleSubject = identidad.Subject
+            GoogleSubject = subject
         };
         if (await _usuarioRepositorio.AgregarCuentaGoogleAsync(nueva, cancellationToken)) return nueva;
 
-        return await _usuarioRepositorio.ObtenerPorGoogleAsync(identidad.Subject, cancellationToken)
-            ?? throw new InvalidOperationException("No pudimos crear la cuenta. Volvé a intentar.");
+        var vinculada = await _usuarioRepositorio.ObtenerPorGoogleAsync(subject, cancellationToken);
+        if (vinculada is not null) return vinculada;
+
+        await VerificarUsernameDisponibleAsync(nombre, cancellationToken);
+        throw new InvalidOperationException("No pudimos crear la cuenta. Volvé a intentar.");
     }
 
     private async Task<Usuario> VincularCuentaGoogleAsync(Usuario usuario, string subject, string? contrasena,
@@ -326,8 +341,7 @@ public class AuthServicio : IAuthServicio, IProcesadorRecuperacionContrasena
             throw new InvalidOperationException("Ya existe una cuenta registrada con ese email.");
 
         var username = dto.Username.Trim();
-        if (await _usuarioRepositorio.ExistePorUsernameAsync(username, cancellationToken))
-            throw new InvalidOperationException("Ya existe una cuenta registrada con ese nombre de usuario.");
+        await VerificarUsernameDisponibleAsync(username, cancellationToken);
 
         var usuario = new Usuario_Personal
         {
@@ -338,6 +352,12 @@ public class AuthServicio : IAuthServicio, IProcesadorRecuperacionContrasena
             FechaCreacion = DateTime.UtcNow
         };
         return usuario;
+    }
+
+    private async Task VerificarUsernameDisponibleAsync(string username, CancellationToken cancellationToken)
+    {
+        if (await _usuarioRepositorio.ExistePorUsernameAsync(username, cancellationToken))
+            throw new InvalidOperationException("Ya existe una cuenta registrada con ese nombre de usuario.");
     }
     private async Task ValidarCredenciales(Usuario usuario, string contrasena, CancellationToken cancellationToken)
     {

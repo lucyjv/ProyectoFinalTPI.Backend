@@ -139,7 +139,7 @@ public class AuthController : ControllerBase
         try
         {
             var resultado = await _authServicio.LoginGoogleAsync(identidad, dto.Contrasena,
-                dto.ConfirmarCreacion, UserAgent(), cancellationToken);
+                dto.ConfirmarCreacion, dto.Username, UserAgent(), cancellationToken);
             Response.Cookies.Delete(GoogleNonceCookie, CookieOptions(DateTimeOffset.UnixEpoch.UtcDateTime));
             EscribirRefreshCookie(resultado);
             return Ok(resultado.Respuesta);

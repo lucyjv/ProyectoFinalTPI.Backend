@@ -11,6 +11,9 @@ public sealed class GoogleLoginDto
     public string? Contrasena { get; init; }
 
     public bool ConfirmarCreacion { get; init; }
+
+    [StringLength(50, ErrorMessage = "El nombre de usuario no puede superar los 50 caracteres.")]
+    public string? Username { get; init; }
 }
 
 public sealed record IdentidadGoogleDto(string Subject, string Email);

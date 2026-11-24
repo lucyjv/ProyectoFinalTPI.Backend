@@ -16,7 +16,7 @@ namespace ProyectoFinalTPI.Backend.Interfaces.Servicio
         Task<ResultadoAutenticacionDto> LoginAsync(LoginDto dto, string? userAgent = null, CancellationToken cancellationToken = default);
 
         Task<ResultadoAutenticacionDto> LoginGoogleAsync(IdentidadGoogleDto identidad, string? contrasena,
-            bool confirmarCreacion, string? userAgent, CancellationToken cancellationToken);
+            bool confirmarCreacion, string? username, string? userAgent, CancellationToken cancellationToken);
 
         Task<ResultadoAutenticacionDto> RenovarAsync(string refreshToken, CancellationToken cancellationToken = default);
 
