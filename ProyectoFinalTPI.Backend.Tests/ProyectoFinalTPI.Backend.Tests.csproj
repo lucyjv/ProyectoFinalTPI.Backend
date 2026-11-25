@@ -8,6 +8,8 @@
     <RunSettingsFilePath>$(MSBuildProjectDirectory)/../coverage.runsettings</RunSettingsFilePath>
   </PropertyGroup>
   <ItemGroup>
+    <None Include="../docs/sql/restaurar-publicaciones-perfil.sql"
+          Link="restaurar-publicaciones-perfil.sql" CopyToOutputDirectory="PreserveNewest" />
     <PackageReference Include="coverlet.collector" Version="10.1.0">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>

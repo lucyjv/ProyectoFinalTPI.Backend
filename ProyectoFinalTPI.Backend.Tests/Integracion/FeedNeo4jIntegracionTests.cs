@@ -23,6 +23,64 @@ public class FeedNeo4jIntegracionTests(Neo4jLogrosFixture neo4j) : IClassFixture
         .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
 
     [Fact]
+    public async Task PuntuacionesDelGrafoDistinguenPuntajePropioYAjenosYPermitenQuitarlo()
+    {
+        await Preparar("""
+            CREATE (u:Usuario {postgresId: 1}), (v:Usuario {postgresId: 2}),
+                   (p:Publicacion {postgresId: 10}), (q:Publicacion {postgresId: 11})
+            CREATE (v)-[:PUNTUO {puntaje: 4}]->(p), (u)-[:PUNTUO {puntaje: 2}]->(q)
+            """);
+        await using var db = CrearContexto();
+        var repositorio = new PublicacionRepositorio(db, neo4j.Driver);
+
+        await repositorio.PuntuarPublicacion(10, 1, 3);
+        var miEstado = await repositorio.ObtenerEstadoPuntuacion(10, 1);
+        var estadoPublico = await repositorio.ObtenerEstadoPuntuacion(10, null);
+        var inexistente = await repositorio.ObtenerEstadoPuntuacion(999, 1);
+        var resumen = await repositorio.ObtenerResumenPuntuaciones([10, 10, 11], 1);
+
+        Assert.Equal(7, miEstado.PuntosTotales);
+        Assert.Equal(3, miEstado.MiPuntuacion);
+        Assert.Equal(7, estadoPublico.PuntosTotales);
+        Assert.Null(estadoPublico.MiPuntuacion);
+        Assert.Equal(0, inexistente.PuntosTotales);
+        Assert.Null(inexistente.MiPuntuacion);
+        Assert.Equal(2, resumen.Count);
+        Assert.Equal((7, (int?)3), resumen[10]);
+        Assert.Equal((2, (int?)2), resumen[11]);
+        Assert.Equal(5, await repositorio.SumarPuntosOtorgadosPorUsuario(1));
+
+        await repositorio.QuitarPuntuacion(10, 1);
+        var actualizado = await repositorio.ObtenerEstadoPuntuacion(10, 1);
+        Assert.Equal(4, actualizado.PuntosTotales);
+        Assert.Null(actualizado.MiPuntuacion);
+        Assert.Equal(2, await repositorio.SumarPuntosOtorgadosPorUsuario(1));
+    }
+
+    [Fact]
+    public async Task QuitarLikeOUnGuardadoSoloAfectaLasInteraccionesDelUsuario()
+    {
+        await Preparar("""
+            CREATE (u:Usuario {postgresId: 1}), (v:Usuario {postgresId: 2}), (p:Publicacion {postgresId: 10})
+            CREATE (u)-[:LE_GUSTA]->(p), (v)-[:LE_GUSTA]->(p)
+            """);
+        await using var db = CrearContexto();
+        var repositorio = new PublicacionRepositorio(db, neo4j.Driver);
+        await repositorio.CrearGuardado(10, 1);
+        await repositorio.CrearGuardado(10, 2);
+        Assert.Equal(1, await repositorio.ContarLikesOtorgados(1));
+        Assert.Equal(new[] { 10 }, await repositorio.ObtenerIdsPublicacionesGuardadas(1));
+
+        await repositorio.QuitarLike(10, 1);
+        await repositorio.QuitarGuardado(10, 1);
+
+        Assert.Equal(0, await repositorio.ContarLikesOtorgados(1));
+        Assert.Equal(1, await repositorio.ContarLikesOtorgados(2));
+        Assert.Empty(await repositorio.ObtenerIdsPublicacionesGuardadas(1));
+        Assert.Equal(new[] { 10 }, await repositorio.ObtenerIdsPublicacionesGuardadas(2));
+    }
+
+    [Fact]
     public async Task QueLasSemillasRespetenAntiguedadTopeYUnaPublicacionPorSemilla()
     {
         //Arrange

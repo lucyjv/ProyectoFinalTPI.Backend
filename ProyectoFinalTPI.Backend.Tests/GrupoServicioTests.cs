@@ -13,6 +13,65 @@ public class GrupoServicioTests
     private readonly Mock<IUsuarioRepositorio> _usuarios = new();
     private readonly Mock<IPublicacionServicio> _publicaciones = new();
 
+    [Fact]
+    public async Task QueLaFichaYElListadoMuestrenLaMembresiaDelUsuarioActual()
+    {
+        var grupo = CrearGrupo();
+        _grupos.Setup(r => r.ObtenerTodos(default)).ReturnsAsync([grupo]);
+        _grupos.Setup(r => r.ObtenerPorId(grupo.Id, default)).ReturnsAsync(grupo);
+        var servicio = CrearServicio();
+
+        var item = Assert.Single(await servicio.ObtenerTodos(grupo.CreadorId));
+        var fichaPublica = await servicio.ObtenerPorId(grupo.Id, null);
+
+        Assert.Equal(grupo.Id, item.Id);
+        Assert.True(item.EsCreador);
+        Assert.True(item.EsIntegrante);
+        Assert.Equal(grupo.Id, fichaPublica.Id);
+        Assert.False(fichaPublica.EsCreador);
+        Assert.False(fichaPublica.EsIntegrante);
+    }
+
+    [Fact]
+    public async Task QueSoloElCreadorPuedaActualizarYEliminarElGrupo()
+    {
+        var grupo = CrearGrupo();
+        var cambios = new Grupo { Nombre = "  Nuevo nombre  ", Descripcion = "  Nueva descripción  ", Decada = 1980 };
+        _grupos.Setup(r => r.ObtenerPorId(grupo.Id, default)).ReturnsAsync(grupo);
+        var servicio = CrearServicio();
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => servicio.Actualizar(grupo.Id, 99, cambios));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => servicio.Eliminar(grupo.Id, 99));
+        _grupos.Verify(r => r.Actualizar(It.IsAny<Grupo>(), default), Times.Never);
+        _grupos.Verify(r => r.Eliminar(It.IsAny<Grupo>(), default), Times.Never);
+
+        var actualizado = await servicio.Actualizar(grupo.Id, grupo.CreadorId, cambios);
+        Assert.Equal("Nuevo nombre", actualizado.Nombre);
+        Assert.Equal("Nueva descripción", actualizado.Descripcion);
+        Assert.Equal(1980, actualizado.Decada);
+        _grupos.Verify(r => r.Actualizar(grupo, default), Times.Once);
+
+        await servicio.Eliminar(grupo.Id, grupo.CreadorId);
+        _grupos.Verify(r => r.Eliminar(grupo, default), Times.Once);
+    }
+
+    [Fact]
+    public async Task QueSalirQuiteLaMembresiaYConserveLosRecuerdosDelGrupo()
+    {
+        var grupo = CrearGrupo();
+        var integrante = new GrupoIntegrante { GrupoId = grupo.Id, UsuarioId = 99 };
+        var recuerdo = new ProyectoFinalTPI.Backend.Dtos.Publicacion.PublicacionDetalleDto { Id = 123 };
+        _grupos.Setup(r => r.ObtenerPorId(grupo.Id, default)).ReturnsAsync(grupo);
+        _grupos.Setup(r => r.ObtenerIntegrante(grupo.Id, integrante.UsuarioId, default)).ReturnsAsync(integrante);
+        _grupos.Setup(r => r.ObtenerRecuerdos(grupo.Id, default)).ReturnsAsync([recuerdo]);
+        var servicio = CrearServicio();
+
+        await servicio.Salir(grupo.Id, integrante.UsuarioId);
+
+        _grupos.Verify(r => r.QuitarIntegrante(integrante, default), Times.Once);
+        Assert.Same(recuerdo, Assert.Single(await servicio.ObtenerRecuerdos(grupo.Id)));
+    }
+
     #region Creación de Grupos
 
     [Fact]

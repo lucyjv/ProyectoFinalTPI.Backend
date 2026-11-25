@@ -14,6 +14,12 @@
                 <ModulePath>.*ProyectoFinalTPI\.Backend\.Tests[^\\/]*\.dll$</ModulePath>
               </Exclude>
             </ModulePaths>
+            <Sources>
+              <Exclude>
+                <Source>.*[\\/]Migrations[\\/].*</Source>
+                <Source>.*ModelSnapshot\.cs$</Source>
+              </Exclude>
+            </Sources>
           </CodeCoverage>
         </Configuration>
       </DataCollector>
@@ -22,6 +28,7 @@
           <Format>cobertura</Format>
           <Include>[ProyectoFinalTPI.Backend*]*</Include>
           <Exclude>[ProyectoFinalTPI.Backend.Tests*]*</Exclude>
+          <ExcludeByFile>**/Migrations/**/*.cs,**/*ModelSnapshot.cs</ExcludeByFile>
           <IncludeTestAssembly>false</IncludeTestAssembly>
         </Configuration>
       </DataCollector>

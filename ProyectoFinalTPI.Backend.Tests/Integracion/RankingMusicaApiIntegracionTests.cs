@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using ProyectoFinalTPI.Backend.Dtos.Auth;
+using ProyectoFinalTPI.Backend.Dtos;
 using ProyectoFinalTPI.Backend.Dtos.RankingMusica;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Repositorio.Data;
@@ -19,6 +20,49 @@ public sealed class RankingMusicaApiIntegracionTests(PostgisFixture postgres) : 
 {
     private const string Ranking = "/api/ranking-musica";
     private const string RankingAdmin = "/api/admin/ranking-musica";
+
+    [Fact]
+    public async Task QueElSaldoAutenticadoSeaActualYUnFalloDeBilleteraNoOculteLaMusica()
+    {
+        await using var factory = new PublicacionesApiFactory(postgres);
+        using var cliente = factory.CreateClient();
+        await Autenticar(factory, cliente, "saldo-musica", ReputacionEnum.Mnnemónide);
+        using var worker = ActivatorUtilities.CreateInstance<RankingMusicaWorker>(factory.Services);
+        await worker.EjecutarCiclo(default);
+        await CrearCandidatura(cliente, $"{Ranking}/sugerencias",
+            new() { Decada = 1980, Titulo = "Canción disponible", Artista = "Artista" });
+
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var usuario = await db.Usuarios.SingleAsync(u => u.Username == "saldo-musica");
+        db.BilleterasPuntosNostalgia.Add(new BilleteraPuntosNostalgia
+        {
+            UsuarioId = usuario.Id, PuntosExtra = 15, FechaActualizacion = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        for (var intento = 0; intento < 3; intento++)
+        {
+            using var respuesta = await cliente.GetAsync("/api/puntos-nostalgia/saldo");
+            Assert.Equal(HttpStatusCode.OK, respuesta.StatusCode);
+            Assert.True(respuesta.Headers.CacheControl?.NoStore);
+            var saldo = await respuesta.Content.ReadFromJsonAsync<SaldoDiarioPuntosNostalgiaDto>();
+            Assert.Equal(25, saldo!.TotalDisponible);
+            var ranking = await cliente.GetFromJsonAsync<RankingMusicaActualDto>($"{Ranking}/actual");
+            Assert.Equal(saldo, ranking!.Saldo);
+            Assert.Single(Assert.Single(ranking.Decadas).Candidaturas);
+        }
+
+        // Solo se modifica la base desechable de esta factory para reproducir el fallo de lectura.
+        await db.Database.ExecuteSqlRawAsync("DROP TABLE billeteras_puntos_nostalgia");
+        using var saldoNoDisponible = await cliente.GetAsync("/api/puntos-nostalgia/saldo");
+        Assert.Equal(HttpStatusCode.InternalServerError, saldoNoDisponible.StatusCode);
+        var problema = await saldoNoDisponible.Content.ReadFromJsonAsync<ProblemDetails>();
+        Assert.True(problema!.Extensions.ContainsKey("traceId"));
+        var musicaDisponible = await cliente.GetFromJsonAsync<RankingMusicaActualDto>($"{Ranking}/actual");
+        Assert.Null(musicaDisponible!.Saldo);
+        Assert.Equal("Canción disponible", Assert.Single(Assert.Single(musicaDisponible.Decadas).Candidaturas).Titulo);
+    }
 
     [Fact]
     public async Task QueLaApiControlePermisosYCupoYExpongaLosResultadosDespuesDelCierre()
@@ -115,6 +159,18 @@ public sealed class RankingMusicaApiIntegracionTests(PostgisFixture postgres) : 
         // Act
         using var swagger = await cliente.GetFromJsonAsync<JsonDocument>("/swagger/v1/swagger.json");
         var rutas = swagger!.RootElement.GetProperty("paths");
+
+        foreach (var (ruta, metodo) in new[]
+        {
+            ("saldo", "get"), ("packs", "get"), ("cotizacion", "get"),
+            ("comprar", "post"), ("confirmar", "post"), ("webhook", "post")
+        })
+        {
+            var operacion = rutas.GetProperty($"/api/puntos-nostalgia/{ruta}").GetProperty(metodo);
+            Assert.False(string.IsNullOrWhiteSpace(operacion.GetProperty("summary").GetString()));
+            Assert.False(string.IsNullOrWhiteSpace(operacion.GetProperty("description").GetString()));
+            Assert.True(operacion.GetProperty("responses").TryGetProperty("200", out _));
+        }
 
         // Assert
         Assert.True(rutas.GetProperty($"{Ranking}/actual").TryGetProperty("get", out _));

@@ -1,4 +1,7 @@
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
+using System.Data.Common;
+using ProyectoFinalTPI.Backend.Dtos;
 using ProyectoFinalTPI.Backend.Dtos.RankingMusica;
 using ProyectoFinalTPI.Backend.Entidades;
 using ProyectoFinalTPI.Backend.Entidades.ValueObjects;
@@ -9,7 +12,8 @@ namespace ProyectoFinalTPI.Backend.Servicio;
 
 public sealed class RankingMusicaServicio(
     IRankingMusicaRepositorio repositorio, ICategoriaServicio categorias, ICupoPuntosNostalgiaServicio puntosNostalgia,
-    TimeProvider reloj, IOptions<RankingMusicaOptions> opciones) : IRankingMusicaServicio
+    TimeProvider reloj, IOptions<RankingMusicaOptions> opciones,
+    ILogger<RankingMusicaServicio>? logger = null) : IRankingMusicaServicio
 {
     private const int CantidadGanadorasPorDecada = 3;
 
@@ -21,7 +25,20 @@ public sealed class RankingMusicaServicio(
 
         var candidaturas = await repositorio.ListarCandidaturas(ronda.Id, ct);
         var decadas = AgruparCandidaturasPorDecada(candidaturas);
-        var saldo = usuarioId.HasValue ? await puntosNostalgia.ObtenerSaldo(usuarioId.Value, ct) : null;
+        SaldoDiarioPuntosNostalgiaDto? saldo = null;
+        if (usuarioId.HasValue)
+        {
+            try
+            {
+                saldo = await puntosNostalgia.ObtenerSaldo(usuarioId.Value, ct);
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested && ex is DbException or TimeoutException)
+            {
+                logger?.LogError(ex,
+                    "No se pudo consultar el saldo del usuario {UsuarioId}. Se devuelve el ranking de música con saldo no disponible.",
+                    usuarioId.Value);
+            }
+        }
         return new(ronda.Id, ronda.Apertura, ronda.Cierre, decadas, saldo);
     }
 
